@@ -1,0 +1,443 @@
+/* ============================================
+   EPES Mobile Responsive Improvements
+   Enhanced CSS for better mobile experience
+   ============================================ */
+
+/* Mobile-first breakpoints */
+@media (max-width: 768px) {
+  /* Sidebar adjustments */
+  .main-sidebar {
+    transform: translateX(-100%);
+    transition: transform 0.3s ease-in-out;
+  }
+  
+  .main-sidebar.show {
+    transform: translateX(0);
+  }
+  
+  /* Content wrapper adjustment */
+  .content-wrapper {
+    margin-left: 0 !important;
+  }
+  
+  /* Card improvements */
+  .card {
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  /* Dashboard cards */
+  .small-box {
+    padding: 1rem;
+    text-align: center;
+  }
+  
+  .small-box h3 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+  
+  .small-box p {
+    font-size: 0.9rem;
+  }
+  
+  /* Table responsiveness */
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  table.dataTable {
+    font-size: 0.85rem;
+  }
+  
+  /* Form improvements */
+  .form-control {
+    font-size: 16px; /* Prevents iOS zoom */
+  }
+  
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  
+  /* Button sizing */
+  .btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+  }
+  
+  .btn-block {
+    margin-bottom: 0.5rem;
+  }
+  
+  /* Modal improvements */
+  .modal-dialog {
+    margin: 1rem;
+    max-width: 95%;
+  }
+  
+  .modal-content {
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  
+  /* Navigation improvements */
+  .nav-pills .nav-link {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+  }
+  
+  /* Toast notifications */
+  .toast {
+    max-width: 90%;
+    margin: 0.5rem;
+  }
+  
+  /* Chart containers */
+  canvas {
+    max-height: 300px !important;
+  }
+  
+  /* Header adjustments */
+  .main-header {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+  }
+  
+  /* Footer adjustments */
+  .main-footer {
+    padding: 1rem;
+    font-size: 0.85rem;
+  }
+  
+  /* Progress bars */
+  .progress {
+    height: 1rem;
+  }
+  
+  /* Badges */
+  .badge {
+    padding: 0.35rem 0.5rem;
+    font-size: 0.75rem;
+  }
+  
+  /* Login page */
+  .login-box {
+    width: 90%;
+    margin: 2rem auto;
+  }
+  
+  .login-card-body {
+    padding: 1.5rem;
+  }
+  
+  /* IPCR/OPCR reports */
+  .ipcr-form {
+    font-size: 10px;
+    padding: 0.5rem;
+  }
+  
+  .ipcr-form table {
+    font-size: 9px;
+  }
+  
+  /* Help documentation */
+  .help-content {
+    padding: 1rem;
+  }
+  
+  /* Notification badge */
+  .notification-badge {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    font-size: 0.6rem;
+    padding: 0.2rem 0.4rem;
+  }
+}
+
+/* Tablet improvements */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .small-box {
+    padding: 1.2rem;
+  }
+  
+  .content-wrapper {
+    padding: 1rem;
+  }
+  
+  .card {
+    margin-bottom: 1.5rem;
+  }
+}
+
+/* Touch-friendly improvements */
+@media (hover: none) and (pointer: coarse) {
+  /* Larger touch targets */
+  .btn, .nav-link, .dropdown-item {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Remove hover effects on touch devices */
+  .btn:hover, .nav-link:hover {
+    background-color: inherit;
+  }
+  
+  .btn:active, .nav-link:active {
+    background-color: rgba(0,0,0,0.1);
+  }
+  
+  /* Easier to tap table rows */
+  tbody tr {
+    padding: 0.5rem 0;
+  }
+}
+
+/* Print styles for reports */
+@media print {
+  .no-print,
+  .sidebar,
+  .main-header,
+  .main-footer,
+  .btn,
+  .modal {
+    display: none !important;
+  }
+  
+  .content-wrapper {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  .card {
+    box-shadow: none !important;
+    border: none !important;
+  }
+  
+  .ipcr-form, .opcr-form {
+    font-size: 10px;
+  }
+  
+  a[href]:after {
+    content: none !important;
+  }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-color: #1a1a1a;
+    --text-color: #e0e0e0;
+    --card-bg: #2d2d2d;
+  }
+  
+  body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+  }
+  
+  .card {
+    background-color: var(--card-bg);
+  }
+  
+  .form-control {
+    background-color: #3d3d3d;
+    color: var(--text-color);
+  }
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .btn-primary {
+    background-color: #000080;
+    border: 2px solid #fff;
+  }
+  
+  .card {
+    border: 2px solid #000;
+  }
+  
+  a {
+    text-decoration: underline;
+  }
+}
+
+/* Loading spinner */
+.spinner-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.spinner-border {
+  width: 3rem;
+  height: 3rem;
+  border: 0.25rem solid #fff;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Mobile navigation toggle */
+.mobile-nav-toggle {
+  display: none;
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 1001;
+  background: #007bff;
+  color: #fff;
+  border: none;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
+}
+
+@media (max-width: 768px) {
+  .mobile-nav-toggle {
+    display: block;
+  }
+}
+
+/* Swipe gestures for mobile */
+.swipe-area {
+  touch-action: pan-y;
+}
+
+/* Pull-to-refresh indicator */
+.ptr-refresh {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  transform: translateY(-100%);
+  transition: transform 0.3s;
+}
+
+.ptr-refresh.show {
+  transform: translateY(0);
+}
+
+/* Mobile-optimized file upload */
+.file-upload-mobile {
+  position: relative;
+  overflow: hidden;
+  display: inline-block;
+  width: 100%;
+}
+
+.file-upload-mobile input[type=file] {
+  position: absolute;
+  left: -9999px;
+}
+
+.file-upload-label {
+  display: block;
+  padding: 1rem;
+  background: #f8f9fa;
+  border: 2px dashed #ccc;
+  text-align: center;
+  cursor: pointer;
+  border-radius: 0.5rem;
+}
+
+/* Status indicator colors */
+.status-pending { background-color: #ffc107; }
+.status-progress { background-color: #17a2b8; }
+.status-verification { background-color: #007bff; }
+.status-verified { background-color: #28a745; }
+
+/* Responsive typography */
+html {
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  html {
+    font-size: 14px;
+  }
+  
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.3rem; }
+  h3 { font-size: 1.1rem; }
+  h4 { font-size: 1rem; }
+}
+
+/* Card grid for mobile */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 768px) {
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Quick action buttons */
+.quick-actions {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  z-index: 999;
+}
+
+.quick-action-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #007bff;
+  color: #fff;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.5rem;
+  cursor: pointer;
+}
+
+/* Offline indicator */
+.offline-indicator {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: #ffc107;
+  color: #000;
+  text-align: center;
+  padding: 0.5rem;
+  display: none;
+  z-index: 10000;
+}
+
+.offline-indicator.show {
+  display: block;
+}
