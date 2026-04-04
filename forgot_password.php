@@ -26,13 +26,21 @@ if(isset($_SESSION['login_id']))
   </div>
   <!-- /.login-logo -->
 
-  <div class="card">
+  <div class="card card-outline card-primary">
+    <div class="card-header text-center">
+      <h3 class="card-title"><i class="fa fa-key"></i> Password Reset</h3>
+    </div>
     <div class="card-body login-card-body">
-      <p class="login-box-msg">Enter your email address to reset your password</p>
+      <div class="text-center mb-4">
+        <i class="fa fa-envelope-open fa-3x text-primary"></i>
+        <p class="login-box-msg mt-3">
+          Enter your email address and we'll send you a link to reset your password.
+        </p>
+      </div>
 
       <form action="" id="forgot-password-form" method="POST">
         <div class="input-group mb-3">
-          <input type="email" class="form-control" name="email" required placeholder="Email">
+          <input type="email" class="form-control form-control-lg" name="email" required placeholder="Enter your email address">
           <div class="input-group-append">
             <div class="input-group-text">
               <span class="fas fa-envelope"></span>
@@ -40,6 +48,7 @@ if(isset($_SESSION['login_id']))
           </div>
         </div>
         <div class="form-group mb-3">
+          <label class="text-muted small"><i class="fa fa-user-tag"></i> Select your role:</label>
           <select name="login" id="" class="custom-select custom-select-sm">
             <option value="0">Faculty</option>
             <option value="1">Dean/Dept Head</option>
@@ -48,13 +57,24 @@ if(isset($_SESSION['login_id']))
         </div>
         <div class="row">
           <div class="col-6">
-            <a href="index.php" class="btn btn-secondary btn-block">Back</a>
+            <a href="index.php" class="btn btn-secondary btn-block">
+              <i class="fa fa-arrow-left"></i> Back
+            </a>
           </div>
           <div class="col-6">
-            <button type="submit" class="btn btn-primary btn-block">Submit</button>
+            <button type="submit" class="btn btn-primary btn-block">
+              <i class="fa fa-paper-plane"></i> Send Reset Link
+            </button>
           </div>
         </div>
       </form>
+      
+      <div class="text-center mt-4">
+        <small class="text-muted">
+          <i class="fa fa-info-circle"></i> Remember your password? 
+          <a href="login.php" class="text-primary">Login here</a>
+        </small>
+      </div>
     </div>
     <!-- /.login-card-body -->
   </div>

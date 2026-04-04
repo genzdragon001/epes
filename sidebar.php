@@ -40,6 +40,15 @@
 
 
             <li class="nav-item dropdown">
+                  <a href="./index.php?page=mov_management" class="nav-link nav-mov_management">
+                      <i class="nav-icon fas fa-folder-open"></i>
+                      <p>
+                          MOV Management
+                      </p>
+                  </a>
+              </li>     
+                        
+              <li class="nav-item dropdown">
                   <a href="./index.php?page=status" class="nav-link nav-status">
                       <i class="nav-icon fas fa-list"></i>
                       <p>
@@ -47,7 +56,7 @@
                       </p>
                   </a>
               </li>     
-                       
+                        
               <li class="nav-item dropdown">
                   <a href="./index.php?page=rating" class="nav-link nav-rating">
                       <i class="nav-icon fas fa-check"></i>
@@ -98,6 +107,7 @@
               </a>
             </li>
               <?php endif; ?>
+              <?php if($is_dean_sidebar): ?>
               <li class="nav-item dropdown">
               <a href="./index.php?page=recommendation" class="nav-link nav-recommendation">
                 <i class="nav-icon fas fa-clipboard-check"></i>
@@ -106,6 +116,7 @@
                 </p>
               </a>
             </li>
+              <?php endif; ?>
              <?php elseif($_SESSION['login_type'] == 2): ?>
             <li class="nav-item dropdown">
             <a href="./index.php?page=faculty_list" class="nav-link nav-faculty_list">

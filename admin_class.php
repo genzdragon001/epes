@@ -92,17 +92,59 @@ Class Action {
 	
 			if($update){
 				$reset_link = SYSTEM_URL . "/reset_password.php?token=" . $token;
+				$system_name = $_SESSION['system']['name'];
 				
 				$body = "
-					<p>Hi " . $user['firstname'] . ",</p>
-					<p>You requested a password reset. Click the link below to reset your password:</p>
-					<p><a href='" . $reset_link . "'>" . $reset_link . "</a></p>
-					<br>
-					<p>If you did not request this, please ignore this email.</p>
-					<p>Regards,<br>" . $_SESSION['system']['name'] . " Team</p>
+				<!DOCTYPE html>
+				<html>
+				<head>
+					<style>
+						body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+						.container { max-width: 600px; margin: 0 auto; padding: 20px; }
+						.header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+						.header h1 { margin: 0; font-size: 24px; }
+						.content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+						.button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 20px 0; }
+						.button:hover { background: #5568d3; }
+						.link-text { word-break: break-all; color: #667eea; }
+						.warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; }
+						.footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #888; font-size: 12px; }
+					</style>
+				</head>
+				<body>
+					<div class='container'>
+						<div class='header'>
+							<h1>🔐 Password Reset Request</h1>
+						</div>
+						<div class='content'>
+							<p>Dear <strong>" . $user['firstname'] . " " . $user['lastname'] . "</strong>,</p>
+							
+							<p>We received a request to reset your password for your account in <strong>" . $system_name . "</strong>.</p>
+							
+							<p>Click the button below to reset your password:</p>
+							<p style='text-align: center;'>
+								<a href='" . $reset_link . "' class='button'>Reset My Password</a>
+							</p>
+							
+							<p>Or copy and paste this link into your browser:</p>
+							<p class='link-text'>" . $reset_link . "</p>
+							
+							<div class='warning'>
+								<strong>⚠️ Important:</strong> This link will expire in <strong>1 hour</strong>.
+							</div>
+							
+							<p>If you did not request this password reset, please ignore this email or contact our support team.</p>
+						</div>
+						<div class='footer'>
+							<p>&copy; " . date('Y') . " " . $system_name . ". All rights reserved.</p>
+							<p>This is an automated message, please do not reply.</p>
+						</div>
+					</div>
+				</body>
+				</html>
 				";
 				
-				if($this->sendEmail($user['email'], $user['firstname'], "Password Reset Request", $body)){
+				if($this->sendEmail($user['email'], $user['firstname'], "Password Reset Request - " . $system_name, $body)){
 					return 1;
 				} else {
 					return 3;
@@ -1680,6 +1722,195 @@ function submit_file() {
 			}
 		}
 		return 1;
+	}
+	
+	// MOV Management Functions
+	function get_faculty_movs(){
+		$faculty_id = $_SESSION['login_id'];
+		$rating_period = $this->db->real_escape_string($_POST['rating_period'] ?? '');
+		$status = $this->db->real_escape_string($_POST['status'] ?? '');
+		$target_id = intval($_POST['target_id'] ?? 0);
+		
+		$where = "WHERE m.faculty_id = $faculty_id";
+		if (!empty($rating_period)) {
+			$where .= " AND m.rating_period = '$rating_period'";
+		}
+		if (!empty($status)) {
+			$where .= " AND m.status = '$status'";
+		}
+		if ($target_id > 0) {
+			$where .= " AND m.target_id = $target_id";
+		}
+		
+		$query = $this->db->query("SELECT m.*, 
+			COALESCE(t.major_output, t.success_indicators) as target_name,
+			t.success_indicators,
+			t.category,
+			t.mfo,
+			CONCAT(e.lastname, ', ', e.firstname, ' ', e.middlename) as faculty_name,
+			DATE_FORMAT(m.date_submitted, '%Y-%m-%d %H:%i') as date_submitted
+			FROM mov_uploads m
+			LEFT JOIN task_list t ON m.target_id = t.id
+			LEFT JOIN employee_list e ON m.faculty_id = e.id
+			$where
+			ORDER BY m.date_submitted DESC");
+		
+		$result = [];
+		while ($row = $query->fetch_assoc()) {
+			$file_size = $row['file_size'];
+			$size_units = ['B', 'KB', 'MB', 'GB'];
+			$size_index = 0;
+			while ($file_size >= 1024 && $size_index < count($size_units) - 1) {
+				$file_size /= 1024;
+				$size_index++;
+			}
+			$row['file_size'] = round($file_size, 2) . ' ' . $size_units[$size_index];
+			$result[] = $row;
+		}
+		
+		echo json_encode($result);
+	}
+	
+	function delete_mov(){
+		extract($_POST);
+		$id = intval($id);
+		
+		// Get file path before deleting
+		$file = $this->db->query("SELECT file_path, file_type FROM mov_uploads WHERE id = $id")->fetch_assoc();
+		
+		$delete = $this->db->query("DELETE FROM mov_uploads WHERE id = $id");
+		
+		if ($delete) {
+			// Delete physical file
+			if ($file && file_exists($file['file_path'] . '.' . $file['file_type'])) {
+				unlink($file['file_path'] . '.' . $file['file_type']);
+			}
+			return 1;
+		}
+		return 0;
+	}
+	
+	function get_mov_summary(){
+		$faculty_id = $_SESSION['login_id'];
+		$rating_period = $this->db->real_escape_string($_POST['rating_period'] ?? '');
+		
+		$where = "WHERE faculty_id = $faculty_id";
+		if (!empty($rating_period)) {
+			$where .= " AND rating_period = '$rating_period'";
+		}
+		
+		$query = $this->db->query("SELECT 
+			rating_period,
+			SUM(total_movs) as total_movs,
+			SUM(verified_movs) as verified_movs,
+			SUM(pending_movs) as pending_movs,
+			SUM(rejected_movs) as rejected_movs,
+			SUM(total_file_size) as total_file_size,
+			MAX(last_submission) as last_submission
+			FROM mov_summary
+			$where
+			GROUP BY rating_period
+			ORDER BY rating_period DESC");
+		
+		$result = [];
+		while ($row = $query->fetch_assoc()) {
+			$file_size = $row['total_file_size'];
+			$size_units = ['B', 'KB', 'MB', 'GB'];
+			$size_index = 0;
+			while ($file_size >= 1024 && $size_index < count($size_units) - 1) {
+				$file_size /= 1024;
+				$size_index++;
+			}
+			$row['total_file_size'] = round($file_size, 2) . ' ' . $size_units[$size_index];
+			$result[] = $row;
+		}
+		
+		echo json_encode($result);
+	}
+	
+	function get_faculty_targets_with_movs(){
+		$faculty_id = $_SESSION['login_id'];
+		$rating_period = $this->db->real_escape_string($_POST['rating_period'] ?? '');
+		$category = $this->db->real_escape_string($_POST['category'] ?? '');
+		
+		// Get faculty position and designation
+		$faculty = $this->db->query("SELECT position_id, designation_id FROM employee_list WHERE id = $faculty_id")->fetch_assoc();
+		$position_id = $faculty['position_id'] ?? 0;
+		$designation_id = $faculty['designation_id'] ?? 0;
+		$is_cos = ($position_id == 19);
+		
+		// Get percentage allocations
+		$allocations = [];
+		$alloc_qry = $this->db->query("SELECT * FROM percentage_allocation 
+			WHERE position_id = $position_id 
+			AND (designation_id IS NULL OR designation_id = $designation_id)
+			AND is_active = 1");
+		while ($row = $alloc_qry->fetch_assoc()) {
+			$key = $row['category'];
+			if ($row['sub_category']) {
+				$key .= '_' . $row['sub_category'];
+			}
+			$allocations[$key] = floatval($row['percentage']);
+		}
+		
+		// Build category filters (same as target_list.php)
+		$cat_filters = [];
+		$has_strategic = isset($allocations['strategic']) && $allocations['strategic'] > 0;
+		if ($designation_id > 0) {
+			$desig_qry = $this->db->query("SELECT designation FROM designation_list WHERE id = $designation_id");
+			if ($desig_qry && $desig_row = $desig_qry->fetch_assoc()) {
+				if (stripos($desig_row['designation'], 'Head') !== false || stripos($desig_row['designation'], 'Director') !== false) {
+					$has_strategic = true;
+				}
+			}
+		}
+		$has_instructions = isset($allocations['core_instructions']) && $allocations['core_instructions'] > 0;
+		$has_research = isset($allocations['core_research']) && $allocations['core_research'] > 0 && !$is_cos;
+		$has_extension = isset($allocations['core_extension']) && $allocations['core_extension'] > 0 && !$is_cos;
+		$has_support = isset($allocations['support']) && $allocations['support'] > 0;
+		
+		if ($has_strategic) $cat_filters[] = "t.category = 'strategic'";
+		if ($has_instructions) $cat_filters[] = "(t.category = 'core' AND (t.sub_category IS NULL OR t.sub_category IN ('instructions','ter','instruction')))";
+		if ($has_research) $cat_filters[] = "(t.category = 'core' AND t.sub_category = 'research')";
+		if ($has_extension) $cat_filters[] = "(t.category = 'core' AND t.sub_category = 'extension')";
+		if ($has_support) $cat_filters[] = "t.category = 'support'";
+		
+		$category_where = !empty($cat_filters) ? " AND (" . implode(" OR ", $cat_filters) . ")" : "";
+		
+		// Get all targets for this faculty (excluding exempted)
+		$query = $this->db->query("SELECT DISTINCT t.id, 
+			COALESCE(t.major_output, t.success_indicators) as target_display,
+			t.major_output,
+			t.success_indicators,
+			t.category, 
+			t.sub_category, 
+			t.mfo
+			FROM task_list t
+			LEFT JOIN target_exemptions te ON t.id = te.task_id AND te.position_id = $position_id
+			WHERE t.is_active = 1
+			AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id)
+			AND (t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = $designation_id)
+			AND te.id IS NULL
+			$category_where
+			ORDER BY t.category, t.sub_category, t.mfo");
+		
+		$result = [];
+		while ($row = $query->fetch_assoc()) {
+			$target_id = $row['id'];
+			
+			// Count MOVs for this target
+			$mov_where = "WHERE m.faculty_id = $faculty_id AND m.target_id = $target_id";
+			if (!empty($rating_period)) {
+				$mov_where .= " AND m.rating_period = '$rating_period'";
+			}
+			
+			$mov_count = $this->db->query("SELECT COUNT(*) as c FROM mov_uploads m $mov_where")->fetch_assoc()['c'];
+			
+			$row['mov_count'] = $mov_count;
+			$result[] = $row;
+		}
+		
+		echo json_encode($result);
 	}
 	
 }

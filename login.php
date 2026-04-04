@@ -42,10 +42,15 @@ if(isset($_SESSION['login_id'])){
           </div>
         </div>
         <div class="input-group mb-3">
-          <input type="password" class="form-control" name="password" required placeholder="Password">
+          <input type="password" class="form-control" name="password" id="password" required placeholder="Password">
           <div class="input-group-append">
             <div class="input-group-text">
-              <span class="fas fa-lock"></span>
+              <!-- <span class="fas fa-lock"></span> -->
+            </div>
+            <div class="input-group-append">
+              <button type="button" class="btn btn-outline-secondary" id="togglePassword" style="border-left: none;">
+                <i class="fa fa-eye" id="toggleIcon"></i>
+              </button>
             </div>
           </div>
         </div>
@@ -60,13 +65,13 @@ if(isset($_SESSION['login_id'])){
         <div class="row">
           <div class="col-8">
             <div class="icheck-primary">
-              <input type="checkbox" id="remember">
+              <input type="checkbox" name="remember" id="remember" value="1">
               <label for="remember">
                 Remember Me
               </label>
             </div>
           </div>
-     
+      
         </div>
          <!-- /.col -->
          <div class="row mt-3">
@@ -98,6 +103,18 @@ if(isset($_SESSION['login_id'])){
 
 <script>
   $(document).ready(function(){
+    $('#togglePassword').click(function(){
+      var password = $('#password');
+      var icon = $('#toggleIcon');
+      if(password.attr('type') === 'password'){
+        password.attr('type', 'text');
+        icon.removeClass('fa-eye').addClass('fa-eye-slash');
+      }else{
+        password.attr('type', 'password');
+        icon.removeClass('fa-eye-slash').addClass('fa-eye');
+      }
+    });
+    
     $('#login-form').submit(function(e){
     e.preventDefault()
     start_load()

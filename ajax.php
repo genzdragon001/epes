@@ -265,5 +265,18 @@ if($action == 'delete_percentage_allocation'){
 if($action == 'save_percentage_allocation_quick'){
 	echo $crud->save_percentage_allocation_quick();
 }
+// MOV Management
+if($action == 'get_faculty_movs'){
+	echo $crud->get_faculty_movs();
+}
+if($action == 'delete_mov'){
+	echo $crud->delete_mov();
+}
+if($action == 'get_mov_summary'){
+	echo $crud->get_mov_summary();
+}
+if($action == 'get_faculty_targets_with_movs'){
+	echo $crud->get_faculty_targets_with_movs();
+}
 ob_end_flush();
 ?>
