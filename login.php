@@ -134,6 +134,8 @@ if(isset($_SESSION['login_id'])){
           location.href ='index.php?page=home';
         }else if(resp == 3){
           $('#login-form').prepend('<div class="alert alert-danger">Account is temporary blocked.</div>')
+        }else if(resp == 4){
+          $('#login-form').prepend('<div class="alert alert-warning"><i class="fa fa-exclamation-circle"></i> Your account is not yet activated. Please check your email and activate your account before logging in.</div>')
         }else{
           $('#login-form').prepend('<div class="alert alert-danger">Username or password is incorrect.</div>')
           

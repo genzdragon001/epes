@@ -274,6 +274,12 @@ Class Action {
 			$this->logAudit($user['id'], $email, $ip_address, $user_agent, "FAILED", "Account blocked");
 			return 3; // Account blocked
 		}
+		
+		// Check if faculty account is activated (only for faculty login type 0)
+		if ($login == 0 && isset($user['is_activated']) && (int)$user['is_activated'] === 0) {
+			$this->logAudit($user['id'], $email, $ip_address, $user_agent, "FAILED", "Account not activated");
+			return 4; // Account not activated
+		}
 	
 		// Verify password (supports legacy md5 and modern password_hash)
 		$passOk = false;
@@ -1591,12 +1597,48 @@ function submit_file() {
 
     if($register){
         $body = "
-            <p>Hi " . $firstname . ",</p>
-            <p>Please click the link below to activate your account:</p>
-            <p><a href='" . $verification_link . "'> " . $verification_link . "</a></p>
-            <br>
-            <p>If you did not request this, please ignore this email.</p>
-            <p>Regards,<br>" . $_SESSION['system']['name'] . " Team</p>
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body { font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 0; }
+                .email-container { max-width: 600px; margin: 30px auto; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+                .email-header { background: linear-gradient(135deg, #007bff 0%, #0056b3 100%); color: #ffffff; padding: 30px; text-align: center; }
+                .email-header h2 { margin: 0; font-size: 24px; }
+                .email-body { padding: 30px; }
+                .email-body p { color: #333333; line-height: 1.6; margin-bottom: 20px; }
+                .email-body .icon-box { text-align: center; margin: 20px 0; }
+                .email-body .icon-box i { font-size: 48px; color: #007bff; }
+                .btn-verify { display: inline-block; background: #007bff; color: #ffffff; text-decoration: none; padding: 12px 30px; border-radius: 5px; font-weight: bold; margin: 20px 0; }
+                .btn-verify:hover { background: #0056b3; }
+                .verification-link { word-break: break-all; color: #007bff; font-size: 14px; }
+                .email-footer { background: #f8f9fa; padding: 20px; text-align: center; color: #6c757d; font-size: 12px; }
+            </style>
+        </head>
+        <body>
+            <div class='email-container'>
+                <div class='email-header'>
+                    <h2><i class='fa fa-envelope-open'></i> Activate Your Account</h2>
+                </div>
+                <div class='email-body'>
+                    <div class='icon-box'>
+                        <i class='fa fa-user-circle'></i>
+                    </div>
+                    <p>Hi <strong>" . $firstname . "</strong>,</p>
+                    <p>Welcome to " . $_SESSION['system']['name'] . "! Please click the button below to activate your account:</p>
+                    <p style='text-align: center;'>
+                        <a href='" . $verification_link . "' class='btn-verify'>Activate Account</a>
+                    </p>
+                    <p>Or copy and paste this link into your browser:</p>
+                    <p class='verification-link'>" . $verification_link . "</p>
+                    <p>If you did not request this activation, please ignore this email.</p>
+                </div>
+                <div class='email-footer'>
+                    <p>&copy; " . date('Y') . " " . $_SESSION['system']['name'] . ". All rights reserved.</p>
+                </div>
+            </div>
+        </body>
+        </html>
         ";
         
         if($this->sendEmail($email, $firstname, "Account Verification", $body)){
