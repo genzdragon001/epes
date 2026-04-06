@@ -1,8 +1,8 @@
 <?php
 include 'db_connect.php';
-$code = $_GET['code'];
-if($code){
-    $update = $conn->query("UPDATE employee_list SET is_activated=1 WHERE verification_code='$code' LIMIT 1");
+$token = $_GET['code'];
+if($token){
+    $update = $conn->query("UPDATE employee_list SET is_activated=1 WHERE reset_token='$token' LIMIT 1");
     if($update){
         
        // after verification checks
