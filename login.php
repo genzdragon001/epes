@@ -31,6 +31,20 @@ if(isset($_SESSION['login_id'])){
     </div>
   <?php endif; ?>
 
+      <?php if (isset($_SESSION['verify_success'])): ?>
+      <div class="alert alert-success text-center">
+        <i class="fa fa-check-circle fa-2x mb-2"></i>
+        <p class="mb-0"><?php echo $_SESSION['verify_success']; unset($_SESSION['verify_success']); ?></p>
+      </div>
+    <?php endif; ?>
+    
+    <?php if (isset($_SESSION['verify_error'])): ?>
+      <div class="alert alert-danger text-center">
+        <i class="fa fa-exclamation-circle fa-2x mb-2"></i>
+        <p class="mb-0"><?php echo $_SESSION['verify_error']; unset($_SESSION['verify_error']); ?></p>
+      </div>
+    <?php endif; ?>
+
       <form action="" id="login-form">
         <?php echo csrf_field(); ?>
         <div class="input-group mb-3">

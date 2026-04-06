@@ -1,29 +1,16 @@
 <?php
+session_start();
 include 'db_connect.php';
 $token = $_GET['code'];
 if($token){
     $update = $conn->query("UPDATE employee_list SET is_activated=1 WHERE reset_token='$token' LIMIT 1");
-    if($update){
-        
-       // after verification checks
-            $_SESSION['verified'] = 'Account verified successfully';
-            if (isset($_SESSION['verified'])) {
-                echo "<script>alert('{$_SESSION['verified']}');</script>";
-                unset($_SESSION['verified']);
-            }
-            // redirect to index
-           header("Location: index.php");
-           
+    if($update && $conn->affected_rows > 0){
+        $_SESSION['verify_success'] = 'Account verified successfully! You can now login.';
+        header("Location: login.php");
+        exit;
     } else {
-        $_SESSION['verified'] = 'Invalid verification code';
-
-        // redirect to index
-     header("Location: index.php");
-    //   echo $_SESSION['verified'];
-      
+        $_SESSION['verify_error'] = 'Invalid or expired verification link. Please register again or contact support.';
+        header("Location: login.php");
+        exit;
     }
-
-    
- //   echo $_SESSION['verified'];
-     
 }
