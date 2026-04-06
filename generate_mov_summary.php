@@ -412,7 +412,8 @@ $efficiency_rating = $summary['total'] > 0 ? round(($rating_calc / ($summary['to
                 
                 $movs_copy = $conn->query("SELECT m.*, 
                     COALESCE(t.major_output, t.success_indicators) as target_name,
-                    t.category, t.mfo
+                    t.category, t.mfo,
+                    (SELECT deadline FROM target_deadlines WHERE target_id = $target_id ORDER BY deadline LIMIT 1) as first_deadline
                     FROM mov_uploads m
                     LEFT JOIN task_list t ON m.target_id = t.id
                     WHERE m.faculty_id = $faculty_id AND m.rating_period = '$period' AND m.target_id = $target_id
@@ -445,16 +446,33 @@ $efficiency_rating = $summary['total'] > 0 ? round(($rating_calc / ($summary['to
                     $deadline_timestamp = null;
                     if ($target && isset($target['deadlines']) && !empty($target['deadlines'])) {
                         $deadlines = explode('|', $target['deadlines']);
-                        if (isset($deadlines[$i - 1]) && !empty($deadlines[$i - 1])) {
-                            $deadline_display = date('M d, Y', strtotime($deadlines[$i - 1]));
-                            $deadline_timestamp = strtotime($deadlines[$i - 1]);
+                        $submitted_month_num = date('n', strtotime($row['date_submitted']));
+                        $submitted_year = date('Y', strtotime($row['date_submitted']));
+                        
+                        foreach ($deadlines as $dl) {
+                            if (!empty($dl)) {
+                                $dl_month = date('n', strtotime($dl));
+                                $dl_year = date('Y', strtotime($dl));
+                                if ($dl_month == $submitted_month_num && $dl_year == $submitted_year) {
+                                    $deadline_display = date('M d, Y', strtotime($dl));
+                                    $deadline_timestamp = strtotime($dl);
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if ($deadline_timestamp === null && isset($deadlines[0]) && !empty($deadlines[0])) {
+                            $deadline_display = date('M d, Y', strtotime($deadlines[0]));
+                            $deadline_timestamp = strtotime($deadlines[0]);
                         }
                     }
                     
                     $valid_date = strtotime($row['date_submitted']);
+                 
                     if ($valid_date && $valid_date > 0) {
                         $date_display = date('M d, Y', $valid_date);
                         $submitted_timestamp = $valid_date;
+                      
                     } else {
                         $submitted_timestamp = mktime(0, 0, 0, $month_num, 15, $report_year);
                         $date_display = $month . ' 15, ' . $report_year;
