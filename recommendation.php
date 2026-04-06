@@ -105,24 +105,22 @@ $periods_result = $conn->query("SELECT DISTINCT rating_period FROM renewal_recom
         </div>
         <div class="card-body">
             <?php
-            $faculty_list = $conn->query("SELECT id, firstname, middlename, lastname, department_id, position_id FROM employee_list WHERE position_id = '18' ORDER BY lastname ASC");
+            $faculty_list = $conn->query("SELECT id, firstname, middlename, lastname, department_id, position_id FROM employee_list WHERE position_id = '19' ORDER BY lastname ASC");
             $faculty_data = [];
             
             while ($emp = $faculty_list->fetch_assoc()) {
                 $emp_id = $emp['id'];
-                $is_cos = true;
-                $faculty_type = 'COS';
+                $emp_position_id = $emp['position_id'];
                 
-                $mfo = $is_cos ? "1,0" : "1,2,3,4,0";
-                $support_index = $is_cos ? 6 : 13;
-                $number_of_support = $is_cos ? 10 : 17;
-                $number_of_instruction = $is_cos ? 6 : 7;
+                $mfo = "1,0";
                 
                 $qry = $conn->query("
                     SELECT 
                         t.id AS task_id,
-                        t.targets_measures,
+                        t.category,
+                        t.sub_category,
                         t.success_indicators,
+                        t.targets_measures,
                         t.efficiency AS task_efficiency,
                         t.timeliness AS task_timeliness,
                         t.quality AS task_quality,
@@ -136,71 +134,99 @@ $periods_result = $conn->query("SELECT DISTINCT rating_period FROM renewal_recom
                     LEFT JOIN ratings r ON r.task_id = tp.task_id AND r.employee_id = tp.faculty_id
                     WHERE tp.faculty_id = $emp_id 
                       AND t.mfo IN ($mfo)
-                    ORDER BY t.id ASC
+                      AND t.is_active = 1
+                    ORDER BY t.category, t.sub_category, t.id
                 ");
                 
-                $tasks = [];
+                $ter_sum = 0; $ter_count = 0;
+                $instruction_sum = 0; $instruction_count = 0;
+                $support_sum = 0; $support_count = 0;
+                $total_ratings = 0;
+                
                 while ($row = $qry->fetch_assoc()) {
                     $rating_eff = (isset($row['rating_efficiency']) && is_numeric($row['rating_efficiency'])) ? (float)$row['rating_efficiency'] : null;
                     $rating_time = (isset($row['rating_timeliness']) && is_numeric($row['rating_timeliness'])) ? (float)$row['rating_timeliness'] : null;
                     $rating_qual = (isset($row['rating_quality']) && is_numeric($row['rating_quality'])) ? (float)$row['rating_quality'] : null;
                     
                     $criteria = [];
-                    if ($row['task_quality'] == 'Applicable' && $rating_qual !== null) {
-                        $criteria['quality'] = $rating_qual;
-                    }
-                    if ($row['task_efficiency'] == 'Applicable' && $rating_eff !== null) {
-                        $criteria['efficiency'] = $rating_eff;
-                    }
-                    if ($row['task_timeliness'] == 'Applicable' && $rating_time !== null) {
-                        $criteria['timeliness'] = $rating_time;
-                    }
+                    if ($row['task_quality'] == 'Applicable' && $rating_qual !== null) $criteria['quality'] = $rating_qual;
+                    if ($row['task_efficiency'] == 'Applicable' && $rating_eff !== null) $criteria['efficiency'] = $rating_eff;
+                    if ($row['task_timeliness'] == 'Applicable' && $rating_time !== null) $criteria['timeliness'] = $rating_time;
                     
                     $average = (count($criteria) > 0) ? array_sum($criteria) / count($criteria) : null;
                     
-                    $tasks[] = [
-                        'average' => $average,
-                        'efficiency' => $rating_eff,
-                        'timeliness' => $rating_time,
-                        'quality' => $rating_qual,
-                        'task_id' => $row['task_id'],
-                    ];
-                }
-                
-                $total_ratings = count($tasks);
-                
-                $a1 = (isset($tasks[0]['average']) && is_numeric($tasks[0]['average'])) ? (float)$tasks[0]['average'] : 0;
-                $a2_sum = 0; $a2_count = 0;
-                for ($i = 1; $i < min($number_of_instruction, count($tasks)); $i++) {
-                    if (is_numeric($tasks[$i]['average'])) {
-                        $a2_sum += (float)$tasks[$i]['average'];
-                        $a2_count++;
+                    $sub = strtolower($row['sub_category'] ?? '');
+                    
+                    if ($row['progress'] == 'Verified' && is_numeric($average)) {
+                        $total_ratings++;
+                        
+                        if ($sub == 'ter') {
+                            $ter_sum += $average;
+                            $ter_count++;
+                        } elseif ($sub == 'instruction' || $sub == 'instructions') {
+                            $instruction_sum += $average;
+                            $instruction_count++;
+                        } elseif ($row['category'] == 'support') {
+                            $support_sum += $average;
+                            $support_count++;
+                        }
                     }
                 }
-                $instruction_ave = ($a2_count > 0 && $a1 > 0) ? (($a2_sum / $a2_count) + $a1) / 2 : (($a2_count > 0) ? $a2_sum / $a2_count : 0);
                 
-                $support_sum = 0; $support_count = 0;
-                for ($i = $support_index; $i < min($number_of_support, count($tasks)); $i++) {
-                    if (is_numeric($tasks[$i]['average'])) {
-                        $support_sum += (float)$tasks[$i]['average'];
-                        $support_count++;
-                    }
+                $ter_ave = $ter_count > 0 ? $ter_sum / $ter_count : 0;
+                
+                $instr_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list WHERE category = 'core' AND (sub_category = 'instruction' OR sub_category = 'instructions') AND is_active = 1 AND (academic_rank_id IS NULL OR academic_rank_id = 0 OR academic_rank_id = $emp_position_id)");
+                $total_instr_count = $instr_task_qry ? (int)$instr_task_qry->fetch_assoc()['task_count'] : 0;
+                
+                $exempt_qry = $conn->query("SELECT COUNT(*) as exempt_count FROM target_exemptions te INNER JOIN task_list tl ON te.task_id = tl.id WHERE te.position_id = $emp_position_id AND (tl.sub_category = 'instruction' OR tl.sub_category = 'instructions')");
+                $exempt_count = $exempt_qry ? (int)$exempt_qry->fetch_assoc()['exempt_count'] : 0;
+                $expected_instr_count = $total_instr_count - $exempt_count;
+                
+                $divisor = $expected_instr_count > 0 ? $expected_instr_count : ($instruction_count > 0 ? $instruction_count : 1);
+                $instruction_div = $instruction_count > 0 ? $instruction_sum / $divisor : 0;
+                
+                $instruction_rating = ($ter_ave * 0.50) + ($instruction_div * 0.50);
+                
+                $support_average = $support_count > 0 ? $support_sum / $support_count : 0;
+                
+                $core_sum = 0;
+                $core_total_count = 0;
+                
+                if ($instruction_count > 0 || $ter_count > 0) {
+                    $core_sum += $instruction_rating;
+                    $core_total_count += 1;
                 }
-                $support_average = ($support_count > 0) ? $support_sum / $support_count : 0;
+                if ($support_count > 0) {
+                    $core_sum += $support_average;
+                    $core_total_count += 1;
+                }
                 
-                $core_function = $instruction_ave;
-                $core_weighted = $core_function * 0.9;
-                $support_weighted = $support_average * 0.1;
+                $core_function = $core_total_count > 0 ? $core_sum / $core_total_count : 0;
+                $core_weighted = $core_function * 0.90;
+                $support_weighted = $support_average * 0.10;
                 $total_score = $core_weighted + $support_weighted;
                 
                 $eff_sum = 0; $eff_count = 0;
                 $time_sum = 0; $time_count = 0;
                 $qual_sum = 0; $qual_count = 0;
                 
-                foreach ($tasks as $t) {
-                    if ($t['efficiency'] !== null) { $eff_sum += $t['efficiency']; $eff_count++; }
-                    if ($t['timeliness'] !== null) { $time_sum += $t['timeliness']; $time_count++; }
-                    if ($t['quality'] !== null) { $qual_sum += $t['quality']; $qual_count++; }
+                $qry2 = $conn->query("
+                    SELECT 
+                        r.efficiency AS rating_efficiency,
+                        r.timeliness AS rating_timeliness,
+                        r.quality AS rating_quality
+                    FROM task_progress tp
+                    INNER JOIN task_list t ON tp.task_id = t.id
+                    LEFT JOIN ratings r ON r.task_id = tp.task_id AND r.employee_id = tp.faculty_id
+                    WHERE tp.faculty_id = $emp_id 
+                      AND t.mfo IN ($mfo)
+                      AND tp.progress = 'Verified'
+                ");
+                
+                while ($r = $qry2->fetch_assoc()) {
+                    if (isset($r['rating_efficiency']) && is_numeric($r['rating_efficiency'])) { $eff_sum += $r['rating_efficiency']; $eff_count++; }
+                    if (isset($r['rating_timeliness']) && is_numeric($r['rating_timeliness'])) { $time_sum += $r['rating_timeliness']; $time_count++; }
+                    if (isset($r['rating_quality']) && is_numeric($r['rating_quality'])) { $qual_sum += $r['rating_quality']; $qual_count++; }
                 }
                 
                 $avg_eff = $eff_count > 0 ? round($eff_sum / $eff_count, 2) : null;
@@ -214,9 +240,8 @@ $periods_result = $conn->query("SELECT DISTINCT rating_period FROM renewal_recom
                     'id' => $emp_id,
                     'name' => $emp['lastname'] . ', ' . $emp['firstname'] . ' ' . $emp['middlename'],
                     'department' => $department,
-                    'faculty_type' => $faculty_type,
                     'total_ratings' => $total_ratings,
-                    'instruction_ave' => is_numeric($instruction_ave) ? number_format($instruction_ave, 2) : '-',
+                    'instruction_ave' => is_numeric($instruction_rating) ? number_format($instruction_rating, 2) : '-',
                     'support_ave' => is_numeric($support_average) ? number_format($support_average, 2) : '-',
                     'total_score' => is_numeric($total_score) ? number_format($total_score, 2) : '0.00',
                     'adjectival' => getAdjectivalRating($total_score),
