@@ -147,37 +147,17 @@ if (!$is_admin) {
                             <th class="text-center" style="width: 40px;">#</th>
                             <th><?php echo $is_admin ? 'Faculty Name' : ($is_dean ? 'Department Head' : 'Faculty Name'); ?></th>
                             <th><?php echo $is_admin ? 'Department' : 'Designation'; ?></th>
-                            <th class="text-center">Total Tasks</th>
-                            <th class="text-center">For Verification</th>
-                            <th class="text-center">Verified</th>
-                            <th class="text-center">Pending</th>
-                            <th class="text-center" style="width: 120px;">Progress</th>
                             <?php if($is_admin || $is_dean || $is_dept_head): ?>
                             <th class="text-center" style="width: 100px;">Action</th>
                             <?php endif; ?>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php $i = 1; foreach($faculty_data as $row): 
-                            $total_f = $row['total_tasks'] > 0 ? $row['total_tasks'] : 1;
-                            $progress_pct = $row['verified'] > 0 ? round(($row['verified'] / $total_f) * 100) : 0;
-                        ?>
+                        <?php $i = 1; foreach($faculty_data as $row): ?>
                         <tr>
                             <td class="text-center font-weight-bold"><?= $i++ ?></td>
                             <td><strong><?= htmlspecialchars($row['lastname'] . ', ' . $row['firstname'] . ' ' . $row['middlename']) ?></strong></td>
                             <td><?= htmlspecialchars($is_admin ? ($row['department'] ?? 'N/A') : ($row['designation'] ?? 'Faculty')) ?></td>
-                            <td class="text-center"><span class="badge badge-secondary"><?= $row['total_tasks'] ?></span></td>
-                            <td class="text-center"><span class="badge badge-warning"><?= $row['for_verification'] ?></span></td>
-                            <td class="text-center"><span class="badge badge-success"><?= $row['verified'] ?></span></td>
-                            <td class="text-center"><span class="badge badge-danger"><?= $row['pending'] ?></span></td>
-                            <td class="text-center">
-                                <div class="progress mb-0" style="height: 15px;">
-                                    <div class="progress-bar bg-success" role="progressbar" style="width: <?= $progress_pct ?>%">
-                                        <?= $progress_pct ?>%
-                                    </div>
-                                </div>
-                                <small class="text-muted"><?= $row['verified'] ?>/<?= $row['total_tasks'] ?> verified</small>
-                            </td>
                             <?php if($is_admin || $is_dean || $is_dept_head): ?>
                             <td class="text-center">
                                 <a href="index.php?page=evaluation&id=<?= $row['id'] ?>" class="btn btn-sm btn-info">
