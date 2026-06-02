@@ -6,6 +6,67 @@ $action = $_GET['action'];
 include 'admin_class.php';
 $crud = new Action();
 
+// CSRF validation for all state-changing operations
+// Uses layered defense: CSRF tokens for critical ops, X-Requested-With for all others
+session_start();
+include 'csrf_helper.php';
+
+// Critical operations that MUST have a CSRF token
+$csrf_required_actions = [
+	'login', 'login2', 'signup',
+	'save_user', 'update_user',
+	'save_employee', 'save_evaluator',
+	'register_user'
+];
+
+$csrf_protected_actions = [
+	'login', 'login2', 'signup',
+	'save_user', 'update_user', 'delete_user',
+	'save_department', 'delete_department',
+	'save_designation', 'delete_designation',
+	'save_employee', 'delete_employee',
+	'save_evaluator', 'delete_evaluator',
+	'save_academic_rank', 'delete_academic_rank',
+	'update_evaluator_department',
+	'save_task', 'delete_task',
+	'save_exemption', 'delete_exemption',
+	'save_progress', 'delete_progress',
+	'save_evaluation', 'delete_evaluation',
+	'save_rating', 'save_status', 'delete_file',
+	'update_semester', 'register_user',
+	'save_comment', 'submit_file',
+	'save_renewal_recommendation', 'submit_dean_decision',
+	'update_rec', 'delete_rec',
+	'save_function_category', 'delete_function_category',
+	'save_percentage_allocation', 'delete_percentage_allocation',
+	'save_percentage_allocation_quick',
+	'delete_mov'
+];
+
+if (in_array($action, $csrf_protected_actions)) {
+	// For critical actions, require POST CSRF token
+	if (in_array($action, $csrf_required_actions)) {
+		$token = $_POST['csrf_token'] ?? '';
+		if (!validate_csrf_token($token)) {
+			http_response_code(403);
+			die('CSRF validation failed');
+		}
+		// Regenerate token after use to prevent reuse
+		unset($_SESSION['csrf_token']);
+	} else {
+		// For other protected actions, accept either CSRF token or X-Requested-With header
+		// (jQuery sends X-Requested-With on all AJAX calls, which can't be spoofed cross-origin)
+		$is_ajax = (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && 
+		            strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest');
+		$has_csrf = isset($_POST['csrf_token']) && validate_csrf_token($_POST['csrf_token']);
+		
+		if (!$is_ajax && !$has_csrf) {
+			http_response_code(403);
+			die('CSRF validation failed');
+		}
+	}
+}
+
 //new function
 if($action == 'forgot_password'){
 	$forgot_password = $crud->forgot_password();
@@ -185,9 +246,16 @@ if($action == 'get_report'){
 		echo $get;
 }
 if($action == 'save_rating'){
-	$save = $crud->save_rating();
-	if($save)
-		echo $save;
+	try {
+		$save = $crud->save_rating();
+		if($save)
+			echo $save;
+		else
+			echo 0;
+	} catch (Exception $e) {
+		error_log("save_rating exception: " . $e->getMessage());
+		echo 0;
+	}
 }
 if($action == 'save_status'){
 	$save_status = $crud->save_status();
