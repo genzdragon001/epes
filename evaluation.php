@@ -10,6 +10,10 @@ switch ($_SESSION['login_type']){
 
 $nameId = isset($_GET['id']) ? $_GET['id'] : '9999';
 
+// Admin (login_type 2) is view-only — no rating, status changes, or comments
+$login_type = $_SESSION['login_type'] ?? -1;
+$is_admin_view = ($login_type == 2);
+
 $qry = $conn->query("SELECT CONCAT(firstname, ' ', lastname) AS faculty_name FROM employee_list WHERE id = '$nameId' LIMIT 1");
 
 if ($qry && $qry->num_rows > 0) {
@@ -110,6 +114,13 @@ SELECT
             <span class="text-muted">-</span>
         <?php endif; ?></td>
         <td class="text-center align-middle">
+            <?php if ($is_admin_view): ?>
+                <?php 
+                $currentStatus = $row['task_progress'] ?? null;
+                $statusClass = ($currentStatus == 'Verified') ? 'badge-success' : (($currentStatus == 'For Verification') ? 'badge-warning' : 'badge-secondary');
+                ?>
+                <span class="badge <?= $statusClass ?>"><?= $currentStatus ?? 'Pending' ?></span>
+            <?php else: ?>
             <div class="dropdown">
                 <?php 
                 $currentStatus = $row['task_progress'] ?? null;
@@ -136,22 +147,25 @@ SELECT
                        data-value="Verified">Verified</a>
                 </div>
             </div>
+            <?php endif; ?>
         </td>
         <td class="text-center align-middle">
+            <?php 
+                $effApplicable = (isset($row['task_efficiency']) && $row['task_efficiency'] === 'Applicable');
+                $currentEff = isset($row['rating_efficiency']) ? $row['rating_efficiency'] : '-';
+            ?>
+            <?php if ($is_admin_view): ?>
+                <span class="badge <?= isset($row['rating_efficiency']) ? 'badge-success' : 'badge-secondary' ?>"><?= $effApplicable ? $currentEff : 'N/A' ?></span>
+            <?php else: ?>
             <div class="dropdown">
-                <?php 
-                    $effApplicable = (isset($row['task_efficiency']) && $row['task_efficiency'] === 'Applicable');
-                    $currentEff = isset($row['rating_efficiency']) ? $row['rating_efficiency'] : 'Set';
-                    $effColor = isset($row['rating_efficiency']) ? 'btn-success' : 'btn-secondary';
-                ?>
-                <button class="btn btn-sm <?= $effColor ?> dropdown-toggle" 
+                <button class="btn btn-sm <?= isset($row['rating_efficiency']) ? 'btn-success' : 'btn-secondary' ?> dropdown-toggle" 
                         type="button" 
                         id="effDropdown<?= $row['progress_id'] ?>" 
                         data-toggle="dropdown" 
                         aria-haspopup="true" 
                         aria-expanded="false"
                         <?= !$effApplicable ? 'disabled' : '' ?>>
-                    <?= $effApplicable ? $currentEff : 'N/A' ?>
+                    <?= $effApplicable ? (isset($row['rating_efficiency']) ? $row['rating_efficiency'] : 'Set') : 'N/A' ?>
                 </button>
                 <?php if ($effApplicable): ?>
                     <div class="dropdown-menu p-3" aria-labelledby="effDropdown<?= $row['progress_id'] ?>" style="min-width: 200px;">
@@ -181,22 +195,25 @@ SELECT
                     </div>
                 <?php endif; ?>
             </div>
+            <?php endif; ?>
         </td>
         <td class="text-center align-middle">
+            <?php 
+                $qualApplicable = (isset($row['task_quality']) && $row['task_quality'] === 'Applicable');
+                $currentQual = isset($row['rating_quality']) ? $row['rating_quality'] : '-';
+            ?>
+            <?php if ($is_admin_view): ?>
+                <span class="badge <?= isset($row['rating_quality']) ? 'badge-success' : 'badge-secondary' ?>"><?= $qualApplicable ? $currentQual : 'N/A' ?></span>
+            <?php else: ?>
             <div class="dropdown">
-                <?php 
-                    $qualApplicable = (isset($row['task_quality']) && $row['task_quality'] === 'Applicable');
-                    $currentQual = isset($row['rating_quality']) ? $row['rating_quality'] : 'Set';
-                    $qualColor = isset($row['rating_quality']) ? 'btn-success' : 'btn-secondary';
-                ?>
-                <button class="btn btn-sm <?= $qualColor ?> dropdown-toggle" 
+                <button class="btn btn-sm <?= isset($row['rating_quality']) ? 'btn-success' : 'btn-secondary' ?> dropdown-toggle" 
                         type="button" 
                         id="qualDropdown<?= $row['progress_id'] ?>" 
                         data-toggle="dropdown" 
                         aria-haspopup="true" 
                         aria-expanded="false"
                         <?= !$qualApplicable ? 'disabled' : '' ?>>
-                    <?= $qualApplicable ? $currentQual : 'N/A' ?>
+                    <?= $qualApplicable ? (isset($row['rating_quality']) ? $row['rating_quality'] : 'Set') : 'N/A' ?>
                 </button>
                 <?php if ($qualApplicable): ?>
                     <div class="dropdown-menu p-3" aria-labelledby="qualDropdown<?= $row['progress_id'] ?>" style="min-width: 200px;">
@@ -226,22 +243,25 @@ SELECT
                     </div>
                 <?php endif; ?>
             </div>
+            <?php endif; ?>
         </td>
         <td class="text-center align-middle">
+            <?php 
+                $timeApplicable = (isset($row['task_timeliness']) && $row['task_timeliness'] === 'Applicable');
+                $currentTime = isset($row['rating_timeliness']) ? $row['rating_timeliness'] : '-';
+            ?>
+            <?php if ($is_admin_view): ?>
+                <span class="badge <?= isset($row['rating_timeliness']) ? 'badge-success' : 'badge-secondary' ?>"><?= $timeApplicable ? $currentTime : 'N/A' ?></span>
+            <?php else: ?>
             <div class="dropdown">
-                <?php 
-                    $timeApplicable = (isset($row['task_timeliness']) && $row['task_timeliness'] === 'Applicable');
-                    $currentTime = isset($row['rating_timeliness']) ? $row['rating_timeliness'] : 'Set';
-                    $timeColor = isset($row['rating_timeliness']) ? 'btn-success' : 'btn-secondary';
-                ?>
-                <button class="btn btn-sm <?= $timeColor ?> dropdown-toggle" 
+                <button class="btn btn-sm <?= isset($row['rating_timeliness']) ? 'btn-success' : 'btn-secondary' ?> dropdown-toggle" 
                         type="button" 
                         id="timeDropdown<?= $row['progress_id'] ?>" 
                         data-toggle="dropdown" 
                         aria-haspopup="true" 
                         aria-expanded="false"
                         <?= !$timeApplicable ? 'disabled' : '' ?>>
-                    <?= $timeApplicable ? $currentTime : 'N/A' ?>
+                    <?= $timeApplicable ? (isset($row['rating_timeliness']) ? $row['rating_timeliness'] : 'Set') : 'N/A' ?>
                 </button>
                 <?php if ($timeApplicable): ?>
                     <div class="dropdown-menu p-3" aria-labelledby="timeDropdown<?= $row['progress_id'] ?>" style="min-width: 200px;">
@@ -271,6 +291,7 @@ SELECT
                     </div>
                 <?php endif; ?>
             </div>
+            <?php endif; ?>
         </td>
     </tr>
 <?php endwhile; endif; ?>
@@ -288,6 +309,7 @@ if($comment_check && $comment_check->num_rows > 0){
     $existing_comment = htmlspecialchars($comment_row['comment_text']);
 }
 ?>
+<?php if (!$is_admin_view): ?>
 <div class="card mt-4 border-secondary">
     <div class="card-header bg-secondary text-white">
         <h5 class="card-title mb-0"><i class="fas fa-comments"></i> Evaluator Comment</h5>
@@ -311,6 +333,18 @@ if($comment_check && $comment_check->num_rows > 0){
         </form>
     </div>
 </div>
+<?php else: ?>
+    <?php if (!empty($existing_comment)): ?>
+    <div class="card mt-4 border-secondary">
+        <div class="card-header bg-secondary text-white">
+            <h5 class="card-title mb-0"><i class="fas fa-comments"></i> Evaluator Comment</h5>
+        </div>
+        <div class="card-body">
+            <p class="text-muted"><?= $existing_comment ?></p>
+        </div>
+    </div>
+    <?php endif; ?>
+<?php endif; ?>
 		</div>
 	</div>
 </div>
