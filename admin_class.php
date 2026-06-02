@@ -65,7 +65,13 @@ Class Action {
 		}
 	}
 
-
+	/**
+	 * Validate uploaded file extension against allowed types
+	 */
+	private function validateFileExtension($filename) {
+		$ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+		return in_array($ext, ALLOWED_FILE_TYPES);
+	}
 
 	function forgot_password(){
 		extract($_POST);
@@ -164,20 +170,32 @@ Class Action {
 			return 2;
 		}
 	
-		$stmt = $this->db->prepare("SELECT * FROM users WHERE reset_token = ? AND reset_expires > NOW() LIMIT 1");
-		$stmt->bind_param('s', $token);
-		$stmt->execute();
-		$qry = $stmt->get_result();
-		$stmt->close();
+		// Search all 3 user tables for the reset token (forgot_password() supports all 3)
+		$tables = ["employee_list", "evaluator_list", "users"];
+		$user = null;
+		$found_table = null;
 	
-		if ($qry->num_rows == 0) {
+		foreach ($tables as $table) {
+			$stmt = $this->db->prepare("SELECT * FROM {$table} WHERE reset_token = ? AND reset_expires > NOW() LIMIT 1");
+			$stmt->bind_param('s', $token);
+			$stmt->execute();
+			$qry = $stmt->get_result();
+			$stmt->close();
+	
+			if ($qry->num_rows > 0) {
+				$user = $qry->fetch_assoc();
+				$found_table = $table;
+				break;
+			}
+		}
+	
+		if (!$user) {
 			return 3;
 		}
 	
-		$user = $qry->fetch_assoc();
 		$hashedPassword = password_hash($password, PASSWORD_DEFAULT);
 	
-		$update_stmt = $this->db->prepare("UPDATE users SET password = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?");
+		$update_stmt = $this->db->prepare("UPDATE {$found_table} SET password = ?, reset_token = NULL, reset_expires = NULL WHERE id = ?");
 		$update_stmt->bind_param('si', $hashedPassword, $user['id']);
 		$update = $update_stmt->execute();
 		$update_stmt->close();
@@ -251,6 +269,25 @@ Class Action {
 		$ip_address = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
 		$user_agent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
 	
+		// IP-based rate limiting: max 10 attempts per IP per 5 minutes
+		$rate_windows = 300;    // 5 minutes
+		$rate_limit = 10;       // max attempts per window
+		$cutoff = date("Y-m-d H:i:s", time() - $rate_windows);
+
+		$stmt_rl = $this->db->prepare(
+			"SELECT COUNT(*) AS cnt FROM login_audit_trail 
+			 WHERE ip_address = ? AND login_time > ? AND login_status = 'FAILED'"
+		);
+		$stmt_rl->bind_param('ss', $ip_address, $cutoff);
+		$stmt_rl->execute();
+		$rl = $stmt_rl->get_result()->fetch_assoc();
+		$stmt_rl->close();
+
+		if ((int)$rl['cnt'] >= $rate_limit) {
+			$this->logAudit(NULL, $email ?? 'unknown', $ip_address, $user_agent, "FAILED", "IP rate limit exceeded");
+			return 5; // Rate limited — too many attempts from this IP
+		}
+	
 		// Choose table based on login type
 		$table = $tables[$login] ?? "users";
 	
@@ -282,18 +319,31 @@ Class Action {
 		}
 	
 		// Verify password (supports legacy md5 and modern password_hash)
+		// After successful MD5 login, auto-migrates to bcrypt
 		$passOk = false;
+		$isMd5 = false;
 		if (!empty($user['password'])) {
 			$stored = (string)$user['password'];
 			if (preg_match('/^[a-f0-9]{32}$/i', $stored)) {
 				$passOk = hash_equals($stored, md5((string)$password));
+				$isMd5 = true;
 			} else {
 				$passOk = password_verify((string)$password, $stored);
 			}
 		}
 		if ($passOk) {
-			// Reset failed login count
 			$uid = (int)$user['id'];
+
+			// Auto-migrate MD5 passwords to bcrypt on successful login
+			if ($isMd5) {
+				$newHash = password_hash((string)$password, PASSWORD_DEFAULT);
+				$rh = $this->db->prepare("UPDATE {$table} SET password = ? WHERE id = ?");
+				$rh->bind_param('si', $newHash, $uid);
+				$rh->execute();
+				$rh->close();
+			}
+
+			// Reset failed login count
 			$rst = $this->db->prepare("UPDATE {$table} SET failed_login = 0 WHERE id = ?");
 			$rst->bind_param('i', $uid);
 			$rst->execute();
@@ -379,15 +429,20 @@ Class Action {
 			session_start();
 		}
 		if(isset($_SESSION['login_id'])){
-			$user_id   = $_SESSION['login_id'];
+			$user_id   = (int)$_SESSION['login_id'];
 			$username  = isset($_SESSION['login_email']) ? $_SESSION['login_email'] : 'Unknown';
 			$ip_address = $_SERVER['REMOTE_ADDR'];
 			$user_agent = $_SERVER['HTTP_USER_AGENT'];
 	
-			// Insert logout record
-			$this->db->query("INSERT INTO login_audit_trail 
+			// Insert logout record (prepared statement)
+			$status = 'SUCCESS';
+			$reason = 'User logged out';
+			$lstmt = $this->db->prepare("INSERT INTO login_audit_trail 
 				(user_id, username, ip_address, user_agent, login_status, failure_reason) 
-				VALUES ('".$user_id."', '".$username."', '".$ip_address."', '".$user_agent."', 'SUCCESS', 'User logged out')");
+				VALUES (?, ?, ?, ?, ?, ?)");
+			$lstmt->bind_param('isssss', $user_id, $username, $ip_address, $user_agent, $status, $reason);
+			$lstmt->execute();
+			$lstmt->close();
 		}
 		// Unset all session variables
 		$_SESSION = [];
@@ -426,13 +481,16 @@ Class Action {
 
 	function reset_employee(){
 		extract($_POST);
-		//$tables = array("employee_list", "evaluator_list", "users");
-		// Reset failed attempts and unblock account
-		$reset = $this->db->query("
+		// Reset failed attempts and unblock account (prepared statement)
+		$id_int = intval($id);
+		$reset_stmt = $this->db->prepare("
 			UPDATE employee_list
 			SET failed_login = 0, isBlocked = 0 
-			WHERE id = '".$id."' 
+			WHERE id = ? 
 		");
+		$reset_stmt->bind_param('i', $id_int);
+		$reset = $reset_stmt->execute();
+		$reset_stmt->close();
 	
 		if($reset){
 			return 1; // success
@@ -443,13 +501,16 @@ Class Action {
 	
 	function reset_evaluator(){
 		extract($_POST);
-		//$tables = array("employee_list", "evaluator_list", "users");
-		// Reset failed attempts and unblock account
-		$reset = $this->db->query("
+		// Reset failed attempts and unblock account (prepared statement)
+		$id_int = intval($id);
+		$reset_stmt = $this->db->prepare("
 			UPDATE evaluator_list
 			SET failed_login = 0, isBlocked = 0 
-			WHERE id = '".$id."' 
+			WHERE id = ? 
 		");
+		$reset_stmt->bind_param('i', $id_int);
+		$reset = $reset_stmt->execute();
+		$reset_stmt->close();
 	
 		if($reset){
 			return 1; // success
@@ -519,43 +580,48 @@ Class Action {
 	
 	function signup(){
 		extract($_POST);
-		$data = "";
-		foreach($_POST as $k => $v){
-			if(!in_array($k, array('id','cpass')) && !is_numeric($k)){
-				if($k =='password'){
-					if(empty($v))
-						continue;
-					$v = md5($v);
-
-				}
-				if(empty($data)){
-					$data .= " $k='$v' ";
-				}else{
-					$data .= ", $k='$v' ";
-				}
-			}
+		
+		// Check for duplicate email using prepared statement
+		if (!empty($id)) {
+			$stmt = $this->db->prepare("SELECT * FROM users WHERE email = ? AND id != ?");
+			$stmt->bind_param('si', $email, $id);
+		} else {
+			$stmt = $this->db->prepare("SELECT * FROM users WHERE email = ?");
+			$stmt->bind_param('s', $email);
 		}
-
-		$check = $this->db->query("SELECT * FROM users where email ='$email' ".(!empty($id) ? " and id != {$id} " : ''))->num_rows;
+		$stmt->execute();
+		$check = $stmt->get_result()->num_rows;
+		$stmt->close();
+		
 		if($check > 0){
 			return 2;
-			exit;
 		}
+		
+		$avatar = 'no-image-available.png';
 		if(isset($_FILES['img']) && $_FILES['img']['tmp_name'] != ''){
 			$fname = strtotime(date('y-m-d H:i')).'_'.$_FILES['img']['name'];
 			$move = move_uploaded_file($_FILES['img']['tmp_name'],'assets/uploads/'. $fname);
-			$data .= ", avatar = '$fname' ";
-
+			$avatar = $fname;
 		}
+		
+		$password_hash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : '';
+		$firstname = $_POST['firstname'] ?? '';
+		$lastname = $_POST['lastname'] ?? '';
+		
 		if(empty($id)){
-			if(!isset($_FILES['img']) || (isset($_FILES['img']) && $_FILES['img']['tmp_name'] == '')){	
-			$data .= ", avatar = 'no-image-available.png' ";
+			$stmt = $this->db->prepare("INSERT INTO users (firstname, lastname, email, password, avatar) VALUES (?, ?, ?, ?, ?)");
+			$stmt->bind_param('sssss', $firstname, $lastname, $email, $password_hash, $avatar);
+		} else {
+			if(!empty($password)){
+				$stmt = $this->db->prepare("UPDATE users SET firstname=?, lastname=?, email=?, password=?, avatar=? WHERE id=?");
+				$stmt->bind_param('sssssi', $firstname, $lastname, $email, $password_hash, $avatar, $id);
+			} else {
+				$stmt = $this->db->prepare("UPDATE users SET firstname=?, lastname=?, email=?, avatar=? WHERE id=?");
+				$stmt->bind_param('ssssi', $firstname, $lastname, $email, $avatar, $id);
+			}
 		}
-			$save = $this->db->query("INSERT INTO users set $data");
-
-		}else{
-			$save = $this->db->query("UPDATE users set $data where id = $id");
-		}
+		$save = $stmt->execute();
+		$stmt->close();
 
 		if($save){
 			if(empty($id))
@@ -564,48 +630,67 @@ Class Action {
 				if(!in_array($key, array('id','cpass','password')) && !is_numeric($key))
 					$_SESSION['login_'.$key] = $value;
 			}
-					$_SESSION['login_id'] = $id;
-				if(isset($_FILES['img']) && !empty($_FILES['img']['tmp_name']))
-					$_SESSION['login_avatar'] = $fname;
+			$_SESSION['login_id'] = $id;
+			if(isset($_FILES['img']) && !empty($_FILES['img']['tmp_name']))
+				$_SESSION['login_avatar'] = $fname;
 			return 1;
 		}
 	}
 
 	function update_user(){
 		extract($_POST);
-		$data = "";
-		foreach($_POST as $k => $v){
-			if(!in_array($k, array('id','cpass','table','password')) && !is_numeric($k)){
-				
-				if(empty($data)){
-					$data .= " $k='$v' ";
-				}else{
-					$data .= ", $k='$v' ";
-				}
-			}
+		
+		// Whitelist table names
+		$allowed_tables = ["employee_list", "evaluator_list", "users"];
+		$type = ["employee_list", "evaluator_list", "users"];
+		$table = $allowed_tables[$_SESSION['login_type']] ?? 'users';
+		
+		// Check for duplicate email using prepared statement
+		if (!empty($id)) {
+			$stmt = $this->db->prepare("SELECT * FROM {$table} WHERE email = ? AND id != ?");
+			$stmt->bind_param('si', $email, $id);
+		} else {
+			$stmt = $this->db->prepare("SELECT * FROM {$table} WHERE email = ?");
+			$stmt->bind_param('s', $email);
 		}
-		$type = array("employee_list","evaluator_list","users");
-		$check = $this->db->query("SELECT * FROM {$type[$_SESSION['login_type']]} where email ='$email' ".(!empty($id) ? " and id != {$id} " : ''))->num_rows;
+		$stmt->execute();
+		$check = $stmt->get_result()->num_rows;
+		$stmt->close();
+		
 		if($check > 0){
 			return 2;
-			exit;
 		}
+		
+		$avatar = 'no-image-available.png';
 		if(isset($_FILES['img']) && $_FILES['img']['tmp_name'] != ''){
 			$fname = strtotime(date('y-m-d H:i')).'_'.$_FILES['img']['name'];
 			$move = move_uploaded_file($_FILES['img']['tmp_name'],'assets/uploads/'. $fname);
-			$data .= ", avatar = '$fname' ";
-
+			$avatar = $fname;
 		}
-		if(!empty($password))
-			$data .= " ,password=md5('$password') ";
+		
+		$password_hash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : '';
+		$firstname = $_POST['firstname'] ?? '';
+		$lastname = $_POST['lastname'] ?? '';
+		
 		if(empty($id)){
-			if(!isset($_FILES['img']) || (isset($_FILES['img']) && $_FILES['img']['tmp_name'] == '')){	
-				$data .= ", avatar = 'no-image-available.png' ";
+			if(!empty($password)){
+				$stmt = $this->db->prepare("INSERT INTO {$table} (firstname, lastname, email, password, avatar) VALUES (?, ?, ?, ?, ?)");
+				$stmt->bind_param('sssss', $firstname, $lastname, $email, $password_hash, $avatar);
+			} else {
+				$stmt = $this->db->prepare("INSERT INTO {$table} (firstname, lastname, email, avatar) VALUES (?, ?, ?, ?)");
+				$stmt->bind_param('ssss', $firstname, $lastname, $email, $avatar);
 			}
-			$save = $this->db->query("INSERT INTO {$type[$_SESSION['login_type']]} set $data");
-		}else{
-			$save = $this->db->query("UPDATE {$type[$_SESSION['login_type']]} set $data where id = $id");
+		} else {
+			if(!empty($password)){
+				$stmt = $this->db->prepare("UPDATE {$table} SET firstname=?, lastname=?, email=?, password=?, avatar=? WHERE id=?");
+				$stmt->bind_param('sssssi', $firstname, $lastname, $email, $password_hash, $avatar, $id);
+			} else {
+				$stmt = $this->db->prepare("UPDATE {$table} SET firstname=?, lastname=?, email=?, avatar=? WHERE id=?");
+				$stmt->bind_param('ssssi', $firstname, $lastname, $email, $avatar, $id);
+			}
 		}
+		$save = $stmt->execute();
+		$stmt->close();
 
 		if($save){
 			foreach ($_POST as $key => $value) {
@@ -613,7 +698,7 @@ Class Action {
 					$_SESSION['login_'.$key] = $value;
 			}
 			if(isset($_FILES['img']) && !empty($_FILES['img']['tmp_name']))
-					$_SESSION['login_avatar'] = $fname;
+				$_SESSION['login_avatar'] = $fname;
 			return 1;
 		}
 	}
@@ -625,27 +710,37 @@ Class Action {
 	}
 	function save_system_settings(){
 		extract($_POST);
-		$data = '';
+		// Build safe key-value pairs for known system settings
+		$allowed_keys = ['name', 'email', 'contact', 'address', 'cover_img'];
+		$data = [];
 		foreach($_POST as $k => $v){
-			if(!is_numeric($k)){
-				if(empty($data)){
-					$data .= " $k='$v' ";
-				}else{
-					$data .= ", $k='$v' ";
-				}
+			if(!is_numeric($k) && in_array($k, $allowed_keys)){
+				$data[$k] = $this->db->real_escape_string($v);
 			}
 		}
-		if($_FILES['cover']['tmp_name'] != ''){
+		if(isset($_FILES['cover']) && $_FILES['cover']['tmp_name'] != ''){
 			$fname = strtotime(date('y-m-d H:i')).'_'.$_FILES['cover']['name'];
 			$move = move_uploaded_file($_FILES['cover']['tmp_name'],'../assets/uploads/'. $fname);
-			$data .= ", cover_img = '$fname' ";
-
+			if($move) $data['cover_img'] = $fname;
 		}
+		
 		$chk = $this->db->query("SELECT * FROM system_settings");
 		if($chk->num_rows > 0){
-			$save = $this->db->query("UPDATE system_settings set $data where id =".$chk->fetch_array()['id']);
-		}else{
-			$save = $this->db->query("INSERT INTO system_settings set $data");
+			$settings_id = intval($chk->fetch_array()['id']);
+			$sets = [];
+			foreach($data as $k => $v){
+				$sets[] = "$k = '$v'";
+			}
+			$set_clause = implode(', ', $sets);
+			if(!empty($set_clause)){
+				$save = $this->db->query("UPDATE system_settings SET $set_clause WHERE id = $settings_id");
+			}
+		} else {
+			$keys = implode(', ', array_keys($data));
+			$vals = "'" . implode("', '", array_values($data)) . "'";
+			if(!empty($keys)){
+				$save = $this->db->query("INSERT INTO system_settings ($keys) VALUES ($vals)");
+			}
 		}
 		if($save){
 			foreach($_POST as $k => $v){
@@ -653,7 +748,7 @@ Class Action {
 					$_SESSION['system'][$k] = $v;
 				}
 			}
-			if($_FILES['cover']['tmp_name'] != ''){
+			if(isset($fname)){
 				$_SESSION['system']['cover_img'] = $fname;
 			}
 			return 1;
@@ -675,70 +770,80 @@ Class Action {
 	}
 	function save_department(){
 		extract($_POST);
-		$data = "";
-		foreach($_POST as $k => $v){
-			if(!in_array($k, array('id','user_ids')) && !is_numeric($k)){
-				if(empty($data)){
-					$data .= " $k='$v' ";
-				}else{
-					$data .= ", $k='$v' ";
-				}
-			}
-		}
-		$chk = $this->db->query("SELECT * FROM department_list where department = '$department' and id != '{$id}' ")->num_rows;
+		$department_name = $_POST['department'] ?? '';
+		$id = isset($id) ? intval($id) : null;
+		
+		$chk_stmt = $this->db->prepare("SELECT * FROM department_list WHERE department = ? AND id != ?");
+		$chk_stmt->bind_param('si', $department_name, $id);
+		$chk_stmt->execute();
+		$chk = $chk_stmt->get_result()->num_rows;
+		$chk_stmt->close();
+		
 		if($chk > 0){
 			return 2;
 		}
-		if(isset($user_ids)){
-			$data .= ", user_ids='".implode(',',$user_ids)."' ";
-		}
+		$user_ids_str = isset($user_ids) ? implode(',', $user_ids) : '';
+		
 		if(empty($id)){
-			$save = $this->db->query("INSERT INTO department_list set $data");
-		}else{
-			$save = $this->db->query("UPDATE department_list set $data where id = $id");
+			$stmt = $this->db->prepare("INSERT INTO department_list (department, user_ids) VALUES (?, ?)");
+			$stmt->bind_param('ss', $department_name, $user_ids_str);
+		} else {
+			$stmt = $this->db->prepare("UPDATE department_list SET department=?, user_ids=? WHERE id=?");
+			$stmt->bind_param('ssi', $department_name, $user_ids_str, $id);
 		}
+		$save = $stmt->execute();
+		$stmt->close();
 		if($save){
 			return 1;
 		}
 	}
 	function delete_department(){
 		extract($_POST);
-		$delete = $this->db->query("DELETE FROM department_list where id = $id");
+		$id = intval($id);
+		$stmt = $this->db->prepare("DELETE FROM department_list WHERE id = ?");
+		$stmt->bind_param('i', $id);
+		$delete = $stmt->execute();
+		$stmt->close();
 		if($delete){
 			return 1;
 		}
 	}
 	function save_designation(){
 		extract($_POST);
-		$data = "";
-		foreach($_POST as $k => $v){
-			if(!in_array($k, array('id','user_ids')) && !is_numeric($k)){
-				if(empty($data)){
-					$data .= " $k='$v' ";
-				}else{
-					$data .= ", $k='$v' ";
-				}
-			}
-		}
-		$chk = $this->db->query("SELECT * FROM designation_list where designation = '$designation' and id != '{$id}' ")->num_rows;
+		$designation_name = $_POST['designation'] ?? '';
+		$id = isset($id) ? intval($id) : null;
+		
+		$chk_stmt = $this->db->prepare("SELECT * FROM designation_list WHERE designation = ? AND id != ?");
+		$chk_stmt->bind_param('si', $designation_name, $id);
+		$chk_stmt->execute();
+		$chk = $chk_stmt->get_result()->num_rows;
+		$chk_stmt->close();
+		
 		if($chk > 0){
 			return 2;
 		}
-		if(isset($user_ids)){
-			$data .= ", user_ids='".implode(',',$user_ids)."' ";
-		}
+		$user_ids_str = isset($user_ids) ? implode(',', $user_ids) : '';
+		
 		if(empty($id)){
-			$save = $this->db->query("INSERT INTO designation_list set $data");
-		}else{
-			$save = $this->db->query("UPDATE designation_list set $data where id = $id");
+			$stmt = $this->db->prepare("INSERT INTO designation_list (designation, user_ids) VALUES (?, ?)");
+			$stmt->bind_param('ss', $designation_name, $user_ids_str);
+		} else {
+			$stmt = $this->db->prepare("UPDATE designation_list SET designation=?, user_ids=? WHERE id=?");
+			$stmt->bind_param('ssi', $designation_name, $user_ids_str, $id);
 		}
+		$save = $stmt->execute();
+		$stmt->close();
 		if($save){
 			return 1;
 		}
 	}
 	function delete_designation(){
 		extract($_POST);
-		$delete = $this->db->query("DELETE FROM designation_list where id = $id");
+		$id = intval($id);
+		$stmt = $this->db->prepare("DELETE FROM designation_list WHERE id = ?");
+		$stmt->bind_param('i', $id);
+		$delete = $stmt->execute();
+		$stmt->close();
 		if($delete){
 			return 1;
 		}
@@ -776,18 +881,18 @@ Class Action {
 		
 		if(empty($id)){
 			$password_hash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : '';
-			$stmt = $this->db->prepare("INSERT INTO employee_list (employee_id, firstname, lastname, email, password, department_id, designation_id, evaluator_id, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
-			$stmt->bind_param('ssssssiss', $employee_id, $firstname, $lastname, $email, $password_hash, $department_id, $designation_id, $evaluator_id, $avatar);
+			$stmt = $this->db->prepare("INSERT INTO employee_list (employee_id, firstname, lastname, email, password, department_id, position_id, designation_id, evaluator_id, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+			$stmt->bind_param('sssssissis', $employee_id, $firstname, $lastname, $email, $password_hash, $department_id, $position_id, $designation_id, $evaluator_id, $avatar);
 			$save = $stmt->execute();
 			$stmt->close();
 		} else {
 			if(!empty($password)){
 				$password_hash = password_hash($password, PASSWORD_DEFAULT);
-				$stmt = $this->db->prepare("UPDATE employee_list SET employee_id=?, firstname=?, lastname=?, email=?, password=?, department_id=?, designation_id=?, evaluator_id=?, avatar=? WHERE id=?");
-				$stmt->bind_param('ssssssissi', $employee_id, $firstname, $lastname, $email, $password_hash, $department_id, $designation_id, $evaluator_id, $avatar, $id);
+				$stmt = $this->db->prepare("UPDATE employee_list SET employee_id=?, firstname=?, lastname=?, email=?, password=?, department_id=?, position_id=?, designation_id=?, evaluator_id=?, avatar=? WHERE id=?");
+				$stmt->bind_param('ssssssissii', $employee_id, $firstname, $lastname, $email, $password_hash, $department_id, $position_id, $designation_id, $evaluator_id, $avatar, $id);
 			} else {
-				$stmt = $this->db->prepare("UPDATE employee_list SET employee_id=?, firstname=?, lastname=?, email=?, department_id=?, designation_id=?, evaluator_id=?, avatar=? WHERE id=?");
-				$stmt->bind_param('ssssissii', $employee_id, $firstname, $lastname, $email, $department_id, $designation_id, $evaluator_id, $avatar, $id);
+				$stmt = $this->db->prepare("UPDATE employee_list SET employee_id=?, firstname=?, lastname=?, email=?, department_id=?, position_id=?, designation_id=?, evaluator_id=?, avatar=? WHERE id=?");
+				$stmt->bind_param('ssssissiii', $employee_id, $firstname, $lastname, $email, $department_id, $position_id, $designation_id, $evaluator_id, $avatar, $id);
 			}
 			$save = $stmt->execute();
 			$stmt->close();
@@ -799,12 +904,18 @@ Class Action {
 		extract($_POST);
 		$id = intval($id);
 		
-		$this->db->query("DELETE FROM task_progress WHERE faculty_id = $id");
-		$this->db->query("DELETE FROM ratings WHERE employee_id = $id");
-		$this->db->query("DELETE FROM comments WHERE employee_id = $id");
-		$this->db->query("DELETE FROM renewal_recommendations WHERE faculty_id = $id");
+		$tables = ['task_progress' => 'faculty_id', 'ratings' => 'employee_id', 'comments' => 'employee_id', 'renewal_recommendations' => 'faculty_id'];
+		foreach($tables as $table => $col){
+			$stmt = $this->db->prepare("DELETE FROM {$table} WHERE {$col} = ?");
+			$stmt->bind_param('i', $id);
+			$stmt->execute();
+			$stmt->close();
+		}
 		
-		$delete = $this->db->query("DELETE FROM employee_list WHERE id = $id");
+		$stmt = $this->db->prepare("DELETE FROM employee_list WHERE id = ?");
+		$stmt->bind_param('i', $id);
+		$delete = $stmt->execute();
+		$stmt->close();
 		
 		if($this->db->error) {
 			return 0;
@@ -816,39 +927,54 @@ Class Action {
 	}
 	function save_evaluator(){
 		extract($_POST);
-		$data = "";
-		foreach($_POST as $k => $v){
-			if(!in_array($k, array('id','cpass','password')) && !is_numeric($k)){
-				if(empty($data)){
-					$data .= " $k='$v' ";
-				}else{
-					$data .= ", $k='$v' ";
-				}
-			}
+		
+		// Check for duplicate email using prepared statement
+		if (!empty($id)) {
+			$stmt = $this->db->prepare("SELECT * FROM evaluator_list WHERE email = ? AND id != ?");
+			$stmt->bind_param('si', $email, $id);
+		} else {
+			$stmt = $this->db->prepare("SELECT * FROM evaluator_list WHERE email = ?");
+			$stmt->bind_param('s', $email);
 		}
-		if(!empty($password)){
-					$data .= ", password=md5('$password') ";
-
-		}
-		$check = $this->db->query("SELECT * FROM evaluator_list where email ='$email' ".(!empty($id) ? " and id != {$id} " : ''))->num_rows;
+		$stmt->execute();
+		$check = $stmt->get_result()->num_rows;
+		$stmt->close();
+		
 		if($check > 0){
 			return 2;
-			exit;
 		}
+		
+		$avatar = 'no-image-available.png';
 		if(isset($_FILES['img']) && $_FILES['img']['tmp_name'] != ''){
 			$fname = strtotime(date('y-m-d H:i')).'_'.$_FILES['img']['name'];
 			$move = move_uploaded_file($_FILES['img']['tmp_name'],'assets/uploads/'. $fname);
-			$data .= ", avatar = '$fname' ";
-
+			$avatar = $fname;
 		}
+		
+		$password_hash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : '';
+		$firstname = $_POST['firstname'] ?? '';
+		$lastname = $_POST['lastname'] ?? '';
+		$employee_id = $_POST['employee_id'] ?? '';
+		
 		if(empty($id)){
-			if(!isset($_FILES['img']) || (isset($_FILES['img']) && $_FILES['img']['tmp_name'] == '')){	
-				$data .= ", avatar = 'no-image-available.png' ";
+			if(!empty($password)){
+				$stmt = $this->db->prepare("INSERT INTO evaluator_list (employee_id, firstname, lastname, email, password, avatar) VALUES (?, ?, ?, ?, ?, ?)");
+				$stmt->bind_param('ssssss', $employee_id, $firstname, $lastname, $email, $password_hash, $avatar);
+			} else {
+				$stmt = $this->db->prepare("INSERT INTO evaluator_list (employee_id, firstname, lastname, email, avatar) VALUES (?, ?, ?, ?, ?)");
+				$stmt->bind_param('sssss', $employee_id, $firstname, $lastname, $email, $avatar);
 			}
-			$save = $this->db->query("INSERT INTO evaluator_list set $data");
-		}else{
-			$save = $this->db->query("UPDATE evaluator_list set $data where id = $id");
+		} else {
+			if(!empty($password)){
+				$stmt = $this->db->prepare("UPDATE evaluator_list SET employee_id=?, firstname=?, lastname=?, email=?, password=?, avatar=? WHERE id=?");
+				$stmt->bind_param('ssssssi', $employee_id, $firstname, $lastname, $email, $password_hash, $avatar, $id);
+			} else {
+				$stmt = $this->db->prepare("UPDATE evaluator_list SET employee_id=?, firstname=?, lastname=?, email=?, avatar=? WHERE id=?");
+				$stmt->bind_param('sssssi', $employee_id, $firstname, $lastname, $email, $avatar, $id);
+			}
 		}
+		$save = $stmt->execute();
+		$stmt->close();
 
 		if($save){
 			return 1;
@@ -856,71 +982,81 @@ Class Action {
 	}
 	function delete_evaluator(){
 		extract($_POST);
-		$delete = $this->db->query("DELETE FROM evaluator_list where id = ".$id);
+		$id = intval($id);
+		$stmt = $this->db->prepare("DELETE FROM evaluator_list WHERE id = ?");
+		$stmt->bind_param('i', $id);
+		$delete = $stmt->execute();
+		$stmt->close();
 		if($delete)
 			return 1;
 	}
 	function save_academic_rank(){
 		extract($_POST);
-		$data = "";
-		foreach($_POST as $k => $v){
-			if(!in_array($k, array('id')) && !is_numeric($k)){
-				if(empty($data)){
-					$data .= " $k='$v' ";
-				}else{
-					$data .= ", $k='$v' ";
-				}
-			}
-		}
-		$chk = $this->db->query("SELECT * FROM position_list where position = '$position' and id != '{$id}' ")->num_rows;
+		$position = $_POST['position'] ?? '';
+		$id = isset($id) ? intval($id) : null;
+		
+		$stmt = $this->db->prepare("SELECT * FROM position_list WHERE position = ? AND id != ?");
+		$stmt->bind_param('si', $position, $id);
+		$stmt->execute();
+		$chk = $stmt->get_result()->num_rows;
+		$stmt->close();
+		
 		if($chk > 0){
 			return 2;
 		}
 		if(empty($id)){
-			$save = $this->db->query("INSERT INTO position_list set $data");
-		}else{
-			$save = $this->db->query("UPDATE position_list set $data where id = $id");
+			$stmt = $this->db->prepare("INSERT INTO position_list (position) VALUES (?)");
+			$stmt->bind_param('s', $position);
+		} else {
+			$stmt = $this->db->prepare("UPDATE position_list SET position=? WHERE id=?");
+			$stmt->bind_param('si', $position, $id);
 		}
+		$save = $stmt->execute();
+		$stmt->close();
 		if($save){
 			return 1;
 		}
 	}
 	function delete_academic_rank(){
 		extract($_POST);
-		$delete = $this->db->query("DELETE FROM position_list where id = $id");
+		$id = intval($id);
+		$stmt = $this->db->prepare("DELETE FROM position_list WHERE id = ?");
+		$stmt->bind_param('i', $id);
+		$delete = $stmt->execute();
+		$stmt->close();
 		if($delete){
 			return 1;
 		}
 	}
 	function update_evaluator_department(){
 		extract($_POST);
-		$update = $this->db->query("UPDATE evaluator_list set department_id = '$department_id' where id = $id");
+		$id = intval($id);
+		$department_id = intval($department_id);
+		$stmt = $this->db->prepare("UPDATE evaluator_list SET department_id = ? WHERE id = ?");
+		$stmt->bind_param('ii', $department_id, $id);
+		$update = $stmt->execute();
+		$stmt->close();
 		if($update)
 			return 1;
 	}
 	function save_task(){
 		extract($_POST);
-		$data = "";
-		foreach($_POST as $k => $v){
-			if(!in_array($k, array('id')) && !is_numeric($k)){
-				// Escape quotes for safety
-				$v = $this->db->real_escape_string($v);
-	
-				if(empty($data)){
-					$data .= " $k='$v' ";
-				}else{
-					$data .= ", $k='$v' ";
-				}
-			}
-		}
-	
+		$task_name = $_POST['task'] ?? '';
+		$id = isset($id) ? intval($id) : null;
+		$category = $_POST['category'] ?? '';
+		$efficiency = $_POST['efficiency'] ?? '';
+		$timeliness = $_POST['timeliness'] ?? '';
+		$quality = $_POST['quality'] ?? '';
+		
 		if(empty($id)){
-			// Insert new record, include date_created
-			$save = $this->db->query("INSERT INTO task_list SET $data, date_created=NOW()");
-		}else{
-			// Update existing record (don’t touch date_created)
-			$save = $this->db->query("UPDATE task_list SET $data WHERE id = $id");
+			$stmt = $this->db->prepare("INSERT INTO task_list (task, category, efficiency, timeliness, quality, date_created) VALUES (?, ?, ?, ?, ?, NOW())");
+			$stmt->bind_param('sssss', $task_name, $category, $efficiency, $timeliness, $quality);
+		} else {
+			$stmt = $this->db->prepare("UPDATE task_list SET task=?, category=?, efficiency=?, timeliness=?, quality=? WHERE id=?");
+			$stmt->bind_param('sssssi', $task_name, $category, $efficiency, $timeliness, $quality, $id);
 		}
+		$save = $stmt->execute();
+		$stmt->close();
 	
 		if($save){
 			return 1;
@@ -929,7 +1065,11 @@ Class Action {
 	
 	function delete_task(){
 		extract($_POST);
-		$delete = $this->db->query("DELETE FROM task_list where id = $id");
+		$id = intval($id);
+		$stmt = $this->db->prepare("DELETE FROM task_list WHERE id = ?");
+		$stmt->bind_param('i', $id);
+		$delete = $stmt->execute();
+		$stmt->close();
 		if($delete){
 			return 1;
 		}
@@ -958,9 +1098,10 @@ Class Action {
 		$task_id = intval($task_id);
 		$position_id = intval($position_id);
 		
-		$sql = "INSERT INTO target_exemptions (task_id, position_id) VALUES ($task_id, $position_id)";
-		
-		$save = $this->db->query($sql);
+		$stmt = $this->db->prepare("INSERT INTO target_exemptions (task_id, position_id) VALUES (?, ?)");
+		$stmt->bind_param('ii', $task_id, $position_id);
+		$save = $stmt->execute();
+		$stmt->close();
 		if($save){
 			return json_encode(['status' => 'success']);
 		} else {
@@ -971,7 +1112,10 @@ Class Action {
 	function delete_exemption(){
 		extract($_POST);
 		$id = intval($id);
-		$delete = $this->db->query("DELETE FROM target_exemptions WHERE id = $id");
+		$stmt = $this->db->prepare("DELETE FROM target_exemptions WHERE id = ?");
+		$stmt->bind_param('i', $id);
+		$delete = $stmt->execute();
+		$stmt->close();
 		if($delete){
 			return json_encode(['status' => 'success']);
 		} else {
@@ -981,28 +1125,49 @@ Class Action {
 	function save_rating(){
 		extract($_POST);
 		$progress_id = intval($progress_id);
-		$field = $this->db->real_escape_string($field);
 		$value = floatval($value);
+		
+		// Whitelist allowed field names to prevent SQL injection through $field
+		$allowed_fields = ['efficiency', 'timeliness', 'quality'];
+		$field = in_array($field, $allowed_fields) ? $field : null;
+		if ($field === null) {
+			return 0;
+		}
 	
 		// Get task_id and employee_id from task_progress
-		$qry = $this->db->query("SELECT task_id, faculty_id FROM task_progress WHERE id = $progress_id");
+		$stmt = $this->db->prepare("SELECT task_id, faculty_id FROM task_progress WHERE id = ?");
+		$stmt->bind_param('i', $progress_id);
+		$stmt->execute();
+		$qry = $stmt->get_result();
+		$stmt->close();
 		if($qry->num_rows > 0){
 			$row = $qry->fetch_assoc();
 			$task_id = $row['task_id'];
 			$employee_id = $row['faculty_id'];
+		} else {
+			return 0;
 		}
 	
 		// Check if rating already exists
-		$check = $this->db->query("SELECT id FROM ratings WHERE task_id = $task_id AND employee_id = $employee_id");
+		$stmt = $this->db->prepare("SELECT id FROM ratings WHERE task_id = ? AND employee_id = ?");
+		$stmt->bind_param('ii', $task_id, $employee_id);
+		$stmt->execute();
+		$check = $stmt->get_result();
+		$stmt->close();
 		if($check->num_rows > 0){
 			$rating = $check->fetch_assoc();
 			$rating_id = $rating['id'];
-			// Update the specific field
-			$save_rating = $this->db->query("UPDATE ratings SET $field = $value WHERE id = $rating_id");
+			// Safe: $field is whitelisted, $value and $rating_id are bound
+			$stmt = $this->db->prepare("UPDATE ratings SET {$field} = ?, rating_period = ? WHERE id = ?");
+			$stmt->bind_param('dsi', $value, $rating_period, $rating_id);
+			$stmt->execute();
+			$stmt->close();
 			return 1;
-		}else{
-			// Insert new record
-			$save_rating = $this->db->query("INSERT INTO ratings (task_id, employee_id, $field) VALUES ($task_id, $employee_id, $value)");
+		} else {
+			$stmt = $this->db->prepare("INSERT INTO ratings (task_id, employee_id, {$field}, rating_period) VALUES (?, ?, ?, ?)");
+			$stmt->bind_param('iids', $task_id, $employee_id, $value, $rating_period);
+			$stmt->execute();
+			$stmt->close();
 			return 1;
 		}
 	
@@ -1013,21 +1178,28 @@ Class Action {
 		if(isset($_POST['faculty_id']) && isset($_POST['evaluator_id']) && isset($_POST['comment'])){
 			$faculty_id = intval($_POST['faculty_id']);
 			$evaluator_id = intval($_POST['evaluator_id']);
-			$comment = $this->db->real_escape_string($_POST['comment']);
-			
+			$comment = $_POST['comment'];
 			
 			// Check if comment already exists for this faculty-evaluator combination
-			$check = $this->db->query("SELECT id FROM comments WHERE employee_id = $faculty_id AND rater_id = $evaluator_id");
+			$stmt = $this->db->prepare("SELECT id FROM comments WHERE employee_id = ? AND rater_id = ?");
+			$stmt->bind_param('ii', $faculty_id, $evaluator_id);
+			$stmt->execute();
+			$check = $stmt->get_result();
+			$stmt->close();
 			
 			if($check->num_rows > 0){
 				// Update existing comment
 				$comment_row = $check->fetch_assoc();
 				$comment_id = $comment_row['id'];
-				$save_comment = $this->db->query("UPDATE comments SET comment_text = '$comment', date_updated = CURRENT_TIMESTAMP WHERE id = $comment_id");
+				$stmt = $this->db->prepare("UPDATE comments SET comment_text = ?, date_updated = CURRENT_TIMESTAMP WHERE id = ?");
+				$stmt->bind_param('si', $comment, $comment_id);
 			} else {
 				// Insert new comment
-				$save_comment = $this->db->query("INSERT INTO comments (employee_id, rater_id, comment_text) VALUES ($faculty_id, $evaluator_id, '$comment')");
+				$stmt = $this->db->prepare("INSERT INTO comments (employee_id, rater_id, comment_text) VALUES (?, ?, ?)");
+				$stmt->bind_param('iis', $faculty_id, $evaluator_id, $comment);
 			}
+			$save_comment = $stmt->execute();
+			$stmt->close();
 			
 			if($save_comment){
 				return 1;
@@ -1039,74 +1211,67 @@ Class Action {
 		}
 	}
 	function save_status() {
-    header('Content-Type: application/json'); // make sure AJAX expects JSON
+    header('Content-Type: application/json');
 
-    // --- 1️⃣ Retrieve and sanitize POST inputs ---
-    $id      = isset($_POST['id']) ? (int) $_POST['id'] : null;         // task_id
-    $value   = isset($_POST['status']) ? trim($_POST['status']) : null;   // progress value
-    $faculty = isset($_POST['faculty']) ? (int) $_POST['faculty'] : null; // faculty_id
+    $id      = isset($_POST['id']) ? (int) $_POST['id'] : null;
+    $value   = isset($_POST['status']) ? trim($_POST['status']) : null;
+    $faculty = isset($_POST['faculty']) ? (int) $_POST['faculty'] : null;
 
-    // 🪵 Debug: log raw POST data and processed vars
-    error_log("RAW POST: " . json_encode($_POST));
     error_log("Processed => id: {$id}, faculty: {$faculty}, value: '{$value}'");
 
-    // --- 2️⃣ Validate inputs ---
     if ($id === null || $faculty === null || $value === null || $value === '') {
-        echo json_encode([
-            "status" => "error",
-            "message" => "Missing or invalid parameters.",
-            "debug" => [
-                "id" => $id,
-                "faculty" => $faculty,
-                "value" => $value,
-                "_POST" => $_POST
-            ]
-        ]);
+        echo json_encode(["status" => "error", "message" => "Missing or invalid parameters."]);
         return;
     }
 
-    // --- 3️⃣ Get user/session info for audit trail ---
     $userId    = $_SESSION['login_id']   ?? null;
     $username  = $_SESSION['login_email'] ?? 'Unknown';
     $ip        = $_SERVER['REMOTE_ADDR']  ?? '0.0.0.0';
     $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
-
-    // --- 4️⃣ Escape strings safely ---
-    $value      = $this->db->real_escape_string($value);
-    $username   = $this->db->real_escape_string($username);
-    $ip         = $this->db->real_escape_string($ip);
-    $userAgent  = $this->db->real_escape_string($userAgent);
     $activity_log = '';
 
-    // --- 4.5️⃣ Validate ratings before allowing status change to Verified ---
     if ($value === 'Verified') {
-        $taskCheck = $this->db->query("SELECT efficiency AS task_eff, timeliness AS task_time, quality AS task_qual FROM task_list WHERE id = $id LIMIT 1");
+        $stmt = $this->db->prepare("SELECT efficiency AS task_eff, timeliness AS task_time, quality AS task_qual FROM task_list WHERE id = ? LIMIT 1");
+        $stmt->bind_param('i', $id);
+        $stmt->execute();
+        $taskCheck = $stmt->get_result();
+        $stmt->close();
         if (!$taskCheck || $taskCheck->num_rows == 0) {
-            echo json_encode([
-                "status" => "error",
-                "message" => "Task not found."
-            ]);
+            echo json_encode(["status" => "error", "message" => "Task not found."]);
             return;
         }
         $taskRow = $taskCheck->fetch_assoc();
         
-        $ratingCheck = $this->db->query("SELECT efficiency, timeliness, quality FROM ratings WHERE employee_id = $faculty AND task_id = $id LIMIT 1");
+        $stmt = $this->db->prepare("SELECT efficiency, timeliness, quality FROM ratings WHERE employee_id = ? AND task_id = ? LIMIT 1");
+        $stmt->bind_param('ii', $faculty, $id);
+        $stmt->execute();
+        $ratingCheck = $stmt->get_result();
+        $stmt->close();
         if (!$ratingCheck || $ratingCheck->num_rows == 0) {
             $missingRatings = [];
-            if ($taskRow['task_eff'] === 'Applicable' && empty($this->db->query("SELECT efficiency FROM ratings WHERE employee_id = $faculty AND task_id = $id")->fetch_assoc()['efficiency'] ?? null)) {
+            $stmt = $this->db->prepare("SELECT efficiency FROM ratings WHERE employee_id = ? AND task_id = ?");
+            $stmt->bind_param('ii', $faculty, $id);
+            $stmt->execute();
+            if ($taskRow['task_eff'] === 'Applicable' && empty($stmt->get_result()->fetch_assoc()['efficiency'] ?? null)) {
                 $missingRatings[] = 'Efficiency';
             }
-            if ($taskRow['task_time'] === 'Applicable' && empty($this->db->query("SELECT timeliness FROM ratings WHERE employee_id = $faculty AND task_id = $id")->fetch_assoc()['timeliness'] ?? null)) {
+            $stmt->close();
+            $stmt = $this->db->prepare("SELECT timeliness FROM ratings WHERE employee_id = ? AND task_id = ?");
+            $stmt->bind_param('ii', $faculty, $id);
+            $stmt->execute();
+            if ($taskRow['task_time'] === 'Applicable' && empty($stmt->get_result()->fetch_assoc()['timeliness'] ?? null)) {
                 $missingRatings[] = 'Timeliness';
             }
-            if ($taskRow['task_qual'] === 'Applicable' && empty($this->db->query("SELECT quality FROM ratings WHERE employee_id = $faculty AND task_id = $id")->fetch_assoc()['quality'] ?? null)) {
+            $stmt->close();
+            $stmt = $this->db->prepare("SELECT quality FROM ratings WHERE employee_id = ? AND task_id = ?");
+            $stmt->bind_param('ii', $faculty, $id);
+            $stmt->execute();
+            if ($taskRow['task_qual'] === 'Applicable' && empty($stmt->get_result()->fetch_assoc()['quality'] ?? null)) {
                 $missingRatings[] = 'Quality';
             }
+            $stmt->close();
             if (count($missingRatings) > 0) {
-                echo json_encode([
-                    "status" => "error",
-                    "message" => "Cannot verify without ratings. Please set " . implode(', ', $missingRatings) . " ratings first."
-                ]);
+                echo json_encode(["status" => "error", "message" => "Cannot verify without ratings. Please set " . implode(', ', $missingRatings) . " ratings first."]);
                 return;
             }
         } else {
@@ -1122,64 +1287,68 @@ Class Action {
                 $missingRatings[] = 'Quality';
             }
             if (count($missingRatings) > 0) {
-                echo json_encode([
-                    "status" => "error",
-                    "message" => "Cannot verify. Please complete " . implode(', ', $missingRatings) . " ratings first."
-                ]);
+                echo json_encode(["status" => "error", "message" => "Cannot verify. Please complete " . implode(', ', $missingRatings) . " ratings first."]);
                 return;
             }
         }
     }
 
-    // --- 5️⃣ Check if the record exists ---
-    $check = $this->db->query("SELECT id, progress FROM task_progress WHERE task_id = $id AND faculty_id = $faculty LIMIT 1");
+    // Check if record exists
+    $stmt = $this->db->prepare("SELECT id, progress FROM task_progress WHERE task_id = ? AND faculty_id = ? LIMIT 1");
+    $stmt->bind_param('ii', $id, $faculty);
+    $stmt->execute();
+    $check = $stmt->get_result();
+    $stmt->close();
 
     if ($check && $check->num_rows > 0) {
         $row = $check->fetch_assoc();
         $progressId = (int) $row['id'];
-        $oldStatus = $this->db->real_escape_string($row['progress']);
+        $oldStatus = $row['progress'];
         $activity_log = "Changed status from '{$oldStatus}' to '{$value}' for faculty ID {$faculty} (task ID {$id})";
         
         if ($value === 'For Verification') {
-            $this->db->query("DELETE FROM ratings WHERE employee_id = $faculty AND task_id = $id");
-            $save_status = $this->db->query("UPDATE task_progress SET progress = '$value', date_verified = NULL WHERE id = $progressId");
+            $stmt = $this->db->prepare("DELETE FROM ratings WHERE employee_id = ? AND task_id = ?");
+            $stmt->bind_param('ii', $faculty, $id);
+            $stmt->execute();
+            $stmt->close();
+            $stmt = $this->db->prepare("UPDATE task_progress SET progress = ?, date_verified = NULL WHERE id = ?");
+            $stmt->bind_param('si', $value, $progressId);
         } elseif ($value === 'Verified') {
-            $save_status = $this->db->query("UPDATE task_progress SET progress = '$value', date_verified = NOW() WHERE id = $progressId");
+            $stmt = $this->db->prepare("UPDATE task_progress SET progress = ?, date_verified = NOW() WHERE id = ?");
+            $stmt->bind_param('si', $value, $progressId);
         } else {
-            $save_status = $this->db->query("UPDATE task_progress SET progress = '$value' WHERE id = $progressId");
+            $stmt = $this->db->prepare("UPDATE task_progress SET progress = ? WHERE id = ?");
+            $stmt->bind_param('si', $value, $progressId);
         }
+        $save_status = $stmt->execute();
+        $stmt->close();
     } else {
         $activity_log = "Created new status '{$value}' for faculty ID {$faculty} (task ID {$id})";
         if ($value === 'Verified') {
-            $save_status = $this->db->query("INSERT INTO task_progress (task_id, faculty_id, progress, date_verified) VALUES ($id, $faculty, '$value', NOW())");
+            $stmt = $this->db->prepare("INSERT INTO task_progress (task_id, faculty_id, progress, date_verified) VALUES (?, ?, ?, NOW())");
+            $stmt->bind_param('iis', $id, $faculty, $value);
         } else {
-            $save_status = $this->db->query("INSERT INTO task_progress (task_id, faculty_id, progress) VALUES ($id, $faculty, '$value')");
+            $stmt = $this->db->prepare("INSERT INTO task_progress (task_id, faculty_id, progress) VALUES (?, ?, ?)");
+            $stmt->bind_param('iis', $id, $faculty, $value);
         }
+        $save_status = $stmt->execute();
+        $stmt->close();
     }
 
-    // --- 6️⃣ Log to audit trail and send JSON result ---
     if ($save_status) {
-        $activity_log = $this->db->real_escape_string($activity_log);
-        $this->db->query("
-            INSERT INTO login_audit_trail 
-            (user_id, username, ip_address, user_agent, login_status, failure_reason)
-            VALUES ('$userId', '$username', '$ip', '$userAgent', 'SUCCESS', '$activity_log')
-        ");
+        $stmt = $this->db->prepare("INSERT INTO login_audit_trail (user_id, username, ip_address, user_agent, login_status, failure_reason) VALUES (?, ?, ?, ?, 'SUCCESS', ?)");
+        $stmt->bind_param('issss', $userId, $username, $ip, $userAgent, $activity_log);
+        $stmt->execute();
+        $stmt->close();
         echo json_encode(["status" => "success", "message" => "Status saved successfully"]);
     } else {
         $error = $this->db->error;
-        $error_msg = $this->db->real_escape_string("Failed to update status: $error");
-
-        $this->db->query("
-            INSERT INTO login_audit_trail 
-            (user_id, username, ip_address, user_agent, login_status, failure_reason)
-            VALUES ('$userId', '$username', '$ip', '$userAgent', 'FAILED', '$error_msg')
-        ");
-        echo json_encode([
-            "status" => "error",
-            "message" => "Database update failed",
-            "debug" => $error
-        ]);
+        $stmt = $this->db->prepare("INSERT INTO login_audit_trail (user_id, username, ip_address, user_agent, login_status, failure_reason) VALUES (?, ?, ?, ?, 'FAILED', ?)");
+        $error_msg = "Failed to update status: $error";
+        $stmt->bind_param('issss', $userId, $username, $ip, $userAgent, $error_msg);
+        $stmt->execute();
+        $stmt->close();
+        echo json_encode(["status" => "error", "message" => "Database update failed"]);
     }
 }
 
@@ -1188,6 +1357,7 @@ function submit_file() {
     
     $task_id = isset($_POST['task_id']) ? (int) $_POST['task_id'] : 0;
     $faculty_id = $_SESSION['login_id'] ?? 0;
+    $rating_period = isset($_POST['rating_period']) ? $this->db->real_escape_string($_POST['rating_period']) : '';
     
     if ($task_id === 0 || $faculty_id === 0) {
         echo json_encode(["status" => "error", "message" => "Invalid task or faculty ID."]);
@@ -1224,9 +1394,9 @@ function submit_file() {
         if ($check && $check->num_rows > 0) {
             $row = $check->fetch_assoc();
             $progressId = (int) $row['id'];
-            $this->db->query("UPDATE task_progress SET file_path = '$uploadDir$newFileName', file_type = '$fileType', progress = 'For Verification', date_created = NOW() WHERE id = $progressId");
+            $this->db->query("UPDATE task_progress SET file_path = '$uploadDir$newFileName', file_type = '$fileType', progress = 'For Verification', date_created = NOW(), rating_period = '$rating_period' WHERE id = $progressId");
         } else {
-            $this->db->query("INSERT INTO task_progress (task_id, faculty_id, file_path, file_type, progress, date_created) VALUES ($task_id, $faculty_id, '$uploadDir$newFileName', '$fileType', 'For Verification', NOW())");
+            $this->db->query("INSERT INTO task_progress (task_id, faculty_id, file_path, file_type, progress, date_created, rating_period) VALUES ($task_id, $faculty_id, '$uploadDir$newFileName', '$fileType', 'For Verification', NOW(), '$rating_period')");
         }
         
         echo json_encode(["status" => "success", "message" => "File submitted successfully."]);
@@ -1406,20 +1576,13 @@ function submit_file() {
 		extract($_POST);
 		$id = intval($id);
 		$overall_score = floatval($overall_score);
-		$instruction_ave = isset($instruction_ave) && $instruction_ave !== '' ? floatval($instruction_ave) : 'NULL';
-		$support_ave = isset($support_ave) && $support_ave !== '' ? floatval($support_ave) : 'NULL';
-		$recommendation_status = $this->db->real_escape_string($recommendation_status);
-		$system_reason = $this->db->real_escape_string($system_reason);
+		$recommendation_status = $_POST['recommendation_status'] ?? 'Pending';
+		$system_reason = $_POST['system_reason'] ?? '';
 		
-		$sql = "UPDATE renewal_recommendations SET 
-			overall_score = $overall_score,
-			instruction_ave = $instruction_ave,
-			support_ave = $support_ave,
-			recommendation_status = '$recommendation_status',
-			system_generated_reason = '$system_reason'
-			WHERE id = $id";
-		
-		$save = $this->db->query($sql);
+		$stmt = $this->db->prepare("UPDATE renewal_recommendations SET overall_score=?, recommendation_status=?, system_generated_reason=? WHERE id=?");
+		$stmt->bind_param('dssi', $overall_score, $recommendation_status, $system_reason, $id);
+		$save = $stmt->execute();
+		$stmt->close();
 		
 		if($this->db->error) {
 			return "Error: " . $this->db->error;
@@ -1432,7 +1595,10 @@ function submit_file() {
 		extract($_POST);
 		$id = intval($id);
 		
-		$delete = $this->db->query("DELETE FROM renewal_recommendations WHERE id = $id");
+		$stmt = $this->db->prepare("DELETE FROM renewal_recommendations WHERE id = ?");
+		$stmt->bind_param('i', $id);
+		$delete = $stmt->execute();
+		$stmt->close();
 		
 		if($this->db->error) {
 			return "Error: " . $this->db->error;
@@ -1653,22 +1819,18 @@ function submit_file() {
 	
 	function save_function_category(){
 		extract($_POST);
-		$data = "";
-		foreach($_POST as $k => $v){
-			if(!in_array($k, array('id')) && !is_numeric($k)){
-				$v = $this->db->real_escape_string($v);
-				if(empty($data)){
-					$data .= " $k='$v' ";
-				}else{
-					$data .= ", $k='$v' ";
-				}
-			}
-		}
+		$name = $_POST['name'] ?? '';
+		$id = isset($id) ? intval($id) : null;
+		
 		if(empty($id)){
-			$save = $this->db->query("INSERT INTO function_categories SET $data");
-		}else{
-			$save = $this->db->query("UPDATE function_categories SET $data WHERE id = $id");
+			$stmt = $this->db->prepare("INSERT INTO function_categories (name) VALUES (?)");
+			$stmt->bind_param('s', $name);
+		} else {
+			$stmt = $this->db->prepare("UPDATE function_categories SET name=? WHERE id=?");
+			$stmt->bind_param('si', $name, $id);
 		}
+		$save = $stmt->execute();
+		$stmt->close();
 		if($save){
 			return 1;
 		}
@@ -1676,13 +1838,22 @@ function submit_file() {
 	
 	function get_function_category(){
 		extract($_POST);
-		$qry = $this->db->query("SELECT * FROM function_categories WHERE id = $id");
+		$id = intval($id);
+		$stmt = $this->db->prepare("SELECT * FROM function_categories WHERE id = ?");
+		$stmt->bind_param('i', $id);
+		$stmt->execute();
+		$qry = $stmt->get_result();
+		$stmt->close();
 		echo json_encode($qry->fetch_assoc());
 	}
 	
 	function delete_function_category(){
 		extract($_POST);
-		$delete = $this->db->query("DELETE FROM function_categories WHERE id = $id");
+		$id = intval($id);
+		$stmt = $this->db->prepare("DELETE FROM function_categories WHERE id = ?");
+		$stmt->bind_param('i', $id);
+		$delete = $stmt->execute();
+		$stmt->close();
 		if($delete){
 			return 1;
 		}
@@ -1690,22 +1861,23 @@ function submit_file() {
 	
 	function save_percentage_allocation(){
 		extract($_POST);
-		$data = "";
-		foreach($_POST as $k => $v){
-			if(!in_array($k, array('id')) && !is_numeric($k)){
-				$v = $this->db->real_escape_string($v);
-				if(empty($data)){
-					$data .= " $k='$v' ";
-				}else{
-					$data .= ", $k='$v' ";
-				}
-			}
-		}
+		$position_id = intval($_POST['position_id'] ?? 0);
+		$designation_id = intval($_POST['designation_id'] ?? 0);
+		$category = $_POST['category'] ?? '';
+		$sub_category = $_POST['sub_category'] ?? '';
+		$percentage = floatval($_POST['percentage'] ?? 0);
+		$function_category = $_POST['function_category'] ?? '';
+		$id = isset($id) ? intval($id) : null;
+		
 		if(empty($id)){
-			$save = $this->db->query("INSERT INTO percentage_allocation SET $data");
-		}else{
-			$save = $this->db->query("UPDATE percentage_allocation SET $data WHERE id = $id");
+			$stmt = $this->db->prepare("INSERT INTO percentage_allocation (position_id, designation_id, category, sub_category, percentage, function_category) VALUES (?, ?, ?, ?, ?, ?)");
+			$stmt->bind_param('iissds', $position_id, $designation_id, $category, $sub_category, $percentage, $function_category);
+		} else {
+			$stmt = $this->db->prepare("UPDATE percentage_allocation SET position_id=?, designation_id=?, category=?, sub_category=?, percentage=?, function_category=? WHERE id=?");
+			$stmt->bind_param('iissdsi', $position_id, $designation_id, $category, $sub_category, $percentage, $function_category, $id);
 		}
+		$save = $stmt->execute();
+		$stmt->close();
 		if($save){
 			return 1;
 		}
@@ -1713,13 +1885,22 @@ function submit_file() {
 	
 	function get_percentage_allocation(){
 		extract($_POST);
-		$qry = $this->db->query("SELECT * FROM percentage_allocation WHERE id = $id");
+		$id = intval($id);
+		$stmt = $this->db->prepare("SELECT * FROM percentage_allocation WHERE id = ?");
+		$stmt->bind_param('i', $id);
+		$stmt->execute();
+		$qry = $stmt->get_result();
+		$stmt->close();
 		echo json_encode($qry->fetch_assoc());
 	}
 	
 	function delete_percentage_allocation(){
 		extract($_POST);
-		$delete = $this->db->query("DELETE FROM percentage_allocation WHERE id = $id");
+		$id = intval($id);
+		$stmt = $this->db->prepare("DELETE FROM percentage_allocation WHERE id = ?");
+		$stmt->bind_param('i', $id);
+		$delete = $stmt->execute();
+		$stmt->close();
 		if($delete){
 			return 1;
 		}
