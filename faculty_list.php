@@ -61,10 +61,11 @@ if (!$is_admin) {
             } elseif($is_dean) {
                 $faculty_data = [];
                 $result = $conn->query("
-                    SELECT e.id, e.firstname, e.middlename, e.lastname, dep.department
+                    SELECT e.id, e.firstname, e.middlename, e.lastname, dl.designation, dep.department
                     FROM employee_list e
-                    INNER JOIN evaluator_list ev ON e.firstname = ev.firstname AND e.lastname = ev.lastname AND ev.type = '0'
+                    LEFT JOIN designation_list dl ON e.designation_id = dl.id
                     LEFT JOIN department_list dep ON e.department_id = dep.id
+                    WHERE e.designation_id = 2
                 ");
                 if ($result && $result->num_rows > 0) {
                     while ($row = $result->fetch_assoc()) {
@@ -179,8 +180,8 @@ if (!$is_admin) {
                             </td>
                             <?php if($is_admin || $is_dean || $is_dept_head): ?>
                             <td class="text-center">
-                                <a href="index.php?page=evaluation&id=<?= $row['id'] ?>" class="btn btn-sm btn-primary">
-                                    <i class="fa fa-edit"></i> Evaluate
+                                <a href="index.php?page=evaluation&id=<?= $row['id'] ?>" class="btn btn-sm btn-info">
+                                    <i class="fa fa-search"></i> Check Evaluation
                                 </a>
                             </td>
                             <?php endif; ?>
