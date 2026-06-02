@@ -2,12 +2,90 @@
 <html lang="en">
 <?php
  session_start();
+ include 'db_connect.php';
+
+ // "Remember Me" auto-login: check for persistent cookie
+ if (!isset($_SESSION['login_id']) && isset($_COOKIE['remember_me'])) {
+     $parts = explode(':', $_COOKIE['remember_me']);
+     if (count($parts) === 2) {
+         $selector = $parts[0];
+         $validator = $parts[1];
+         
+         // Look up token in database
+         $stmt = $conn->prepare(
+             "SELECT rt.*, 
+              CASE rt.user_type
+                  WHEN 0 THEN el.email
+                  WHEN 1 THEN ev.email
+                  WHEN 2 THEN u.email
+              END as email
+              FROM remember_tokens rt
+              LEFT JOIN employee_list el ON rt.user_id = el.id AND rt.user_type = 0
+              LEFT JOIN evaluator_list ev ON rt.user_id = ev.id AND rt.user_type = 1
+              LEFT JOIN users u ON rt.user_id = u.id AND rt.user_type = 2
+              WHERE rt.selector = ? AND rt.expires > NOW()
+              LIMIT 1"
+         );
+         $stmt->bind_param('s', $selector);
+         $stmt->execute();
+         $result = $stmt->get_result();
+         $stmt->close();
+         
+         if ($result && $result->num_rows > 0) {
+             $token = $result->fetch_assoc();
+             if (hash_equals($token['hashed_validator'], hash('sha256', $validator))) {
+                 // Valid token — set session
+                 $tables = ['employee_list', 'evaluator_list', 'users'];
+                 $table = $tables[$token['user_type']];
+                 
+                 $stmt = $conn->prepare("SELECT *, CONCAT(firstname,' ',lastname) AS name FROM {$table} WHERE id = ? LIMIT 1");
+                 $stmt->bind_param('i', $token['user_id']);
+                 $stmt->execute();
+                 $user = $stmt->get_result()->fetch_assoc();
+                 $stmt->close();
+                 
+                 if ($user) {
+                     // Set session variables
+                     foreach ($user as $key => $value) {
+                         if ($key !== 'password' && !is_numeric($key)) {
+                             $_SESSION['login_'.$key] = $value;
+                         }
+                     }
+                     $_SESSION['login_id'] = $token['user_id'];
+                     $_SESSION['login_type'] = $token['user_type'];
+                     
+                     // Rotate token: delete old, insert new
+                     $stmt = $conn->prepare("DELETE FROM remember_tokens WHERE id = ?");
+                     $stmt->bind_param('i', $token['id']);
+                     $stmt->execute();
+                     $stmt->close();
+                     
+                     $new_selector = bin2hex(random_bytes(16));
+                     $new_validator = bin2hex(random_bytes(32));
+                     $new_hashed = hash('sha256', $new_validator);
+                     $new_expires = date('Y-m-d H:i:s', strtotime('+30 days'));
+                     
+                     $stmt = $conn->prepare("INSERT INTO remember_tokens (user_id, user_type, selector, hashed_validator, expires) VALUES (?, ?, ?, ?, ?)");
+                     $stmt->bind_param('iisss', $token['user_id'], $token['user_type'], $new_selector, $new_hashed, $new_expires);
+                     $stmt->execute();
+                     $stmt->close();
+                     
+                     setcookie('remember_me', $new_selector . ':' . $new_validator, [
+                         'expires' => time() + (30 * 24 * 60 * 60),
+                         'path' => '/',
+                         'httponly' => true,
+                         'samesite' => 'Lax'
+                     ]);
+                 }
+             }
+         }
+     }
+ }
 
  // Update timestamp for active user
 
 	if(!isset($_SESSION['login_id']))
 	    header('location:login.php');
-    include 'db_connect.php';
     ob_start();
   if(!isset($_SESSION['system'])){
 

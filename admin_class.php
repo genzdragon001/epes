@@ -363,6 +363,27 @@ Class Action {
 			// Session hardening: regenerate session id on privilege change/login
 			session_regenerate_id(true);
 
+			// "Remember Me" - set persistent cookie token
+			if (isset($_POST['remember']) && $_POST['remember'] == '1') {
+				$selector = bin2hex(random_bytes(16));
+				$validator = bin2hex(random_bytes(32));
+				$hashed_validator = hash('sha256', $validator);
+				$expires = date('Y-m-d H:i:s', strtotime('+30 days'));
+				
+				$stmt = $this->db->prepare("INSERT INTO remember_tokens (user_id, user_type, selector, hashed_validator, expires) VALUES (?, ?, ?, ?, ?)");
+				$stmt->bind_param('iisss', $uid, $login, $selector, $hashed_validator, $expires);
+				$stmt->execute();
+				$stmt->close();
+				
+				// Set cookie: selector:validator, expires in 30 days, httponly
+				setcookie('remember_me', $selector . ':' . $validator, [
+					'expires' => time() + (30 * 24 * 60 * 60),
+					'path' => '/',
+					'httponly' => true,
+					'samesite' => 'Lax'
+				]);
+			}
+
 			// Fetch the latest/current rating period
 				$qry = $this->db->query("SELECT semester, year 
 				FROM rating_period 
