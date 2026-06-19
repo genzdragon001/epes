@@ -18,7 +18,8 @@ UPDATE evaluator_list SET designation_id = 4
 -- 2. Add deadline fields to task_list (for IPCR Excel alignment)
 ALTER TABLE task_list 
   ADD COLUMN IF NOT EXISTS deadline DATE NULL,
-  ADD COLUMN IF NOT EXISTS deadline_note VARCHAR(255) NULL;
+  ADD COLUMN IF NOT EXISTS deadline_note VARCHAR(255) NULL,
+  ADD COLUMN IF NOT EXISTS status TINYINT DEFAULT 0 AFTER is_active;
 
 -- 3. Add timeliness/efficiency rating fields to task_progress (for auto-scoring)
 ALTER TABLE task_progress 

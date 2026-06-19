@@ -1621,6 +1621,18 @@ function submit_file() {
 		if(!isset($is_complete))
 			$data .= ", is_complete=0 ";
 		if(empty($id)){
+			// Duplicate prevention: check if this faculty already submitted this task
+			$faculty_id = intval($_POST['faculty_id'] ?? $_SESSION['login_id'] ?? 0);
+			$task_id    = intval($_POST['task_id'] ?? 0);
+			if ($faculty_id > 0 && $task_id > 0) {
+				$check = $this->db->query("SELECT id FROM task_progress WHERE task_id = $task_id AND faculty_id = $faculty_id LIMIT 1");
+				if ($check && $check->num_rows > 0) {
+					$existing = $check->fetch_assoc();
+					$id = (int) $existing['id'];
+				}
+			}
+		}
+		if(empty($id)){
 			$save = $this->db->query("INSERT INTO task_progress set $data");
 		}else{
 			$save = $this->db->query("UPDATE task_progress set $data where id = $id");
