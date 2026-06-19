@@ -162,3 +162,59 @@ $('.number').on('input keyup keypress',function(){
 <script src="assets/plugins/datatables-buttons/js/buttons.print.min.js"></script>
 <script src="assets/plugins/datatables-buttons/js/buttons.colVis.min.js"></script>
 
+<!-- Session Timeout: client-side idle timer (14 min warning, 15 min redirect) -->
+<script>
+(function() {
+    var IDLE_TIMEOUT = 14 * 60 * 1000;  // 14 minutes — warn 1 min before server kills session
+    var REDIRECT_AFTER = 15 * 60 * 1000; // 15 minutes — matches server $inactivityLimit
+    var idleTimer = null;
+    var warned = false;
+
+    function resetTimer() {
+        clearTimeout(idleTimer);
+        warned = false;
+        idleTimer = setTimeout(showWarning, IDLE_TIMEOUT);
+    }
+
+    function showWarning() {
+        warned = true;
+        // Show toast warning
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: 'Session Expiring',
+                text: 'You have been inactive. Your session will expire in 1 minute.',
+                icon: 'warning',
+                timer: 55000,
+                timerProgressBar: true,
+                showConfirmButton: true,
+                confirmButtonText: 'Stay Logged In',
+                allowOutsideClick: false
+            }).then(function(result) {
+                if (result.isConfirmed || result.dismiss === Swal.DismissReason.timer) {
+                    // User acknowledged or timer ran out — redirect
+                    window.location.href = 'login.php?session=expired';
+                }
+            });
+        } else {
+            // Fallback: simple confirm
+            if (confirm('Your session is about to expire. Click OK to stay logged in.')) {
+                resetTimer();
+            } else {
+                window.location.href = 'login.php?session=expired';
+            }
+        }
+        // If no response within 60 seconds, force redirect
+        setTimeout(function() {
+            if (warned) window.location.href = 'login.php?session=expired';
+        }, REDIRECT_AFTER - IDLE_TIMEOUT);
+    }
+
+    // Track user activity
+    ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'].forEach(function(evt) {
+        document.addEventListener(evt, resetTimer, true);
+    });
+
+    resetTimer(); // Start timer on page load
+})();
+</script>
+

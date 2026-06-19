@@ -5,7 +5,10 @@ $day = date('d');
 $year = date('Y');
 $today = $year . '-' . $month . '-' . $day;
 
-$qry = $conn->query("SELECT * FROM position_list WHERE id = {$_GET['id']}") or die(mysqli_error($conn));
+$stmt = $conn->prepare("SELECT * FROM position_list WHERE id = ?");
+$stmt->bind_param("i", $_GET['id']);
+$stmt->execute();
+$qry = $stmt->get_result();
 foreach($qry->fetch_array() as $k => $v){
     $$k = $v;
 }

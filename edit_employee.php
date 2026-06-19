@@ -1,6 +1,9 @@
 <?php
 include 'db_connect.php';
-$qry = $conn->query("SELECT * FROM employee_list where id = ".$_GET['id'])->fetch_array();
+$stmt = $conn->prepare("SELECT * FROM employee_list where id = ?");
+$stmt->bind_param("i", $_GET['id']);
+$stmt->execute();
+$qry = $stmt->get_result()->fetch_array();
 foreach($qry as $k => $v){
 	$$k = $v;
 }

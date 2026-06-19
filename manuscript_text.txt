@@ -1,0 +1,1658 @@
+Design and Development of a Faculty Performance Documentation and
+    Evaluation System to Support Evidence Based Decision ­Making
+
+                                         A Capstone Project
+                                              Presented to
+
+                            The Faculty of the Graduate School of the
+                            University of the Immaculate Conception
+
+                                      Fr. Selga St., Davao City
+                                     In Partial Fulfillment of the
+                             Academic Requirements for the Degree
+                                   Master in Information System
+
+                                    MARLON R. HERMOSO
+
+                                           December 2025
+                                CHAPTER 1
+                             INTRODUCTION
+
+The Background of the Study
+
+         In the global landscape of higher education, deans are playing an important role in
+achieving the quality of education, development of faculty and academic excellence.
+However these deans nowadays are facing a lot of challenges in managing their faculty
+performance amid of rising expectations regarding accountability, transparency, and data-
+based decision making. Nkata, J. L., & Ssempebwa, J. (2024), Makerere University,
+Uganda, highlighted the strenuous nature of deans' roles, emphasizing the difficulty in
+balancing faculty and administrative demands. Deans often find themselves caught
+between the expectations of faculty and the directives of the central administration, leading
+to role conflict and ambiguity. Hussain et al. (2025), said that to be fair, consistent, and
+successful, performance review systems need to be both quantitative and qualitative.
+
+         In the case of Philippine Higher education, these difficulties are worsen because of
+the limited digital resources, administrative inefficiencies, and inconsistent standards in
+faculty evaluation practices. The Second Congressional Commission on Education
+(EDCOM 2) highlighted in its 2025 report that many State Universities and Colleges
+(SUCs) continue to rely on the outdated and fragmented systems, which lead to weak
+governance and poor data utilization. The Philippine Institute for Development Studies
+(PIDS) further observed that despite the increasing enrollees in the higher education, the
+quality assurance and institutional management is still inconsistent, with some SUC are
+still struggling with the implementation of strong and effective systems for evaluation
+success.
+
+         Colleges and universities outside of major cities face additional challenges, such as
+perceived biases, a lack of transparency in the evaluation process, and delays in faculty
+performance feedback (Abejo, 2024). Many of these schools lack clear guidelines for
+research and evaluation, provide teachers with excessive work outside of class, and have
+even fewer resources, which demotivates teachers and hinders the success of the school
+(Dela Cruz & Dela Cruz, 2024). Additionally, a large number of regional institutions still
+conduct faculty reviews using manual, paper-based processes, which exacerbates
+inefficiencies and delays crucial administrative decisions (Loyola, 2023). Therefore,
+regional higher education institutions face even more serious issues like a lack of resources
+and unclear procedures in addition to the same issues facing the rest of the nation, such as
+inconsistent standards and weak leadership (Abejo, 2024; Dela Cruz & Dela Cruz, 2024;
+Loyola, 2023).
+
+         At the institutional level, Dr. Emilio B. Espinosa Sr. Memorial State College of
+Agriculture and Technology (DEBESMSCAT) is also facing this kind of challenges. One
+of the most urgent issues is the manual processing and reconciliation of faculty
+performance data, which is time-consuming, prone to error, and lacks transparency. This
+method contributes to delays in evaluation, inconsistencies in documentation, and
+difficulties in aligning faculty outputs with institutional priorities. As a result, not only are
+deans burdened with administrative workload, but overall academic planning, resource
+allocation, and institutional reporting are also compromised.
+         The Individual Performance Commitment and Review (IPCR), is a standard tool
+required by the Civil Service Commission under the Strategic Performance Management
+System (SPMS). It is an essential component of faculty performance evaluation in every
+SUC. Part of the IPCR process is setting performance goals, keeping track of
+accomplishments, and evaluating results based on Office Performance Commitment and
+Review (OPCR) goals. But there are big problems in preparing IPCRs manually, such as
+duplication of data, lack of real time monitoring, and having trouble in compiling all reports
+for submission. These issues make it harder to keep track of success and make decisions.
+
+         These challenges are not exclusive to DEBESMSCAT. Other Philippine
+institutions report similar issues. For instance, a study at Pangasinan State University found
+that faculty members with multiple roles struggled with preparing IPCRs due to
+overlapping responsibilities and the absence of standardized performance computation
+models. The study proposed a mathematical model, evaluated using the Technology
+Acceptance Model, which significantly improved user satisfaction (Cenas, 2022).
+Similarly, at Leyte Normal University, researchers observed that although faculty
+performance ratings were generally satisfactory, the process heavily depended on manual
+inputs, which affected the reliability and consistency of results (Caluza et al., 2017).
+
+         The IPCR workflow typically begins with setting individual targets aligned with
+the institution's OPCR. Faculty members then document their accomplishments
+throughout the performance period, which are validated by their respective deans and
+submitted to the Performance Management Team. Key performance areas--namely
+instruction, research, extension, and production--carry varying weights, with instruction
+often taking precedence due to its direct link to student outcomes and accreditation
+requirements.
+
+         Given the systemic and institutional inefficiencies, there is a clear and urgent need
+for a digital solution that streamlines faculty performance documentation and evaluation,
+reduces administrative burden, and enhances data accuracy and usability. In response, this
+capstone project proposes the design and development of a Faculty Performance
+Documentation and Evaluation System tailored to DEBESMSCAT's operational context,
+while aligning with national standards such as SPMS and OPCR/IPCR protocols. The
+system aims to support evidence-based academic planning, foster transparency, and
+empower academic leaders in making informed decisions.
+
+Critical Success Factors
+    1. User-Centered System Design - The system is user-friendly and tailored to the
+         faculty workflows. Early user's engagement during the design phase ensures the
+         system success.
+    2. Accurate and Secure Data Management ­ The system ensures data integrity,
+         confidentiality, and security when handling performance data. It includes validation
+         mechanism and role-based access controls.
+    3. IPCR and SPMS Standards Alignment ­ The system complies with the Civil
+         Service Commission's guidelines for IPCR documentation. It supports the standard
+         templates, rating scales and performance indicators.
+    4. Automation of Manual Process ­ Automating data entry and report generation
+         will reduce errors and faculty burden. This includes the consolidation of monthly
+         and quarterly report, and auto calculation of overall rating.
+
+    5. System Acceptability and Adoption ­ This system is accepted by the intended
+         users which is measured through usability testing, feedback surveys, and pilot
+         implementation. Training and support materials was provided in facilitating the
+         adoption.
+
+    6. Scalability and Integration ­ The system is dynamic to accommodate changes or
+         possible expansion to other colleges.
+
+    7. Intellectual Property (IP) Feasibility ­ The system uses original design and
+         functions to qualify for IP protection. Documentation, source code management
+         and innovation is maintained for IP filing.
+
+    8. Data Driven Reporting Capability ­ The system is generating analyrics and
+         reports that support decision making by Deans. Key features like dashboards, and
+         performance summaries are very useful.
+
+    9. Compliance with Institutional Policies ­ The system is aligned with
+         DEBESMSCAT quality policy and support institutional goals.
+
+Problem/Opportunity Definition
+
+         At DEBESMSCAT, faculty members and deans face difficulties with regards to
+performance data reconciliation, IPCR documents consolidation, and aligning outputs with
+institutional goals. The absence of a centralized digital system results in redundant
+documentation, limited access to historical data, and challenges in consolidating reports
+for OPCR submissions. This limits the institution in making more informed decisions,
+allocating resources and strategic planning.
+
+         Despite the digital technologies availability, currently DEBESMSCAT has no
+system that would address this needs of faculty performance documentation and
+evaluation. Also, the lack of innovations like this limits the potential for intellectual
+Property production, which could contribute to institutional goals.
+
+Specifically, it seeks to answer the following questions:
+
+    1. What are the limitations of the current manual system used for faculty performance
+         documentation and IPCR preparation at DEBESMSCAT?
+
+    2. How can the proposed system improve the efficiency, accuracy, and acceptability
+         of faculty performance evaluation among stakeholders?
+
+    3. What innovative features can be integrated into the system to qualify it for
+         intellectual property protection?
+
+General Objective:
+         The general objective of this capstone project is to design and develop a Faculty
+
+Performance Documentation and Evaluation System for DEBESMSCAT that facilitates
+evidence-based decision-making by automating the collection, analysis, and reporting of
+faculty performance data. Specifically, it aims to:
+    1. To develop a functional web-based system that enables efficient documentation,
+         monitoring, and evaluation of faculty performance based on predefined institutional
+         criteria and metrics.
+
+    2. To assess the usability, functionality, and overall acceptability of the developed
+         system among faculty members through user testing and feedback mechanisms.
+
+    3. To create a patent draft document that outlines the unique features and technical
+         specifications of the developed system.
+
+Significance of the Study
+         This study is significant as it addresses a critical gap in the performance evaluation
+
+process of faculty members within State Universities and Colleges (SUCs), particularly
+at DEBESMSCAT. By designing and developing the system tailored to the documentation
+and evaluation of faculty performance, the study contributes to the modernization of
+institutional processes and supports the broader goal of evidence-based decision-making
+in higher education.
+
+1. For the Institution (DEBESMSCAT): The system will help the institution's
+    efficiency by automating the preparation and consolidation of IPCR reports. This will
+    reduce the burden on deans and faculty, reduce errors, and improve the timeliness and
+    accuracy of performance evaluations.
+
+2. To the Faculty Members: All Faculty will benefit from an efficient and transparent
+    evaluation process. The system will allow them to monitor their performance in real-
+    time, align their outputs with institutional goals, and receive timely feedback.
+
+3. To the Deans: Deans will gain access to reliable performance data that can inform
+    decisions related to promotions, workload distribution, and faculty development
+    programs.
+
+4. To the Higher Education Sector: The study contributes to the ongoing digital
+    transformation of SUCs in the Philippines. It aligns with national efforts to improve
+    governance, transparency, and quality assurance in higher education, as emphasized by
+    EDCOM 2 and the Civil Service Commission.
+
+5. To Future Researchers and Developers: This project serves as a foundation for future
+    innovations in academic performance management systems. It opens opportunities for
+    further research in areas such as predictive analytics, AI-assisted evaluation, and
+    integration with learning management systems.
+
+6. To Intellectual Property Development: By incorporating original design and
+    functionality, the system has the potential to be registered as intellectual property. This
+    not only adds value to the institution but also promotes innovation and recognition in
+    the field of educational technology.
+
+The scope of the Study
+
+         This study focuses on the design and development of a Faculty Performance
+Documentation and Evaluation System specifically tailored for Dr. Emilio B. Espinosa Sr.
+Memorial State College of Agriculture and Technology (DEBESMSCAT). The system
+aims to automate and streamline the preparation, submission, and evaluation of
+the Individual Performance Commitment and Review (IPCR) and Office Performance
+Commitment and Review (OPCR) forms.
+
+The system will include the following core features:
+
+     Digital encoding and submission of IPCR data
+     Manual input of ratings per performance criterion by authorized evaluators
+     Automated computation of the overall performance rating based on weighted
+
+         criteria
+     Real-time tracking of faculty accomplishments
+     Role-based access for faculty, deans, and staff.
+     Report generation for performance summaries and OPCR consolidation
+     Basic analytics to support evidence-based decision-making
+
+The system will be deployed at the College of Arts and Sciences, DEBESMSCAT and will
+primarily serve Faculty and Dean.
+
+Delimitations of the Study
+     The system is developed and tested only within DEBESMSCAT, and may not
+         immediately reflect the needs or workflows of other SUCs or private institutions.
+     While individual criterion ratings are manually inputted, the system automatically
+         calculates the overall performance rating to ensure consistency and reduce human
+         error.
+     The evaluation will focus on instructional, research, extension, and production
+         functions as outlined in the IPCR, but will not include other HR-related modules
+         such as payroll, leave management, or promotion tracking.
+                                             CHAPTER II
+
+                REVIEW OF RELATED LITERATURE AND SYSTEMS
+
+Related Literature
+         The growing emphasis on evidence-based decision-making in higher education has
+
+transformed the way institutions evaluate faculty performance. The literature reveals how
+academic organizations worldwide are adapting to new methods of documentation,
+automation, and holistic assessment. This synthesis categorizes relevant research into four
+major themes, aligned with the goals of your proposed Faculty Performance
+Documentation and Evaluation System.
+
+Data-Driven and Contextualized Evaluation Models
+         Globally, there is a significant shift toward data-driven and institution-specific
+
+faculty evaluation systems. Hussain, Lee, and Patel (2025) highlighted the role of analytics-
+powered platforms in delivering personalized assessments that balance transparency and
+academic rigor. Wang (2023) illustrated how cultural and institutional contexts influence
+evaluation approaches in elite institutions such as Harvard and Peking University. Santiago
+and Benavides (2009) and Isoré (2009) both cautioned against rigid, standardized models,
+instead recommending adaptive frameworks suited to individual institutions. Khan (2013)
+advocated for developmental evaluations that foster faculty growth rather than impose
+punitive measures. Complementing these conceptual insights, Benosa and Oñate (2023)
+and Dela Fuente and Dela Fuente (2022) introduced analytics-integrated platforms that
+empower institutional decision-making. Meanwhile, Rapacke (2024), Thompson (2025),
+and Tinch (2025) emphasized the need for originality and innovation in system design to
+meet the technical requirements for intellectual property eligibility.
+
+         In the Philippine context, studies similarly call for automated and analytics-
+enhanced evaluation systems adapted to local needs. Bueno (2023) reported inconsistent
+faculty evaluations at Columban College due to the lack of standard tools. Cenas (2022)
+responded to the complexity of multiple faculty roles by proposing a mathematical model
+for IPCR accuracy validated using the Technology Acceptance Model. Dela Fuente and
+Dela Fuente (2022) demonstrated how analytics integration improved assessment
+reliability and minimized human error. At ISPSC, Cinizan and Valdez (2023) enhanced
+their Faculty Performance Evaluation System by embedding analytics features, achieving
+a very high usability rating. Romblon State University implemented intelligent evaluation
+mechanisms such as Common Criteria Evaluation (CCE) and Qualitative Contribution
+Evaluation (QCE), supported by analytics to streamline assessments. The Polytechnic
+University of the Philippines linked online evaluation results to teaching load and faculty
+promotions, reinforcing performance-based advancement. National frameworks such as
+CHED's Institutional Sustainability Assessment (ISA) toolkit and Self-Evaluation
+Document (SED), along with DepEd's IPCRF system and the Civil Service Commission's
+Strategic Performance Management System (SPMS), collectively reflect a growing trend
+toward objective, data-backed, and context-aware faculty evaluations in the country.
+
+Holistic and Multifaceted Faculty Evaluation
+         Foreign scholars increasingly advocate for comprehensive faculty evaluation
+
+systems that consider not just instructional effectiveness but also research productivity,
+service engagement, and professional development. Kezar (2018) argued for aligning
+evaluations with institutional missions and faculty roles, while Darling-Hammond (2013)
+promoted formative evaluations as tools for professional growth. Weaver and Carlisle
+(2023) offered implementation strategies for such holistic models, and Kumar (2025)
+discussed India's UGC framework that ensures equal weight across instruction, research,
+and service. Brown (2015) and Golde and Dore (2001) highlighted the disconnect between
+expectations and faculty preparation, proposing feedback systems to bridge the gap.
+Additionally, Lohman (2021), Bernstein (2008), and Boyer (1996) supported integrating
+mentoring, peer review, and scholarly identity into evaluation structures to ensure
+meaningful, development-oriented assessments.
+
+         Locally, multiple studies reflect this call for more holistic and multidimensional
+faculty evaluations. Caluza et al. (2017) found that the reliability of faculty assessment at
+Leyte Normal University was compromised by manual input processes, advocating for
+digital systems that integrate multiple indicators. Patimo (2020) observed that while SUCs
+in Eastern Visayas employed rating scales, they often lacked automation and qualitative
+assessment tools. EDCOM 2 (2024) highlighted faculty evaluation as essential for
+promoting both institutional growth and individual professional development. CHED's
+ISA framework positioned faculty evaluation as a cornerstone of institutional
+sustainability, focusing on quality teaching, governance, and community involvement.
+DepEd's Results-Based Performance Management System (RPMS) and IPCRF modules
+emphasized the importance of development planning and formative feedback. The CSC's
+SPMS Guidebook introduced a four-stage cycle--planning, monitoring, review, and
+rewarding--designed to support continuous improvement. Likewise, evaluation manuals
+from ASSCAT and PCSO link performance assessments to staff incentives and career
+development, while CHED Region 2 provided templates that help institutions align
+evaluations with broader academic goals.
+
+Usability and System Innovation
+         The usability of faculty evaluation systems is a critical factor in their success, and
+
+international research has emphasized the importance of user-centered design (UCD)
+principles. Cruz et al. (2021) demonstrated that UCD significantly enhances user adoption
+and long-term engagement with performance platforms, a conclusion further supported by
+Alao et al. (2022) through practical application in university systems. Yesa, Putri, and Noer
+(2024), Sani et al. (2023), and Orallo (2025) all highlighted how intuitive, design-thinking-
+based interfaces on academic websites and mobile applications improve efficiency and
+accessibility, ultimately encouraging more meaningful participation from users.
+
+         In the local setting, several Philippine institutions have demonstrated how system
+innovation and usability improvements lead to better performance monitoring. Tarlac State
+University's Automated Faculty Evaluation System improved transparency and reduced
+administrative workload through an intuitive design. At ISPSC, the enhanced FPES
+utilized Agile development and data analytics to achieve high usability scores. Central
+Mindanao University's system automated faculty performance monitoring and supported
+multi-source feedback mechanisms. NVSU developed a web and mobile-based platform
+that enabled students to evaluate faculty and access real-time performance dashboards.
+Salas (2015) built a mobile-responsive evaluation system that received strong ratings for
+functionality and portability. Plata and Facun (2020) implemented a paperless feedback
+platform that simplified the student evaluation process. Ramos et al. (2020) designed a
+LAN-based appraisal system that improved documentation efficiency and reduced
+evaluation time. Celis and Pagatpatan (2019) applied the Analytic Hierarchy Process
+(AHP) algorithm to increase the accuracy of evaluation decision-making, while Fadera and
+Enriquez (2018) integrated intelligent analytics into their systems to accelerate data
+processing and reduce errors.
+
+IP Eligibility and System Originality
+         The global literature underscores the importance of originality and technical
+
+innovation in creating systems that are eligible for intellectual property (IP) protection.
+Rapacke (2024) explained that systems must solve identifiable technical problems and
+incorporate method-based uniqueness to qualify for protection. Thompson (2025)
+discussed how the Alice Two-Part Test determines whether a system's features go beyond
+abstract ideas, which is essential for patentability. Tinch (2025) emphasized innovations
+such as improved interactivity and novel analytics as enhancements that support IP claims.
+Collins (2024) and InspireIP (2025) both reinforced that comprehensive documentation
+and strategic technological advancements are fundamental to obtaining software IP rights.
+ISO (2025) highlighted the role of security standards and originality criteria in
+safeguarding digital systems from replication and unauthorized use.
+
+         In the Philippines, recent developments also reflect efforts to build evaluation
+systems that meet the standards of IP eligibility. Dela Fuente and Dela Fuente (2022)
+highlighted that their analytics-based system was designed with original features tailored
+to institutional faculty evaluation, making it a candidate for IP registration. Cinizan and
+Valdez (2023) documented the unique development process of their FPES, which included
+modular architecture and advanced data visualization components. Romblon State
+University integrated custom algorithms and analytics dashboards to strengthen the
+system's claim to technical originality. CHED's ISA toolkit further encourages higher
+education institutions to innovate and document their internal quality assurance
+mechanisms--including faculty evaluation platforms--as a step toward institutional
+development and intellectual property recognition.
+
+Related Systems
+Automated and Analytics-Driven Systems
+
+         Globally, institutions are embracing systems that automate faculty evaluation while
+integrating powerful analytics. Tools like Cflow Faculty Evaluation Platform and EduRate
+utilize AI features--such as OCR, decision trees, and data visualization--to generate
+performance insights. Multi-criteria decision-making models like AHP, TOPSIS, and Grey
+MARCOS enhance objectivity across complex faculty roles. These systems exemplify how
+automation and data science can refine evaluation practices and support evidence-based
+administration.
+
+         In the Philippine context, SUCs are rapidly adopting similar tools. ISPSC's
+enhanced Faculty Performance Evaluation System uses analytics and Agile methods to
+streamline reviews and received high usability marks. Romblon State University's
+intelligent evaluation model applies Common Criteria and Qualitative Contribution
+Evaluation to quantify faculty output. DepEd's IPCRF templates and CHED's ISA
+framework emphasize digital tracking and strategic alignment. These local systems mirror
+global trends while addressing region-specific challenges like multi-role faculty and
+resource constraints.
+
+Usability and Interface-Focused Systems
+         International studies highlight how user-centered design principles boost system
+
+adoption in academic settings. Platforms such as Visual Analytics for Teaching Practice
+and dashboards embedded in EduRate rely on intuitive navigation, real-time feedback, and
+mobile responsiveness to encourage engagement. AHP-based decision support and clean
+design layouts help stakeholders provide input easily and interpret results quickly.
+
+         Filipino institutions are equally focused on interface design that caters to users.
+Tarlac State University's AFES features student-facing tools, checkbox evaluations, and
+streamlined reporting. Central Mindanao University and NVSU use mobile-accessible
+systems with dashboards tailored for faculty, admins, and students. Systems developed by
+Ramos, Plata, Salas, and Celis prioritized intuitive design, portability, and data reliability.
+The emphasis on ease-of-use aligns Philippine innovations with global best practices,
+demonstrating that user experience is as vital as analytical power in faculty evaluation.
+
+IP-Eligible and Innovative Systems
+         Across foreign literature, originality in system architecture is key to achieving
+
+intellectual property protection. Researchers emphasize patentability through modular
+design, unique algorithms, and documented innovation. Platforms like InspireIP and ISO-
+compliant models ensure legal eligibility by capturing inventive technical solutions and
+safeguarding information security. Rapacke, Thompson, and Tinch outline the legal
+frameworks--such as the Alice Two-Part Test--that systems must satisfy to be protected
+under IP law.
+
+         Philippine developers are rising to the challenge of creating novel systems eligible
+for IP registration. ISPSC and Romblon State University embedded distinct analytics
+engines, modular structures, and custom evaluation workflows into their platforms.
+Documentation efforts and Agile-based development processes showcase originality.
+CHED's ISA guidance encourages institutions to treat internal quality assurance tools as
+potentially proprietary assets. The innovative use of algorithms like AHP for faculty
+ranking further bolsters the claim for IP protection. This shows how Philippine systems are
+not just following global standards--they're carving out their own space in the realm of
+educational software innovation.
+                                             CHAPTER 3
+                                DESIGN AND METHODOLOGY
+
+Research Design
+         This study adopts a systems development research approach, focusing on the
+
+design, implementation, and evaluation of a Design and Development of a Faculty
+Performance Documentation and Evaluation System to Support Evidence Based Decision
+­Making. Grounded in the Information Systems Success Model (ISSM) (DeLone &
+McLean, 2003), the framework ensures that the system effectively enhances data quality,
+system usability, and academic decision-making effectiveness.
+
+Faculty              IPCR
+
+             Upload  Faculty Performance  Feedback  Dean
+             Report  Documentation and     IPCs R
+                      Evaluation System
+                 s
+
+       Input
+      Rating
+
+Program Head /         Reports
+   Supervisor        Notification
+
+                                  Figure 1. Conceptual Framework
+
+         The system has three main entities which is the Faculty, Program Head / Immediate
+Supervisor and the Dean. Faculty will upload its Core function reports, and other support
+function reports to the system for the system to consolidate it. The Program Head or
+Immediate Supervisor will be notified every time their people will submit reports that needs
+to be check and rate them based on the criteria given. On the other hand, Dean has the view
+of all the documents being uploaded and can give feedback based on the data on the
+dashboard. Once the period is complete, the IPCR will be available in both Faculty and
+Dean as output and DPCR for Program Head or additional Data for DPCR contribution for
+other Immediate Supervisor.
+
+Analysis and Design
+         People Analysis: The current Faculty Performance Evaluation process involves
+
+multiple stakeholders across academic and administrative tasks. It includes the Faculty
+members who prepared and submit Individual Performance Commitment and Review
+(IPCR) forms, Program Heads and Supervisors who reviews submissions and assign
+ratings, and Deans who oversee College performance and consolidates evaluation results.
+
+         Process Analysis: The existing process flow is manual and paper-based, beginning
+with the cascading of targets, distribution of IPCR templates, followed by individual
+preparation of reports, physical submissions, and manual checking of supervisors. The
+ratings are consolidated using spreadsheets and printed for administrative review. This
+process is prone to delays, data entry errors, and inconsistent data formatting, especially
+during evaluation periods. Decision points ­ such as report validation, rating approval, and
+document generations are often bottlenecks due to limited coordination and lack of real
+time visibility. The absence of centralized tracking make it difficult to monitor submissions
+status, identify missing reports, or generate summaries on time.
+
+         A digital system with automated workflows, submission notification, and users
+dashboards will streamline this process, reduce redundancy, and improve accountability.
+
+         Technology Analysis: The College is still relying on MS Excel and email for
+performance documentation, without centralized database platform. Faculty reports are
+stored in local drives or printed archives, which results to labor intensive when retrieve.
+The network infrastructure supports browser-based access and cloud hosting, but lacks
+dedicated systems for performance management. Existing hardware--faculty desktops and
+admin workstations--is sufficient for web-based applications, though some upgrades may
+be required for older devices. The proposed system is build using HTML, PHP, and
+Javascript which is compatible to the current infrastructure and offer secure multi-user
+access, role based dashboards, and report generation. The absence of automated rating
+calculators, submission tracking, and document archiving are all addressed by proposed
+system.
+
+Feasibility Analysis and Managerial Impact
+
+Technical Feasibility
+         The proposed system is technically feasible given the institution's existing
+
+infrastructure and available expertise. The development stack - HTML, PHP, JavaScript
+(jQuery/Ajax), MySQL, and Bootstrap is compatible with the university's browser-based
+environment and can be deployed on standard web servers. Development will be conducted
+using Visual Studio Code (VS Code), which is lightweight and widely supported. The
+institution's IT personnel are familiar with these technologies, ensuring adequate support
+for deployment and maintenance. Faculty and administrative staff possess basic digital
+literacy, and targeted training will be provided to bridge any gaps. No third-party vendors
+are required, as the system will be built using open-source tools and maintained internally.
+Given the alignment with current systems and the availability of technical resources, the
+project is deemed technically feasible.
+
+Economic Feasibility
+         The projected cost for this project is around 15,000 which is economically
+
+feasible. This budget includes training cost, and contingency fund. Expenses for domain
+hosting will free because it will be covered by the schools current subscription. Expenses
+for Licensing and Vendors fee can be avoided by using open-source technologies and
+internal development. Because the system expedites the workflows, shortens performance
+documentation, and lower administrative cost, the return or investment (ROI) is anticipated
+during the first academic cycle. The project is economically feasible given these cost
+savings and long term advantages.
+
+Operational Feasibility
+         The system is well align with the current university workflows and organizational
+
+structure. It improve the transparency and efficiency by digitalizing the present IPCR
+process without affecting essential duties. Real-time dashboards, rating calculators, and
+automatic submissions will be helpful to instructors and assessors. Feedback loops,
+systematic training programs, and pilot testing all help to promote user adoption. The
+system embodies the institutional values of evidence-based governance, accountability,
+and ongoing development. The implementation of change management tactics, such as
+advocate networks, awareness campaigns, and helpdesk support, has made the system both
+operationally and culturally feasible.
+
+Legal/Ethical Feasibility
+         The system adhere to the Data Privacy Act of 2012 (RA 10173), implementing
+
+secure login protocols, encrypted data transmission and role-based access controls. It also
+obtain the user consent at first login, and privacy policies are clearly explained. The rating
+procedure has ethical measures to make sure that assessments are based only on authorized
+IPCR indicators. Transparency and contextual reasoning are made possible via feedback
+mechanisms. To guarantee continued compliance, audits and privacy impact analyses will
+be carried out on a regular basis. The system is therefore morally and legally sound.
+
+Managerial Impact
+         The system will improve the managerial strategic decision making. Dean and
+
+Program Head will be able to monitor faculty contributions and efficiently distribute
+resources using automated documentation and performance analytics. With the use of
+dashboard, reporting process will be more easier, and manual report consolidation will be
+change to planning and data analysis. By offering organized, auditable records, the
+technology facilitates institutional accreditation and CHED Institutional Sustainability
+Assessment compliance. Aligned with the institution's objectives for academic excellence
+and quality assurance, the system enhances managerial capability overall.
+
+Change Management Component
+         The Faculty Performance Documentation and Evaluation System successful
+
+implementation depends on the coordinated change Management approach that takes the
+organizational preparedness and individual adaptability. Key stakeholders are faculty
+members, program heads and Dean. Faculty members, as primary user's may resist at first
+due to possible increase of accountability and unfamiliar of the platforms. Program heads
+and deans may need to adjust their monitoring and reporting procedure, even if they expect
+to gain from much better workflows.
+The impact of the system to the administrators or Dean will have better access to gather
+data for reporting and decision-making. While the faculties will transition from manual to
+automated performance tracking. Despite of the advantages, these requires a careful
+adjustment.
+
+         This approach will be guided by the ADKAR model. College briefing and
+communication strategies will be used for more awareness. By showcasing the system
+advantages through pilot testing and consultations, stakeholders desire to use the system
+will increase. Trainings, workshops and digital modules will be utilizing for acquiring more
+knowledge about the system. Lastly, Real time technical assistance, and peer coaching will
+help to strengthen their ability.
+
+         Interventions will include a centralized support center for assistance and problems,
+interactive workshops, and department-level pilot programs run by faculty allies. Continual
+improvements and frequent feedback gathering will guarantee that the system adapts to
+user requirements. These strategies aim to reduce opposition, increase institutional trust,
+and establish the system as a fundamental part of academic governance.
+
+Communication Plan
+         Effective communication played a critical role in the successful development,
+
+deployment, and adoption of the Faculty Performance Documentation and Evaluation
+System. Clear channels and regular updates were established among key stakeholders to
+ensure transparency, collaboration, and timely dissemination of information throughout the
+project lifecycle.
+
+         Audience: Faculty Members, Program Heads/Supervisors, Deans, Project
+Development Team.
+
+         Message: Key updates and milestones such as system goals, schedules, training
+sessions, submission deadlines, evaluation procedures, and feedback opportunities, will all
+be covered in the message. Guidance on system usage, login credentials, troubleshooting
+techniques, and policy integration pertaining to IPCR/DPCR documents will also be
+included.
+
+         Channels: Information will be disseminated through the following channels:
+         Email: for formal announcements, login instructions and documentation guides.
+         College Meetings: for Q&A, feedback collection and interactive briefings.
+         Shared Drive: for access of training materials and manuals.
+         Faculty Group Chats: for reminders and quick alert.
+         Workshops: for hands-on system walkthroughs and role specific training.
+         Frequency: Weekly updates during pilot and training phases. Twice a week
+progress report during development and testing. Monthly summary reports to deans during
+active evaluation cycles.
+Responsible Person:
+         Project Leader/Developer ­ for technical updates and system documentation
+         Program Head ­ for cascading the information to the faculty
+         Dean's Office ­ for College level announcement and policy alignment
+
+Schedule and Budget Summary
+
+Project Phases/Milestones:
+         Phase 1: Project Initiation & Planning ­ July 28, 2025 ­ August 8, 2025
+         Milestone A: Finalization of project scope, stakeholder alignment, and approval of
+                          system architecture
+
+         Phase 2: System Development and Testing ­ Aug 1, 2025 ­ October 20, 2025
+         Milestone B: Completion of prototype and internal testing
+         Phase 3: Pilot Implementation ­ Oct 21, 2025 ­ October 22, 2025
+         Milestone C: Deployment to selected departments and feedback collection
+         Phase 4: Training and Full Rollout ­ October 23, 2025 ­ October 23, 2025
+         Milestone D: Conduct of faculty workshops and system activation
+         Phase 5: Monitoring and evaluation ­ October 24, 2025 ­ October 30, 2025
+         Milestone E: Post Implementation review and documentation for college reporting.
+
+Gantt Chart
+
+                            Figure 2. Gantt Chart
+
+Budget
+
+          Item  Cost Estimate
+
+Domain & Hosting  0.00
+
+Dev Tools & Licenses  0.00
+
+Training         10,000
+
+Contingency      5,000
+
+Total            15,000
+
+Requirement Specification
+         The successful development and deployment of the Faculty Performance
+
+Documentation and Evaluation System required a clear specification of both functional and
+non-functional requirements. These requirements were gathered during the planning and
+analysis phases through consultations with institutional stakeholders, benchmarking of
+existing systems, and alignment with CHED and CSC evaluation frameworks.
+Functional Requirements
+    The system's functional requirements define the essential operations and services it
+
+must provide to fulfill its intended role in documenting and evaluating faculty performance:
+     Login and Registration. Enables authorized users to register and securely log into
+         the system using unique credentials. Role-based access allows faculty,
+         administrators, and evaluators to interact with modules relevant to their
+         responsibilities.
+     Faculty Dashboard and IPCR Tracking. Displays real-time evaluation status,
+         visual summaries, and detailed breakdowns of submitted data. IPCR forms and
+         scores are tracked across defined evaluation periods.
+     Administrative Control Panel. Allows administrators to manage user accounts,
+         configure evaluation periods, update criteria weights, and monitor submission
+         activity. Centralized access simplifies institutional oversight.
+     Evaluation Form Submission. Faculty can document achievements under
+         teaching, research, service, and administrative functions. Forms support file
+         attachments, draft saving, and submission confirmation.
+     Performance Rating Calculator. Automatically computes evaluation scores
+         based on institutional metrics and assigned weights. Supports multiple rating
+         categories with aggregated totals aligned with SPMS and IPCR standards.
+     Report Export and Print View. Users can generate performance summaries and
+         IPCR scorecards. Reports are exportable in PDF or printer-friendly formats and
+         accessible per evaluation cycle.
+
+Non-Functional Requirements
+    Non-functional requirements define the performance standards, security protocols,
+
+and system behavior needed to ensure reliability and user satisfaction:
+     System Load Speed. Web pages and dashboards must load in under two seconds
+         under normal network conditions to support efficient user workflows.
+     Secure Login Protocol. User authentication is protected through Secure Socket
+         Layer (SSL) encryption and token-based login sessions to prevent unauthorized
+         access and data breaches.
+     Mobile Responsiveness. The system adapts to various screen sizes and device
+         types, enabling access via desktop computers, tablets, and smartphones without
+         layout distortion.
+     Daily Backup and Restore Features. System data is automatically backed up each
+         day to cloud storage, ensuring recovery options in case of data corruption or
+         accidental deletion.
+     Concurrent User Support. The platform supports up to 30 simultaneous users
+         without degradation in performance, ensuring accessibility during peak submission
+         periods.
+
+Project Management Plan
+
+Staffing
+         To support the successful development, testing, and deployment of the Faculty
+
+Performance Documentation and Evaluation System, a multidisciplinary project team was
+assembled. Each role was carefully selected based on the technical requirements,
+documentation demands, and quality assurance standards of the capstone project.
+
+         Project Manager. Responsible for overall coordination of project activities,
+including planning, documentation, and stakeholder communication. Ensure alignment
+with institutional goals, CHED compliance, and academic standards. He/she must be
+skilled on strategic planning, stakeholder engagement, project documentation, and
+leadership.
+
+         System Analyst. Conduct requirement gathering, process analysis, and system
+modeling. Insure functional alignment with faculty evaluation process. Required skills are
+the following: Business process analysis, data modeling, documentation, and familiarity
+with IPCR frameworks.
+
+         Developer: Builds the system using HTML, PHP, JavaScript (jQuery/Ajax), and
+MySQL. Implements backend logic, frontend interfaces, and database structures. Ensures
+system security, performance, and maintainability. He/she must be Proficiency in PHP,
+MySQL, HTML/CSS, JavaScript, Bootstrap, version control (Git), and secure coding
+practices.
+
+         UI/UX Designer: Responsible for Designing user-friendly interfaces and ensures
+intuitive navigation across modules. Develops responsive layouts and accessibility features
+for faculty and administrative users. Required Skills: UI/UX design principles, Bootstrap,
+wireframing, user testing, and accessibility standards.
+Tester: Develops and executes test cases for unit, integration, system, and user acceptance
+testing. Recognizes bugs, documents issues, and validate fixes before the deployment.
+
+Work Breakdown Structure (WBS)
+
+Code Task Description                               Duration (days) Dependencies
+ 1.0 Project Initiation
+          1.1 Define Project Scope                  14                                       -
+          1.2 Form Team
+          1.3 Stakeholder Consultation              5                                        -
+ 2.0 Requirements Analysis
+          2.1 Gather Requirements                   2   1.1
+          2.2 Document Requirements
+          2.3 Map Workflows & Validate Specs        5   1,2
+ 3.0 System Design
+          3.1 Create Wireframes and UI Mockups      14  1.2
+          3.2 Design Database Schema
+          3.3 Finalize Architecture and Flowcharts  7   1.2
+
+                                                    3   2.1
+
+                                                    4   2.2
+
+                                                    14  2.2
+
+                                                    7   2.2
+
+                                                    3   3.1
+
+                                                    4   3.2
+4.0 Development and Implementation           30  3.3
+
+4.1 Backend Development (MySQL)              14  3.3
+
+4.2 Frontend Development (PHP, HTML,         7   4.1
+    Javascript)
+                                             7   4.2
+4.3 Integration and Feature Completion
+
+5.0 Testing and Refinement                   14  4.3
+
+5.1 Unit and Integration Testing             7   4.3
+
+5.2 User Acceptability Walkthroughs          3   5.1
+
+5.3 Bug Fixes and Refinement                 4   5.2
+
+6.0 Deployment                               7   5.3
+
+6.1 Cloud Hosting and Domain Setup           3   5.3
+
+6.2 System Rollout and Activation            4   6.1
+
+7.0 Documentation and Training               7   6.2
+
+7.1 Prepare User Manuals and Guides          3   6.2
+
+7.2 Conduct Training and Orientation         4   7.1
+
+8.0 Project Closure                          2   7.2
+
+8.1 Final Report and Manuscript Submission   1   7.1
+
+8.2 Post-Deployment Review and Feedback      1   8.1
+
+PERT Diagram
+
+                     Figure 3. PERT Diagram
+Data Modeling
+                           Figure 4. Context Diagram (DFD ­ Level 0)
+
+                              Figure 5. Data Flow Diagram (DFD ­ Level 1)
+Entities     Faculty ­ The primary users who submit reports, manage their profile and
+             receive feedback.
+             Dean - Oversees faculty performance, and provide feedback
+             Program Head / Immediate Supervisor ­ Review submitted reports.
+         
+Process      Faculty Account Management - Handles registration, login, and profile management.
+         1.  It ensures secure access and maintains faculty credentials.
+             Report Submission & Management - Facilitates the uploading and tracking of
+         2.  performance reports. It routes submissions to evaluation and documentation modules.
+             Performance Rating & Evaluation - Stores evaluator scores and comments. This
+         3.  module supports rating computation and historical tracking of performance metrics.
+             Performance Documentation-Generates formal evaluation documents based on
+         4.  submitted reports and ratings. It also sends notifications to supervisors.
+             Dashboard & Monitoring - Provides real-time visual summaries of faculty
+         5.  performance, including trends, completion status, and evaluation outcomes.
+             Feedback & Communication Enables two-way communication between faculty,
+         6.  evaluators, and administrators. It collects feedback, reviews reports, and supports
+             transparency.
+
+Data Store
+          Faculty Database - Central repository for faculty profiles, credentials, and historical
+              performance records.
+          Evaluation Records Store - Contains rating data, evaluator comments, and computed
+              scores used for documentation and analysis.
+          Performance Document Archive - Stores generated reports (e.g., IPCR, DPCR) and
+              institutional summaries for compliance and audit purposes.
+
+Data Flow
+          Faculty Data Flow - Faculty information flows from Faculty Account Management
+              to Report Submission & Management and Dashboard & Monitoring.
+          Report Submission Flow Submitted reports are routed to Rating & Evaluation
+              Records and Performance Documentation for scoring and document generation.
+          Evaluation Feedback Flow Ratings and comments flow from evaluators to Feedback
+              & Communication, which then informs both Faculty and the Dean.
+          Documentation Flow Finalized performance documents are sent to Program
+              Heads/Supervisors and archived for institutional use.
+     Faculty    Faculty_Accou        Report            Rating
+                         nt
+FacultyID (PK)                  ReportID (PK)   RatingID (PK)
+Name            AccountID       FacultyID (FK)  ReportID (FK)
+Department      (PK)            ReportType      ProgramHeadID
+Email           FacultyID (FK)  SubmissionDat   (FK)
+Position        Username        e               Score
+                Password        FilePath        Comments
+ Performance    Role
+       Doc                       Program Head      Evaluation
+                       Dean       / Supervisor       Record
+DocumentID
+(PK)            DeanID (PK)     SupervisorID    EvalID (PK)
+FacultyID (FK)  Name            (PK)            RatingID (FK)
+ReportID (FK)   College         Name            Remarks
+DocumentType                    Department      DateStored
+DateGenerated
+
+                  Figure 6. Entity ­ Relationship Diagram (ERD)
+
+Faculty
+          Faculty ID (PK)
+          Name
+          Department
+          Email
+          Position
+         This is the individual faculty members. Each faculty is identified by FacultyID as
+
+the Primary Key and associated with department and position. This entity will serve as the
+core reference for linking accounts, reports, and performance documentation.
+
+Faculty Account
+          AccountID (PK)
+          FacultyID (FK)
+          Username
+          Password
+          Role
+         This will capture every Performance reports submission. Each report is linked to a
+
+faculty member and includes metadata like type, submission data, and file location. This is
+a Many to one relationship with the faculty.
+Rating
+          ReportID (PK)
+          FacultyID (FK)
+          ReportType
+          SubmissionDate
+          FilePath
+         This entity contains the evaluation scores and comments provided by the program
+
+Head / Immediate supervisor.
+
+Performance Documents
+          DocumentID (PK)
+          FacultyID (FK)
+          ReportID (FK)
+          DocumentType DateGenerated
+         This will represent the formal performance documentation generated from
+
+submitted reports and ratings. A many to one relationship is applied since a faculty can
+have multiple documents derived from different reports.
+
+Dean
+          DeanID (PK)
+          Name
+          College
+         This is the institutional authority overseeing the faculty performance. Though
+
+Deans are not directly linked to evaluation, they send and receive feedback and reports.
+
+Program Head / Supervisor
+          SupervisorID (PK)
+          Name
+          Department
+         They are the evaluators responsible for rating faculty reports. They provide scores
+
+and comments that feed into the rating and evaluation record entities. A one to many
+relationship is applied to this since a Program Head / Supervisor can evaluate many faculty.
+
+Evaluation Record
+          EvalID (PK)
+          RatingID (FK)
+          Remarks
+          DateStored
+         Stores finalized evaluation records, including remarks and archival date. It links
+
+directly to the Rating entity and serves as a historical log for institutional review.
+
+Development and Testing
+         System Development Model: This project uses Iterative Waterfall Model. This
+
+is a structured software development methodology that follows a sequential progression of
+phases--requirements, design, implementation, testing, deployment, and maintenance--
+while allowing feedback and refinement between iterations. This model has been selected
+because it provides a balance between structure and flexibility, which is appropriate for the
+project's academic setting and the small number of the development team.
+
+Feedback  Feasibility Study
+                     Requirement Analysis
+                                              Design
+
+                                                      Coding
+
+                                                              Testing
+
+                                                                       Maintenance
+
+                                     Figure 7. Iterative Waterfall Model
+
+Phases/Iterations:
+         1. Requirements Analysis
+             Purpose: This phase gathers information and defines functional and non-
+             functional requirements of the system.
+             Activities and Procedures: Stakeholder interviews were conducted to make sure
+             that we are following CHED SPMS criteria, and reviewed the existing
+             evaluation workflow.
+             Tools or Techniques Used: Stakeholder consultation forms and requirement
+             specification documents.
+             Stakeholder Involvement: Faculty members, Dean, and institutional evaluators
+             provide input on evaluation criteria, workflows, and reporting needs.
+             Deliverables or Outputs: Finalized requirement specification document.
+         2. System Design:
+             Purpose: To create users interface design based on the gathered requirements.
+             Activities and Procedures: Create diagrams and flowcharts to visualized system
+             components and data relationships.
+             Tools and Techniques Used: MS Word, Lucidchart and Database schema
+             Design.
+             Stakeholder Involvement: UI feedback was gathered from faculty to adjust
+             layouts.
+             Deliverables or Outputs: System Diagram, UI mockups and database design
+             documentation.
+         3. Development and Implementation:
+             Purpose: Building the system based on the approve design.
+             Activities and Procedures: Working with backend, frontend interface and
+             integrated database operations.
+             Tools and Techniques Used: PHP, Javascript, MySQL, HTML, VS Code and
+             Bootstrap.
+             Stakeholder Involvement: Giving update for milestone tracking.
+             Deliverables or Outputs: Functional system modules including login, report
+             submission, ratings input, and report generation.
+         4. Testing and Refinement:
+             Purpose: To validate system functionalities, identify possible bugs, and ensure
+             reliability before the deployment.
+             Activities and Procedures: Conduct unit testing, integration testing, and user's
+             acceptability walkthroughs.
+             Tools and Techniques Used: Manual test scripts, Likert-scale survey for
+             usability feedback.
+             Stakeholder Involvement: The faculty and Dean participated on the testing and
+             provide feedback for improvement.
+             Deliverables or Outputs: Test case documentation, bug reports and updated
+             system modules based on feedbacks.
+         5. Deployment:
+             Purpose: To lunch the system in a live environment for college use.
+             Activities and Procedures: Configure cloud hosting, setting up domain access,
+             and coordinated rollout with IT personnel.
+             Tools and Techniques Used: Cloud deployment services, SSL configuration,
+             and institutional domain integration.
+             Stakeholder Involvement: Dean and IT staff facilitated deployment and initial
+             user onboarding.
+             Deliverables or Outputs: Live system accessible via institutional domain, user
+             accounts activated, and training materials distributed.
+         6. Documentation and Maintenance:
+             Purpose: To prepare formal documentation and ensure system sustainability
+             post-deployment.
+             Activities and Procedures: Finalized user manuals, technical documentation,
+             and disaster recovery protocols.
+             Tools and Techniques Used: Microsoft Word, and PDF export tools.
+             Stakeholder Involvement: Documentation lead coordinated with the project
+             manager and QA tester to ensure completeness.
+             Deliverables or Outputs: Capstone manuscript, user's manual, training guides,
+             and maintenance plan.
+
+Software Development Tools
+         The Faculty Performance Documentation and Evaluation System was developed
+
+using a suite of modern and reliable open source technologies to ensure scalability,
+maintainability, and user centered design. Below are the details:
+
+      HTML: Used for structuring web content and ensuring semantic clarity across
+         pages.
+      PHP: Serves as the server-side scripting language, handling backend logic,
+         database interactions, and dynamic content rendering.
+
+      JavaScript (jQuery/Ajax): Enhances client-side interactivity, supports
+         asynchronous data exchange, and streamlines DOM manipulation for responsive
+         user experiences.
+
+      MySQL: A robust relational database system used to store, retrieve, and manage
+         structured data related to faculty profiles, performance metrics, evaluation records,
+         and system logs. It supports ACID compliance and integrates seamlessly with PHP.
+
+      Visual Studio Code (VS Code): A lightweight yet powerful code editor offering
+         syntax highlighting, version control integration (Git), and extensions for PHP,
+         JavaScript, and MySQL development. It facilitated efficient coding, debugging,
+         and collaboration.
+
+      Bootstrap: A front-end framework used to design responsive and mobile-first
+         interfaces. It provided pre-built UI components, grid systems, and styling utilities
+         that accelerated development while ensuring visual consistency and accessibility.
+
+Test cases and Test Plan
+
+         Test Plan Overview: The test plan summaries the organized method use to validate
+functionality, reliability, and performance of the Faculty Performance Documentation and
+Evaluation System. It define the scope of testing, identify components for evaluation,
+specifies testing types, and assigns responsibilities to ensure that the system meets
+institutional standards and users expectations prior to deployment.
+
+         Components: The system contains several modules such as Faculty Account
+Management, Report Submission, Rating and Evaluation Records, Performance
+Documentation, Dashboard and Monitoring, and Feedback and Communication. Every
+components will go through testing to check how they behave.
+
+         Scope of Testing: All essential modules and user interfaces will be tested.
+Workflows for login and registration, report submission and retrieval, rating computation
+logic, document production, dashboard analytics, and feedback mechanisms are all
+included in this. With regards to data security and integrity, role-based access and
+administrative restrictions will also be observed.
+
+         Objectives: The primary goals of testing are to ensure that all system functionalities
+operate as intended, identify and resolve bugs or inconsistencies, validate performance
+under concurrent usage, and confirm compliance with institutional data handling protocols.
+Testing also aims to verify that the system is user-friendly, secure, and scalable.
+
+         Testing Types:
+          Unit Testing: Validate individual functions and modules (e.g., login, rating
+
+             calculator).
+          Integration Testing: Assure smooth interaction between modules.
+          System Testing: Examine the system as a whole in a production-like setting.
+          Performance Testing: Assess system responsiveness, load handling, and data
+
+             processing speed.
+          Security Testing: Verify encryption protocols, access control, and protection
+
+             against unauthorized access.
+Test Cases
+
+ Test  Feature/Mo        Test       Preconditi  Test Steps           Expected     Actu  Statu
+ Case       dule      Descripti         ons                            Result      al     s
+  ID                                                                              Res
+TC-01  Faculty            on        Faculty 1.Go to log in           Redirect      ult
+       Login                                                         to
+TC-02                 Verify        account     page                 Dashboard    Ask
+TC-03  Invalid Login  login with                                                  how
+                      valid         exists and 2.Enter valid         "Invalid     man
+TC-04  Password       credentials                                    credentials
+       Reset                        active      username             " message
+TC                                                                   displayed
+TC-05  Account                                  /password            Password
+       Lockout                                                       reset
+TC-06  After Failed                             3.Click log in       successful
+       Attempts                                                      ly
+                      System        Faculty 1.Enter wrong
+       Account                                                       Account
+       Unblocked      verificatio   account     password             temporaril
+       by the Admin                                                  y locked
+       Role-Based     n         of  exist       2.Click log in
+       Access                                                        Access
+       Control        incorrect                                      denied or
+                                                                     redirected
+       Session        credentials
+       Timeout                                                       User is
+                      Verify that   Valid email 1.Click "Forgot      logged out
+
+                      faculty       registered Password"
+
+                      can reset     in system 2.Enter
+
+                      their                     registered
+
+                      password                  email
+
+                      via email                 3.Check inbox
+
+                                                and follow
+
+                                                reset link
+
+                      Ensure        Faculty     Enter wrong
+                      system
+                      locks         account password 5
+                      account
+                      after         exists      times
+                      multiple
+                      failed
+                      login
+                      attempts
+
+                      Verify that   Logged in Attempt to
+                      faculty       as faculty access admin
+                      cannot
+                      access                         dashboard URL
+                      admin-
+                      only pages    Logged in Leave session
+                      Validate
+                      automatic                 idle            for
+                      logout
+                 after                configured                    y
+
+                 inactivity           timeout duration              min/
+
+                                                                    hour
+
+                                                                    s
+
+TC-07  Profile   Faculty Logged in 1.Navigate to Profile
+TC-08
+       Update    updates              profile           updated
+TC-09
+TC-10            personal             2.Edit name or successful
+TC-11
+TC-12            informatio           email             ly
+
+TC-13            n                    3.Save Changes
+TC-14
+TC-15  Admin     Admin Logged in 1.Go to "Manage New
+
+       Account   creates a as admin Users"              account
+
+       Creation  new                  2.Enter faculty created
+
+                 faculty              details           and listed
+
+                 account              3.Assign role
+
+                                      4. Save
+
+       Login Audit Verify that System 1.Login        as Timestam
+
+       Trail     login       logging  faculty           ped entry
+
+                 attempts enabled 2.Check audit log recorded
+
+                 are logged
+
+       IPCR Report Faculty Logged in 1.Go to "Submit Confirmat
+
+       Upload    uploads              Report"           ion
+
+                 document             2.Upload file     message
+
+                                      3.Click "Submit"
+
+       Duplicate Prevent Report 1.Attempt to Warning
+
+       Submission duplicate already   upload same or
+
+                 IPCR        submitted file again.      overwrite
+
+                 uploads                                prompt
+
+       Rating    Validate IPCR data 1.Admin initiates Accurate
+
+       Computation correct submitted evaluation         rating
+
+                 rating               2. System         displayed
+
+                 calculatio           computes
+
+                 n based on           rating
+
+                 inputs
+
+       Rating    Admin Rating 1.Admin edit Updated
+
+       Override  manually computed score                rating
+
+                 adjusts              2.Save changes saved
+
+                 rating
+
+       Export to Generate Report 1.Click Export Download
+
+       PDF       PDF of submitted 2.Select Format able PDF
+
+                 submitted                              generated
+
+                 report
+
+       Print Preview Display Report 1.Click "Print Formatted
+
+                 printable submitted Preview"           view
+
+                 version of                             shown
+
+                 report
+   TC-16  Add              Admin Logged in 1.Go to "Manage New
+   TC-17
+TC-18     Evaluation creates as admin Periods"                  period
+
+TC-19     Period           new               2.Enter dates      added
+
+                           evaluation        3. Save
+
+                           cycle
+
+          User Role Assign User              1.Select User      Role
+
+          Assignment faculty/ad account 2.Assign role           updated
+
+                           min roles exists
+
+          Suggested Verify thaPt rogram Head1.Navigate toSuggested
+
+          Decision Deans canhas submitted "Suggested decision is
+
+          Review view             evaluation; Decisions" displayed
+
+                        suggested Dean is logged dashboard with full
+
+                        ratings andin        2.Select         context
+
+                        comments             evaluation (rating,
+
+                        from Program         period           andjustification,
+
+                        Heads                faculty name attachments)
+
+                                             3.Review
+
+                                             suggested rating
+
+                                             and remarks
+
+          Post-         Verify systemDean has1.System updatesEvaluation
+
+          Decision behavior aftersubmitted   evaluation status tatus
+
+          Finalization Dean submitsfinal decision to "Finalized" changes to
+
+                        a         final      2.Locks          "Finalized";
+
+                        decision             evaluation record
+
+                                             record frombecomes
+
+                                             further edits read-only;
+
+                                             3.Sends          faculty
+
+                                             notification tonotified; audit
+
+                                             faculty          trail updated
+
+                                             4.Archives
+
+                                             decision in audit
+
+                                             trail
+
+                                  Table 1. System Test Cases
+
+User Acceptance Testing (UAT):
+
+          UAT Objectives
+           Validate that the system supports core business processes related to faculty
+
+              performance documentation, evaluation, and reporting.
+           Ensure user satisfaction across faculty and administrative roles.
+           Confirm system readiness for deployment in alignment with institutional.
+           Identify usability issues and gather feedback for final refinements.
+
+          Participants
+ College of Arts and Sciences Faculty Members ­ Submit IPCR/DPCR
+    reports, view evaluation results
+
+ Department Chairs/Program Heads ­ Review submissions, assign ratings
+ Dean, College of Arts and Sciences - Oversee compliance and deployment
+
+    readiness
+
+UAT Scenarios/Scripts
+
+ID                     Task Description                        User Role
+
+UAT-001 Submit report with attachments                         Faculty
+
+UAT-002 View submission status and history                     Faculty
+
+UAT-003 Review and rate submitted reports                      Department Chair
+
+UAT-004 Generate summary reports for evaluation period Dean
+
+UAT-005 Test access control and role-based permissions Admin/Dean
+
+UAT-006          Simulate evaluation cycle from submission to  Admin/Dean
+                 final rating
+
+Acceptance Criteria
+ All critical workflows (submission, review, rating, reporting) function without
+
+    errors
+ Role-based access and permissions are correctly enforced
+ Submitted documents are securely stored and retrievable
+ Evaluation results are accurately computed and displayed
+ System performance is stable under expected load
+ Users report  90% satisfaction in usability and
+
+    functionality surveys
+
+ No critical bugs remain unresolved at the end of UAT
+
+UAT Schedule                           Dates                   Duration
+    Phase                              Oct 6­10, 2025          5 days
+    Preparation & Script Finalization  Octo 13­17, 2025        5 days
+    UAT Execution                      Oct 20­23, 2025         4 days
+    Feedback Consolidation & Fixes     Oct 24, 2025            1 day
+    Final Sign-off
+
+Deployment Plan
+
+         The system will be deployed using a phased rollout strategy which will begin with
+a pilot implementation in selected departments before the College wide deployment. This
+approach allows for controlled testing, feedback collection, and incremental adjustments,
+minimizing disruption and ensuring user readiness. The pilot phase will validate core
+functionalities such as report submission, rating workflows, and dashboard monitoring
+before expanding access to all faculty and administrative users.
+
+Installation Procedure: The following are the steps for system installation:
+    1. Server Preparation
+          Provision a secure cloud-based hosting environment
+          Configure PHP, MySQL, and Apache/Nginx stack
+          Enable SSL/TLS encryption for secure data transmission
+    2. System Deployment
+          Upload source code via FTP
+          Set up database schema using MySQL scripts
+          Configure environment variables and access credentials
+          Test connectivity and module responsiveness
+    3. User Access Setup
+          Create initial admin and faculty accounts
+          Assign roles and permissions based on institutional hierarchy
+          Enable login portal and dashboard access
+    4. Final Validation
+          Conduct smoke testing to verify core functions
+          Confirm report submission, rating, and documentation modules are operational
+Data Migration Plan: The system migration will focus more on digitalizing the manual
+and spreadsheets process of faculty records and performance evaluation.
+     Data Collection
+
+             o Gather historical IPCR/DPCR files and evaluation records from Department
+             o Use standards format for database compatibility
+     Data Cleansing
+             o No duplicate data, inconsistency will be corrected, and validated entries
+             o Ensure alignment with faculty IDs and department codes.
+     Migration Execution
+             o Use structured import scripts to populate MySQL tables
+             o Verify integrity through sample queries and dashboard previews
+     Post Migration Validation
+             o Conduct spot checks with department Head
+             o Confirm completeness and accuracy of migrated data
+Cutover Strategy: The college has no previous system
+Rollback Plan: If ever there will be an unresolved issues during deployment, the following
+rollback plan will be executed:
+     Immediate Suspension: Temporary suspension system access and revert to manual
+         submission, and notify all stakeholders via email
+     Data Restoration: Restore the backup records and spreadsheets, re-enable the
+         previous documentation workflow.
+     Issue Resolution: Diagnose the root cause of the issue, apply repairs and retest the
+         module.
+     Post-Rollback Review: Document the incident for future use, and preventive
+         measure. Update deployment checklist and contingency protocols.
+
+Risk Management Plan
+
+Risk  Risk  Likelih Impact Mitigation  Contingency  Respon
+                                            Plan     sible
+Id Description ood    Strategy
+                                                    Person
+R-01  Scope creep      Medium High     Clearly define    Review     the     Project
+      due to evolving                  the project                          Manag
+R-02  stakeholder      Medium Mediu    scope and         schedule and       er
+R-03  demands                       m  implement
+R-04                                   change            available          Develo
+R-05                   Low High        control                              per
+R-06                   High High       procedure.        resources then
+R-07                                   Perform                              Project
+R-08                                   modular           give priority to   Manag
+                                       testing, use                         er
+                                       tested            the important
+                                       framework                            Trainin
+                                       Maintain          elements           g
+                                       budget buffer,                       Coordi
+      Technical                        and monitor       Separate faulty    nator
+      Challenges                       weekly                               Develo
+      during                           expenses          module; rollback   per
+      integration of                   Conduct
+      Module                           Training          to stable version  System
+      Budget                           workshops                            analyst
+      overruns due to                                    Seek college
+      unforeseen                                         support            Project
+      infrastructure                                                        Manag
+      needs                                              Offer one-on-one   er
+      Low User                                           testing            Develo
+      adoption due to                                                       per
+      unfamiliarities
+
+      Data security    Low High        Implement         Disable system
+                                                         in a moment and
+      breach during    Medium Mediu    SSL               restore back up.
+                                    m
+      during                           encryption        Extend
+                       Low Mediu                         Documentation
+      deployment or                 m  and role-based    window
+
+      usage                            access            Reassign roles
+
+      Delays       in                  Early
+
+      documentation                    documentatio
+
+      and report                       n assignments
+
+      preparation                      and          use
+
+                                       templates.
+
+      Staff turnover                   Cross-train
+      affecting
+      continuity                       team members
+      Server
+      downtime         Low High Test load Notify user of the
+      during live
+      deployment                       capacity          temporary outage
+
+                                       beforehand
+
+                       Table 2. Risk Management Plan
+
+Disaster Recovery Plan
+Purpose: In the case of a significant disruption, such as a natural disaster, cyberattack, or
+hardware failure, to guarantee the quick restoration of system operation and data integrity.
+Both teacher performance records and institutional activities are safeguarded by this
+arrangement.
+Key Personnel:
+Project Manager ­ Overall coordinator and decision maker.
+Developer- Technical recovery and system restoration
+IT Support Staff ­ Server access, backup retrieval, and network restoration
+Deployment Coordinator ­ Communication with stakeholder and rollback execution
+Backup Strategy:
+Frequency: Daily incremental backups; weekly full backups
+Location: Cloud Storage
+Type: Encrypted MySQL database dumps and source code archives
+Retention: 30-day rolling backup cycle with offsite replication |
+Recovery Procedure:
+
+    1. Assess the nature and scope of the disruption
+    2. Inform key personnel and initiate recovery protocol
+    3. Restore latest backup from cloud
+    4. Reconfigure server environment and redeploy application
+    5. Test system modules and verify data integrity
+    6. Resume operations and notify users of restoration status
+Recovery Time Objectives: Maximum acceptable downtime is 48 hours from the start of
+disruption.
+Recovery Point Objectives (RPO): Maximum acceptable data lose is 24 hours based on
+daily backup frequency.
+Testing Schedule:
+     Quarterly DRP Simulation: Perform mock recovery drills quarterly
+     Annual Full Recovery Test: end-to-end restoration procedures must be check.
+
+Users Training Plan
+
+Training Objectives: The training program is for the end-user to have that confident to
+use the system. Upon the end of this training, the user must be able to:
+
+     Able to log in securely and navigate the system interface.
+     Able to submit required document report
+     Monitor submission status and evaluation result
+     Perform role-specific tasks such as rating, reviewing, and generating reports
+     Able to do basic troubleshooting and access help resources
+Target Audience:
+
+         Faculty members ­ for report submission and status tracking
+         Program head/Supervisor ­ for reviewing and rating of documents
+         Deans ­ for oversight, summary reporting, and policy alignment
+Training Content:
+     System overview and purpose
+     User interface (dashboard, forms, and notifications)
+     Step by step guide in submitting reports
+     Rating and evaluation workflows
+     Exporting and Importing documents
+     Data privacy and access controls
+     Troubleshooting and support channels
+Training Methods
+
+ Departmental Workshops ­ Hands on sessions with live system access
+
+ User Manuals ­ printed and digital guides
+
+ One-on-One sessions ­ for personal support
+
+ Video Tutorials ­ for asynchronous learning
+
+ Helpdesk support ­ for day to day assistance
+
+Training Schedule
+
+Date               Audience                   Format     Location
+
+Oct 21, 2025       Faculty Members    Workshop           ICT Lab
+
+Oct 22, 2025       Program            Workshop           CAS Bldg. Rm 2
+                   Heads/Supervisors
+
+Oct 23, 2025       Deans              Briefing & Demo    Dean's Office
+
+Oct 24­29, 2025    All Users          One-on-One &       On-call & Online
+                                      Helpdesk
+
+                          Table 3. Training Schedule
+
+Training Materials
+     Printed user manuals and quick-start guides
+     Slide presentations (system overview, workflows)
+     Practice exercises (sample submissions, rating simulations)
+     FAQ sheets and troubleshooting checklists
+
+Evaluation Method
+Training effectiveness will be measured through:
+
+     Post-training feedback forms
+     Task-based assessments
+     Usage monitoring during pilot phase
+     Follow-up interviews with department heads to assess confidence and adoption
+     Helpdesk ticket analysis to identify recurring issues
+
+User's Manual
+
+Faculty Performance Documentation and Evaluation System
+
+Table of Contents:
+Introduction
+Getting Started
+Core Functionalities
+
+         Dashboard Overview
+         IPCR submission
+         Evaluation Rating
+         Report Generation
+Troubleshooting
+Frequently asked questions (FAQ)
+Glossary
+
+Introduction
+This document gives the users with the detailed guide to use the Faculty Performance
+Documentation and Evaluation System. Faculty performance document submission,
+evaluation, and reporting are made easier by the system architecture which guarantee
+timeliness, transparency and adherence to institutional standards.
+
+Getting Started
+Access instruction:
+ Open a web browser and type in the official system URL provided.
+ Recommended browsers: Chrome, Firefox, Edge.
+Login Procedure:
+ Enter your assigned username and password.
+ First-time users will be prompted to change their password and accept the data privacy
+
+  agreement.
+ If login fails, use the "Forgot Password" link or contact your department's system
+
+  coordinator.
+
+Core Functionalities
+Dashboard Overview
+ It displays the submission status, evaluation results, and the system notifications.
+ Navigation menu includes: Home, Submit Report, View Ratings, and Export Documents.
+Report Submission
+Steps:
+
+    1. Click "Submit Report" from the dashboard.
+    2. Select the evaluation period and document type.
+    3. Upload your completed form in PDF format.
+    4. Add supporting documents if required.
+    5. Click "Submit" and wait for confirmation.
+Evaluation and Rating (For Program Heads/Supervisors)
+Steps:
+    1. Navigate to "Review Submissions."
+    2. Select faculty name and evaluation period.
+    3. View submitted documents.
+    4. Enter ratings based on approved metrics.
+    5. Save and finalize evaluation.
+Report Generation
+Steps:
+    1. Go to "Export Documents."
+    2. Choose report type (e.g., Summary, Individual Rating).
+    3. Select format (PDF or Excel).
+    4. Click "Generate" and download
+
+Troubleshooting                                     Solution
+              Issue  Check credentials, use "Forgot Password" and or contact
+                     admin
+Cannot log in        Make sure that the file is in PDF format and under size limit
+
+File upload fails
+              Issue                                   Solution
+Ratings not saving     Confirm all required fields are filled; refresh page
+Dashboard not loading  Clear browser cache; try a different browser
+
+Frequently Asked Questions (FAQ)
+Q1: Can I edit a submitted report?
+A: Yes, if the evaluation period is still open. Go to "My Submissions" and click "Edit."
+Q2: Who can see my evaluation results?
+A: Only authorized personnel such as your supervisor and dean.
+Q3: What if I miss the submission deadline?
+A: Contact your program head immediately. Late submissions may be flagged.
+Q4: Is my data secure?
+A: Yes. The system uses encrypted connections and role-based access controls.
+
+Glossary
+IPCR: Individual Performance Commitment and Review
+DPCR: Department Performance Commitment and Review
+SPMS: Strategic Performance Management System
+Dashboard: Main interface showing user-specific data
+Evaluation Period: Designated timeframe for submitting and reviewing reports
+Rating: Quantitative assessment of performance based on institutional metrics
+

@@ -5,7 +5,10 @@ $designations = $conn->query("SELECT * FROM designation_list ORDER BY designatio
 $academic_ranks = $conn->query("SELECT * FROM position_list ORDER BY position ASC");
 
 if(isset($_GET['id'])){
-    $qry = $conn->query("SELECT * FROM task_list where id = ".$_GET['id'])->fetch_array();
+    $stmt = $conn->prepare("SELECT * FROM task_list where id = ?");
+$stmt->bind_param("i", $_GET['id']);
+$stmt->execute();
+$qry = $stmt->get_result()->fetch_array();
     foreach($qry as $k => $v){
         $$k = $v;
     }

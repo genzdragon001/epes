@@ -86,6 +86,34 @@
 
 	if(!isset($_SESSION['login_id']))
 	    header('location:login.php');
+
+    // First-login check: redirect to password change + privacy consent if needed
+    if (isset($_SESSION['login_id']) && isset($_SESSION['login_type'])) {
+        $login_type = $_SESSION['login_type'];
+        $login_id   = $_SESSION['login_id'];
+        $tables = ['employee_list', 'evaluator_list', 'users'];
+        $table  = $tables[$login_type] ?? 'employee_list';
+        
+        // Only check if we haven't already verified this session
+        if (!isset($_SESSION['first_login_checked'])) {
+            $stmt = $conn->prepare("SELECT password_changed, privacy_accepted FROM {$table} WHERE id = ? LIMIT 1");
+            $stmt->bind_param('i', $login_id);
+            $stmt->execute();
+            $fl = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+            
+            if ($fl && ($fl['password_changed'] == 0 || $fl['privacy_accepted'] == 0)) {
+                // Redirect to first-login setup — but NOT if already on first_login page
+                $current_page = $_GET['page'] ?? '';
+                if ($current_page !== 'first_login') {
+                    header('location:index.php?page=first_login');
+                    exit;
+                }
+            }
+            $_SESSION['first_login_checked'] = true;
+        }
+    }
+
     ob_start();
   if(!isset($_SESSION['system'])){
 

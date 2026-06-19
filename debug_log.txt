@@ -1,18 +1,31 @@
 save_renewal_recommendation called
 POST: Array
 (
-    [faculty_id] => 22
+    [faculty_id] => 23
     [evaluator_id] => 1
     [rating_period] => 1-2526
-    [overall_score] => 0
-    [instruction_ave] => 0.00
-    [support_ave] => 0.00
-    [total_tasks] => 0
+    [overall_score] => 4.53
+    [instruction_ave] => 4.48
+    [support_ave] => 5
+    [total_tasks] => 10
     [verified_tasks] => 0
-    [avg_efficiency] => 
-    [avg_timeliness] => 
-    [avg_quality] => 
-    [recommendation_status] => Not Recommended
-    [system_reason] => No ratings found for this evaluation period. Faculty has no performance data available for renewal assessment.
+    [avg_efficiency] => 1.46
+    [avg_timeliness] => 3.2
+    [avg_quality] => 0
+    [recommendation_status] => Recommended
+    [system_reason] => The faculty has demonstrated VERY SATISFACTORY performance with an overall weighted score of 4.53 out of 5.0. For Contract of Service (COS) Faculty: Instruction Average: 4.48 (VERY SATISFACTORY) - Weighted at 90%. Support Function Average: 5 (OUTSTANDING) - Weighted at 10%. A total of 10 rating(s) were submitted for evaluation. Based on the satisfactory performance indicators, this faculty member is RECOMMENDED for contract renewal.
 )
 
+SQL: UPDATE renewal_recommendations SET 
+				overall_score = 4.53,
+				instruction_ave = 4.48,
+				support_ave = 5,
+				total_tasks = 10,
+				verified_tasks = 0,
+				avg_efficiency = 1.46,
+				avg_timeliness = 3.2,
+				avg_quality = 0,
+				recommendation_status = 'Recommended',
+				system_generated_reason = 'The faculty has demonstrated VERY SATISFACTORY performance with an overall weighted score of 4.53 out of 5.0. For Contract of Service (COS) Faculty: Instruction Average: 4.48 (VERY SATISFACTORY) - Weighted at 90%. Support Function Average: 5 (OUTSTANDING) - Weighted at 10%. A total of 10 rating(s) were submitted for evaluation. Based on the satisfactory performance indicators, this faculty member is RECOMMENDED for contract renewal.'
+				WHERE id = 3
+Save result: success

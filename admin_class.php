@@ -1144,6 +1144,10 @@ Class Action {
 		}
 	}
 	function save_rating(){
+		// Admin (login_type 2) is view-only — reject all rating operations
+		if (($login_type = ($_SESSION['login_type'] ?? -1)) == 2) {
+			return 0;
+		}
 		extract($_POST);
 		$progress_id = intval($progress_id);
 		$value = floatval($value);
@@ -1169,6 +1173,19 @@ Class Action {
 			return 0;
 		}
 	
+		// Determine current period type for rating tracking
+		// Individual ratings are always IPCR-level (DP/OPCR are computed aggregates)
+		$period_type = 'IPCR';
+		if (!empty($rating_period)) {
+			// Must match IPCR specifically since DP/OPCR share same semester+year
+			$stmt = $this->db->prepare("SELECT period_type FROM rating_period WHERE period_type = 'IPCR' AND CONCAT(semester, '-', year) = ? LIMIT 1");
+			$stmt->bind_param('s', $rating_period);
+			$stmt->execute();
+			$rp = $stmt->get_result()->fetch_assoc();
+			$stmt->close();
+			$period_type = $rp['period_type'] ?? 'IPCR';
+		}
+	
 		// Check if rating already exists
 		$stmt = $this->db->prepare("SELECT id FROM ratings WHERE task_id = ? AND employee_id = ?");
 		$stmt->bind_param('ii', $task_id, $employee_id);
@@ -1178,15 +1195,14 @@ Class Action {
 		if($check->num_rows > 0){
 			$rating = $check->fetch_assoc();
 			$rating_id = $rating['id'];
-			// Safe: $field is whitelisted, $value and $rating_id are bound
-			$stmt = $this->db->prepare("UPDATE ratings SET {$field} = ?, rating_period = ? WHERE id = ?");
-			$stmt->bind_param('dsi', $value, $rating_period, $rating_id);
+			$stmt = $this->db->prepare("UPDATE ratings SET {$field} = ?, rating_period = ?, period_type = ? WHERE id = ?");
+			$stmt->bind_param('dssi', $value, $rating_period, $period_type, $rating_id);
 			$stmt->execute();
 			$stmt->close();
 			return 1;
 		} else {
-			$stmt = $this->db->prepare("INSERT INTO ratings (task_id, employee_id, {$field}, rating_period) VALUES (?, ?, ?, ?)");
-			$stmt->bind_param('iids', $task_id, $employee_id, $value, $rating_period);
+			$stmt = $this->db->prepare("INSERT INTO ratings (task_id, employee_id, {$field}, rating_period, period_type) VALUES (?, ?, ?, ?, ?)");
+			$stmt->bind_param('iidss', $task_id, $employee_id, $value, $rating_period, $period_type);
 			$stmt->execute();
 			$stmt->close();
 			return 1;
@@ -1196,6 +1212,10 @@ Class Action {
 	}
 
 	function save_comment(){
+		// Admin (login_type 2) is view-only — reject all comment operations
+		if (($login_type = ($_SESSION['login_type'] ?? -1)) == 2) {
+			return 0;
+		}
 		if(isset($_POST['faculty_id']) && isset($_POST['evaluator_id']) && isset($_POST['comment'])){
 			$faculty_id = intval($_POST['faculty_id']);
 			$evaluator_id = intval($_POST['evaluator_id']);
@@ -1232,6 +1252,11 @@ Class Action {
 		}
 	}
 	function save_status() {
+    // Admin (login_type 2) is view-only — reject all status operations
+    if (($login_type = ($_SESSION['login_type'] ?? -1)) == 2) {
+        echo json_encode(["status" => "error", "message" => "Administrator accounts are view-only."]);
+        return;
+    }
     header('Content-Type: application/json');
 
     $id      = isset($_POST['id']) ? (int) $_POST['id'] : null;
@@ -1357,21 +1382,146 @@ Class Action {
     }
 
     if ($save_status) {
-        $stmt = $this->db->prepare("INSERT INTO login_audit_trail (user_id, username, ip_address, user_agent, login_status, failure_reason) VALUES (?, ?, ?, ?, 'SUCCESS', ?)");
-        $stmt->bind_param('issss', $userId, $username, $ip, $userAgent, $activity_log);
-        $stmt->execute();
-        $stmt->close();
-        echo json_encode(["status" => "success", "message" => "Status saved successfully"]);
+    	// Auto-compute timeliness and efficiency when a task is verified
+    	if ($value === 'Verified') {
+    		$this->auto_score_progress($id, $faculty);
+    	}
+    	$stmt = $this->db->prepare("INSERT INTO login_audit_trail (user_id, username, ip_address, user_agent, login_status, failure_reason) VALUES (?, ?, ?, ?, 'SUCCESS', ?)");
+    	$stmt->bind_param('issss', $userId, $username, $ip, $userAgent, $activity_log);
+    	$stmt->execute();
+    	$stmt->close();
+    	echo json_encode(["status" => "success", "message" => "Status saved successfully"]);
     } else {
-        $error = $this->db->error;
-        $stmt = $this->db->prepare("INSERT INTO login_audit_trail (user_id, username, ip_address, user_agent, login_status, failure_reason) VALUES (?, ?, ?, ?, 'FAILED', ?)");
-        $error_msg = "Failed to update status: $error";
-        $stmt->bind_param('issss', $userId, $username, $ip, $userAgent, $error_msg);
-        $stmt->execute();
-        $stmt->close();
-        echo json_encode(["status" => "error", "message" => "Database update failed"]);
+    	$error = $this->db->error;
+    	$stmt = $this->db->prepare("INSERT INTO login_audit_trail (user_id, username, ip_address, user_agent, login_status, failure_reason) VALUES (?, ?, ?, ?, 'FAILED', ?)");
+    	$error_msg = "Failed to update status: $error";
+    	$stmt->bind_param('issss', $userId, $username, $ip, $userAgent, $error_msg);
+    	$stmt->execute();
+    	$stmt->close();
+    	echo json_encode(["status" => "error", "message" => "Database update failed"]);
     }
-}
+    }
+
+    /**
+    * Compute and store task-level timeliness_rating and efficiency_rating
+    * when a task is verified. Also update the ratings table accordingly.
+    */
+    function auto_score_progress($task_id, $faculty_id) {
+    // Fetch task deadline and submission date
+    $stmt = $this->db->prepare("
+    	SELECT t.deadline, t.efficiency AS task_eff_applicable, t.timeliness AS task_time_applicable,
+    		   tp.date_submitted, tp.date_verified, tp.id AS progress_id, tp.rating_period
+    	FROM task_list t
+    	LEFT JOIN task_progress tp ON t.id = tp.task_id AND tp.faculty_id = ?
+    	WHERE t.id = ?
+    	LIMIT 1
+    ");
+    $stmt->bind_param('ii', $faculty_id, $task_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $stmt->close();
+
+    if (!$result || $result->num_rows == 0) {
+    	return;
+    }
+    $row = $result->fetch_assoc();
+    $progress_id   = intval($row['progress_id'] ?? 0);
+    $deadline    = $row['deadline'];
+    $submitted   = $row['date_submitted'];
+    $verified    = $row['date_verified'] ?: date('Y-m-d H:i:s');
+    $eff_appl    = strtoupper($row['task_eff_applicable'] ?? '');
+    $time_appl   = strtoupper($row['task_time_applicable'] ?? '');
+    $rating_period = $row['rating_period'] ?? ($_SESSION['rating_period'] ?? '');
+
+    if (!$progress_id || $deadline === null || $submitted === null) {
+    	return;
+    }
+
+    $dl   = new DateTime($deadline . ' 23:59:59');
+    $sub  = new DateTime($submitted);
+    $diff = $dl->diff($sub);
+    $days_late = ($sub > $dl) ? $diff->days : -$diff->days;
+
+    // Timeliness rating (5-point SPMS scale)
+    if ($time_appl !== 'APPLICABLE') {
+    	$timeliness_rating = null;
+    } elseif ($days_late <= 0) {
+    	$timeliness_rating = 5;
+    } elseif ($days_late <= 2) {
+    	$timeliness_rating = 4;
+    } elseif ($days_late <= 5) {
+    	$timeliness_rating = 3;
+    } elseif ($days_late <= 10) {
+    	$timeliness_rating = 2;
+    } else {
+    	$timeliness_rating = 1;
+    }
+
+    // Efficiency rating: full (5) if submitted before deadline, scaled down by tardiness
+    if ($eff_appl !== 'APPLICABLE') {
+    	$efficiency_rating = null;
+    } elseif ($days_late <= 0) {
+    	$efficiency_rating = 5;
+    } elseif ($days_late <= 2) {
+    	$efficiency_rating = 4;
+    } elseif ($days_late <= 5) {
+    	$efficiency_rating = 3;
+    } elseif ($days_late <= 10) {
+    	$efficiency_rating = 2;
+    } else {
+    	$efficiency_rating = 1;
+    }
+
+    // Store into task_progress
+    $stmt = $this->db->prepare("
+    	UPDATE task_progress
+    	SET timeliness_rating = ?, efficiency_rating = ?
+    	WHERE id = ?
+    ");
+    $stmt->bind_param('ddi', $timeliness_rating, $efficiency_rating, $progress_id);
+    $stmt->execute();
+    $stmt->close();
+
+    // Mirror into ratings table so IPCR/DPCR/OPCR views pick them up
+    $quality_default = 5;
+    $stmt = $this->db->prepare("
+    	SELECT id FROM ratings
+    	WHERE task_id = ? AND employee_id = ?
+    	LIMIT 1
+    ");
+    $stmt->bind_param('ii', $task_id, $faculty_id);
+    $stmt->execute();
+    $check = $stmt->get_result();
+    $stmt->close();
+
+    $period_type = 'IPCR';
+    if (!empty($rating_period)) {
+    	$stmt = $this->db->prepare("SELECT period_type FROM rating_period WHERE period_type = 'IPCR' AND CONCAT(semester, '-', year) = ? LIMIT 1");
+    	$stmt->bind_param('s', $rating_period);
+    	$stmt->execute();
+    	$rp = $stmt->get_result()->fetch_assoc();
+    	$stmt->close();
+    	$period_type = $rp['period_type'] ?? 'IPCR';
+    }
+
+    if ($check && $check->num_rows > 0) {
+    	$rating_id = $check->fetch_assoc()['id'];
+    	$stmt = $this->db->prepare("
+    		UPDATE ratings
+    		SET efficiency = ?, timeliness = ?, quality = ?, rating_period = ?, period_type = ?
+    		WHERE id = ?
+    	");
+    	$stmt->bind_param('ddsssi', $efficiency_rating, $timeliness_rating, $quality_default, $rating_period, $period_type, $rating_id);
+    } else {
+    	$stmt = $this->db->prepare("
+    		INSERT INTO ratings (task_id, employee_id, efficiency, timeliness, quality, rating_period, period_type)
+    		VALUES (?, ?, ?, ?, ?, ?, ?)
+    	");
+    	$stmt->bind_param('iidddss', $task_id, $faculty_id, $efficiency_rating, $timeliness_rating, $quality_default, $rating_period, $period_type);
+    }
+    $stmt->execute();
+    $stmt->close();
+    }
 
 function submit_file() {
     header('Content-Type: application/json');
@@ -2156,5 +2306,270 @@ function submit_file() {
 		
 		echo json_encode($result);
 	}
+
+	/**
+	 * Update/create rating periods. When period_type='ALL', creates IPCR+DP+OPCR in one save.
+	 */
+	function update_period(){
+		extract($_POST);
+		
+		if(empty($semester) || empty($year)){
+			return 0;
+		}
+		
+		$types_to_update = ['IPCR', 'DP', 'OPCR'];
+		if(!empty($period_type) && $period_type !== 'ALL'){
+			// Single type update
+			$types_to_update = [in_array($period_type, $types_to_update) ? $period_type : 'IPCR'];
+		}
+		
+		$start_date = !empty($start_date) ? $start_date : null;
+		$end_date = !empty($end_date) ? $end_date : null;
+		$auto_cascade = !empty($auto_cascade) ? 1 : 0;
+		$ok = true;
+		
+		foreach($types_to_update as $pt){
+			$code = $pt . '-' . str_replace(' ', '', $semester) . '-' . $year;
+			
+			$stmt = $this->db->prepare(
+				"SELECT id FROM rating_period WHERE period_type = ? AND semester = ? AND year = ? LIMIT 1"
+			);
+			$stmt->bind_param('sss', $pt, $semester, $year);
+			$stmt->execute();
+			$existing = $stmt->get_result();
+			$stmt->close();
+			
+			if($existing && $existing->num_rows > 0){
+				$row = $existing->fetch_assoc();
+				$stmt = $this->db->prepare(
+					"UPDATE rating_period SET code = ?, start_date = ?, end_date = ?, auto_cascade = ? WHERE id = ?"
+				);
+				$stmt->bind_param('sssii', $code, $start_date, $end_date, $auto_cascade, $row['id']);
+			} else {
+				$stmt = $this->db->prepare(
+					"INSERT INTO rating_period (semester, year, code, period_type, start_date, end_date, auto_cascade) 
+					 VALUES (?, ?, ?, ?, ?, ?, ?)"
+				);
+				$stmt->bind_param('ssssssi', $semester, $year, $code, $pt, $start_date, $end_date, $auto_cascade);
+			}
+			$ok = $stmt->execute() && $ok;
+			$stmt->close();
+		}
+		
+		return $ok ? 1 : 0;
+	}
 	
+	/**
+	 * Compute cascading: IPCR → DP (per-department) + IPCR → OPCR (office-wide)
+	 * Both DP and OPCR aggregate from individual IPCR ratings (not chained).
+	 */
+	function cascade_compute(){
+		header('Content-Type: application/json');
+		
+		// Get current active period for each type (latest per type)
+		$periods = [];
+		$qry = $this->db->query(
+			"SELECT id, period_type, semester, year, auto_cascade 
+			 FROM rating_period 
+			 WHERE (period_type, id) IN (
+				 SELECT period_type, MAX(id) FROM rating_period GROUP BY period_type
+			 )"
+		);
+		while($row = $qry->fetch_assoc()){
+			$periods[$row['period_type']] = $row;
+		}
+		
+		$dp_count = 0;
+		$opcr_count = 0;
+		$intervention_count = 0;
+		
+		// ---- STEP 1: IPCR → DP ----
+		// For each faculty member with IPCR ratings, compute department average
+		if(isset($periods['IPCR']) && isset($periods['DP']) && $periods['IPCR']['auto_cascade']){
+			$ipcr_id = $periods['IPCR']['id'];
+			$dp_id = $periods['DP']['id'];
+			$ipcr_code = $periods['IPCR']['semester'] . '-' . $periods['IPCR']['year'];
+			
+			// Get all departments that have rated faculty
+			$dept_qry = $this->db->query("
+				SELECT DISTINCT e.department_id, dl.department 
+				FROM employee_list e
+				INNER JOIN ratings r ON r.employee_id = e.id
+				LEFT JOIN department_list dl ON e.department_id = dl.id
+				WHERE r.rating_period = '$ipcr_code' AND e.department_id IS NOT NULL
+			");
+			
+			while($dept = $dept_qry->fetch_assoc()){
+				$dept_id = $dept['department_id'];
+				
+				// Get average ratings for faculty in this department
+				$avg_qry = $this->db->query("
+					SELECT 
+						AVG(r.efficiency) as avg_eff,
+						AVG(r.timeliness) as avg_time,
+						AVG(r.quality) as avg_qual,
+						COUNT(DISTINCT r.employee_id) as faculty_count
+					FROM ratings r
+					INNER JOIN employee_list e ON r.employee_id = e.id
+					WHERE e.department_id = $dept_id
+					AND r.rating_period = '$ipcr_code'
+					AND r.efficiency > 0 AND r.timeliness > 0 AND r.quality > 0
+				");
+				$avg = $avg_qry->fetch_assoc();
+				
+				if($avg['faculty_count'] > 0){
+					$eff = round($avg['avg_eff'], 2);
+					$time = round($avg['avg_time'], 2);
+					$qual = round($avg['avg_qual'], 2);
+					$overall = round(($eff + $time + $qual) / 3, 2);
+					
+					// Upsert cascading_ratings
+					$stmt = $this->db->prepare("
+						INSERT INTO cascading_ratings 
+							(source_period_id, target_period_id, department_id, level, 
+							 avg_efficiency, avg_timeliness, avg_quality, overall_rating)
+						VALUES (?, ?, ?, 'DP', ?, ?, ?, ?)
+						ON DUPLICATE KEY UPDATE
+							avg_efficiency = VALUES(avg_efficiency),
+							avg_timeliness = VALUES(avg_timeliness),
+							avg_quality = VALUES(avg_quality),
+							overall_rating = VALUES(overall_rating),
+							computed_at = CURRENT_TIMESTAMP
+					");
+					$stmt->bind_param('iiidddd', $ipcr_id, $dp_id, $dept_id, $eff, $time, $qual, $overall);
+					$stmt->execute();
+					$stmt->close();
+					$dp_count++;
+				}
+			}
+		}
+		
+		// ---- STEP 2: IPCR → OPCR (directly from ALL individual IPCR ratings) ----
+		// OPCR is the office-wide average of ALL faculty IPCR ratings —
+		// not an average of department DP averages. DP is per-department only.
+		if(isset($periods['IPCR']) && isset($periods['OPCR']) && $periods['IPCR']['auto_cascade']){
+			$ipcr_id = $periods['IPCR']['id'];
+			$opcr_id = $periods['OPCR']['id'];
+			$ipcr_code = $periods['IPCR']['semester'] . '-' . $periods['IPCR']['year'];
+			
+			// Aggregate ALL individual IPCR ratings office-wide
+			$opcr_qry = $this->db->query("
+				SELECT 
+					AVG(r.efficiency) as avg_eff,
+					AVG(r.timeliness) as avg_time,
+					AVG(r.quality) as avg_qual,
+					COUNT(DISTINCT r.employee_id) as faculty_count
+				FROM ratings r
+				WHERE r.rating_period = '$ipcr_code'
+				AND r.efficiency > 0 AND r.timeliness > 0 AND r.quality > 0
+			");
+			$opcr_avg = $opcr_qry->fetch_assoc();
+			
+			if($opcr_avg['faculty_count'] > 0){
+				$eff = round($opcr_avg['avg_eff'], 2);
+				$time = round($opcr_avg['avg_time'], 2);
+				$qual = round($opcr_avg['avg_qual'], 2);
+				$overall = round(($eff + $time + $qual) / 3, 2);
+				
+				// Office-level OPCR (department_id = 0 means "all departments")
+				$stmt = $this->db->prepare("
+					INSERT INTO cascading_ratings 
+						(source_period_id, target_period_id, department_id, level,
+						 avg_efficiency, avg_timeliness, avg_quality, overall_rating)
+					VALUES (?, ?, 0, 'OPCR', ?, ?, ?, ?)
+					ON DUPLICATE KEY UPDATE
+						avg_efficiency = VALUES(avg_efficiency),
+						avg_timeliness = VALUES(avg_timeliness),
+						avg_quality = VALUES(avg_quality),
+						overall_rating = VALUES(overall_rating),
+						computed_at = CURRENT_TIMESTAMP
+				");
+				$stmt->bind_param('iidddd', $ipcr_id, $opcr_id, $eff, $time, $qual, $overall);
+				$stmt->execute();
+				$stmt->close();
+				$opcr_count = 1;
+			}
+		}
+		
+		// ---- STEP 3: Intervention Flags (3 consecutive low IPCR) ----
+		// Get all IPCR periods ordered by year, semester
+		$ipcr_periods_qry = $this->db->query("
+			SELECT id, semester, year, CONCAT(semester, '-', year) as period_code
+			FROM rating_period 
+			WHERE period_type = 'IPCR' AND is_active = 1
+			ORDER BY year ASC, FIELD(semester, '1st Semester', 'Summer', '2nd Semester')
+		");
+		$ipcr_periods = [];
+		while($rp = $ipcr_periods_qry->fetch_assoc()){
+			$ipcr_periods[] = $rp;
+		}
+		
+		if(count($ipcr_periods) >= 3){
+			// Get all faculty with ratings across IPCR periods
+			$fac_qry = $this->db->query("SELECT DISTINCT employee_id FROM ratings WHERE period_type = 'IPCR'");
+			while($fac = $fac_qry->fetch_assoc()){
+				$eid = $fac['employee_id'];
+				$ratings_history = [];
+				
+				// Get rating for each IPCR period for this faculty
+				for($i = 0; $i < count($ipcr_periods); $i++){
+					$pc = $ipcr_periods[$i]['period_code'];
+					$avg_r = $this->db->query("
+						SELECT AVG((efficiency + timeliness + quality) / 3) as overall,
+							   COUNT(*) as rated_count
+						FROM ratings 
+						WHERE employee_id = $eid 
+						AND rating_period = '$pc'
+						AND efficiency > 0 AND timeliness > 0 AND quality > 0
+					")->fetch_assoc();
+					
+					if($avg_r['rated_count'] > 0){
+						$ratings_history[] = [
+							'period_id' => $ipcr_periods[$i]['id'],
+							'period_label' => $pc,
+							'overall' => round($avg_r['overall'], 2)
+						];
+					}
+				}
+				
+				// Check for 3 consecutive LOW ratings (<= 2.60 = SATISFACTORY or lower)
+				$consecutive_low = [];
+				foreach($ratings_history as $rh){
+					if($rh['overall'] <= 2.60){
+						$consecutive_low[] = $rh;
+					} else {
+						$consecutive_low = []; // Reset on non-low
+					}
+					
+					if(count($consecutive_low) >= 3){
+						// Flag this faculty for intervention
+						$periods_json = json_encode(array_column($consecutive_low, 'period_id'));
+						$ratings_json = json_encode($consecutive_low);
+						
+						$stmt = $this->db->prepare("
+							INSERT IGNORE INTO intervention_flags 
+								(employee_id, flag_type, consecutive_periods, overall_ratings)
+							VALUES (?, '3_CONSECUTIVE_LOW', ?, ?)
+						");
+						$stmt->bind_param('iss', $eid, $periods_json, $ratings_json);
+						$stmt->execute();
+						if($stmt->affected_rows > 0) $intervention_count++;
+						$stmt->close();
+						
+						// Remove oldest to slide window for next check
+						array_shift($consecutive_low);
+					}
+				}
+			}
+		}
+		
+		echo json_encode([
+			'status' => 'success',
+			'dp_count' => $dp_count,
+			'opcr_count' => $opcr_count,
+			'intervention_count' => $intervention_count,
+			'periods_used' => $periods
+		]);
+	}
+
 }

@@ -3,6 +3,17 @@
 $login_type = $_SESSION['login_type'];
 $faculty_id = $_SESSION['login_id'] ?? 0;
 
+// Get current rating period
+$rating_period = '';
+$col_check = $conn->query("SHOW COLUMNS FROM rating_period LIKE 'is_active'");
+$has_is_active = $col_check->num_rows > 0;
+$rp_query = "SELECT code FROM rating_period" . ($has_is_active ? " WHERE is_active = 1" : "") . " LIMIT 1";
+$rp_qry = $conn->query($rp_query);
+if ($rp_qry && $rp_qry->num_rows > 0) {
+    $rp_row = $rp_qry->fetch_assoc();
+    $rating_period = $rp_row['code'];
+}
+
 $emp_qry = $conn->query("SELECT e.*, p.position as position_name, d.designation as designation_name 
     FROM employee_list e 
     LEFT JOIN position_list p ON e.position_id = p.id 
@@ -51,11 +62,12 @@ while ($row = $alloc_qry->fetch_assoc()) {
                     <label><small><b>Filter by Designation:</b></small></label>
                     <select class="form-control form-control-sm filter-select" id="filter_designation">
                         <option value="">All Designations</option>
+                        <option value="0">Faculty</option>
                         <?php 
-                        $designations2 = $conn->query("SELECT * FROM designation_list ORDER BY designation ASC");
+                        $designations2 = $conn->query("SELECT * FROM designation_list WHERE id > 0 ORDER BY designation ASC");
                         while($d = $designations2->fetch_assoc()): 
                         ?>
-                        <option value="<?php echo $d['id'] ?>"><?php echo $d['designation'] ?></option>
+                        <option value="<?php echo $d['id'] ?>"><?php echo htmlspecialchars($d['designation']) ?></option>
                         <?php endwhile; ?>
                     </select>
                 </div>
@@ -155,15 +167,31 @@ while ($row = $alloc_qry->fetch_assoc()) {
                         
                         if ($login_type == 0) {
                             $where .= " AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $emp_position_id)";
-                            $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = $emp_designation_id)";
+                            $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = $emp_designation_id OR t.designation_id IS NULL)";
                             
                             $cat_filters = [];
                             $has_strategic = isset($allocations['strategic']) && $allocations['strategic'] > 0;
+                            $is_admin_role = false;
+                            $is_director = false;
+                            $is_dean = false;
                             if ($emp_designation_id > 0) {
                                 $desig_qry = $conn->query("SELECT designation FROM designation_list WHERE id = $emp_designation_id");
                                 if ($desig_qry && $desig_row = $desig_qry->fetch_assoc()) {
-                                    if (stripos($desig_row['designation'], 'Head') !== false || stripos($desig_row['designation'], 'Director') !== false) {
+                                    $desig_name = $desig_row['designation'];
+                                    if (stripos($desig_name, 'Dean') !== false) {
                                         $has_strategic = true;
+                                        $is_admin_role = true;
+                                        $is_dean = true;
+                                    }
+                                    if (stripos($desig_name, 'Head') !== false || 
+                                        stripos($desig_name, 'Vice President') !== false) {
+                                        $has_strategic = true;
+                                        $is_admin_role = true;
+                                    }
+                                    if (stripos($desig_name, 'Director') !== false) {
+                                        $has_strategic = true;
+                                        $is_admin_role = true;
+                                        $is_director = true;
                                     }
                                 }
                             }
@@ -171,6 +199,13 @@ while ($row = $alloc_qry->fetch_assoc()) {
                             $has_research = isset($allocations['core_research']) && $allocations['core_research'] > 0 && !$is_cos;
                             $has_extension = isset($allocations['core_extension']) && $allocations['core_extension'] > 0 && !$is_cos;
                             $has_support = isset($allocations['support']) && $allocations['support'] > 0;
+                            
+                            if ($is_dean || $is_director) {
+                                $has_instructions = true;
+                                $has_research = true;
+                                $has_extension = true;
+                                $has_support = true;
+                            }
                             
                             if ($has_strategic) $cat_filters[] = "t.category = 'strategic'";
                             if ($has_instructions) $cat_filters[] = "(t.category = 'core' AND (t.sub_category IS NULL OR t.sub_category IN ('instructions','ter','instruction')))";
@@ -399,12 +434,17 @@ while ($row = $alloc_qry->fetch_assoc()) {
                 </button>
             </div>
             <form id="uploadSubmitForm" enctype="multipart/form-data">
+                <input type="hidden" name="task_id" id="submitTaskId">
+                <input type="hidden" name="rating_period" id="submitRatingPeriod" value="">
                 <div class="modal-body">
-                    <input type="hidden" name="task_id" id="submitTaskId">
                     <div class="form-group">
                         <label for="submitDocument">Select file to upload:</label>
                         <input type="file" name="document" id="submitDocument" class="form-control" required accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.xls,.xlsx,.ppt,.pptx">
                         <small class="text-muted">Accepted formats: PDF, DOC, DOCX, JPG, PNG, GIF, XLS, XLSX, PPT, PPTX</small>
+                    </div>
+                    <div class="form-group">
+                        <label><b>Rating Period:</b></label>
+                        <p class="form-control-plaintext" id="displayRatingPeriod">Loading...</p>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -440,15 +480,35 @@ $(document).ready(function(){
         var category = $('#filter_category').val();
         var status = $('#filter_status').val();
 
-        table.columns(4).search(designation);
-        table.columns(5).search(rank);
-        table.columns(3).search(category);
-        
         $.fn.dataTable.ext.search.pop();
         $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-            var rowStatus = $('#list tbody tr:eq(' + dataIndex + ')').data('status');
-            if (status === '') return true;
-            return rowStatus == status;
+            var row = $('#list tbody tr:eq(' + dataIndex + ')');
+            var rowDesignation = row.data('designation');
+            var rowRank = row.data('rank');
+            var rowCategory = row.data('category');
+            var rowStatus = row.data('status');
+            
+            if (designation !== '' && designation !== null) {
+                if (designation === '0') {
+                    if (rowDesignation !== null && rowDesignation !== 0) return false;
+                } else {
+                    if (rowDesignation != designation) return false;
+                }
+            }
+            
+            if (rank !== '' && rank !== null) {
+                if (rowRank != rank) return false;
+            }
+            
+            if (category !== '' && category !== null) {
+                if (rowCategory !== category) return false;
+            }
+            
+            if (status !== '' && status !== null) {
+                if (rowStatus != status) return false;
+            }
+            
+            return true;
         });
         
         table.draw();
@@ -531,6 +591,8 @@ $(document).on('click', '.view-submit-file', function(){
 $(document).on('click', '.submit-btn', function(){
     var taskId = $(this).data('task-id');
     $('#submitTaskId').val(taskId);
+    $('#submitRatingPeriod').val('<?= $rating_period ?>');
+    $('#displayRatingPeriod').text('<?= $rating_period ?>');
     $('#submitDocument').val('');
     $('#uploadSubmitModal').modal('show');
 });

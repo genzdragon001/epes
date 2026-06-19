@@ -165,50 +165,20 @@
                                 </tr>
                                 
                                 <tr class="table-light">
-                                    <td colspan="3"><strong>&nbsp;&nbsp;&nbsp;&nbsp;Instructions</strong> <em>(TER + Instruction = 100%)</em></td>
+                                    <td colspan="3"><strong>&nbsp;&nbsp;&nbsp;&nbsp;Instructions</strong> <em>(TER + Instruction = Instructions Total)</em></td>
                                 </tr>
                                 <tr>
-                                    <td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Instructions (Total)</td>
+                                    <td>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>Instructions (Total)</strong> <small>(computed)</small></td>
                                     <?php if(!isset($group['no_designation']) || !$group['no_designation']): ?>
                                     <td class="text-center bg-light">
-                                        <select class="form-control form-control-sm alloc-select w-75 mx-auto instructions-select" 
-                                                data-positions='<?php echo json_encode($group['ids']); ?>' 
-                                                data-designation="3"
-                                                data-category="core"
-                                                data-sub="instructions"
-                                                data-group="<?php echo $group_idx; ?>">
-                                            <option value="0">0%</option>
-                                            <?php for($i = 5; $i <= 100; $i+=5): ?>
-                                            <option value="<?php echo $i; ?>" <?php echo getAllocation($conn, $group['ids'][0], 3, 'core', 'instructions') == $i ? 'selected' : '' ?>><?php echo $i; ?>%</option>
-                                            <?php endfor; ?>
-                                        </select>
+                                        <span class="badge badge-lg instructions-total-display" data-designation="3">0%</span>
                                     </td>
                                     <td class="text-center bg-light">
-                                        <select class="form-control form-control-sm alloc-select w-75 mx-auto instructions-select" 
-                                                data-positions='<?php echo json_encode($group['ids']); ?>' 
-                                                data-designation="2"
-                                                data-category="core"
-                                                data-sub="instructions"
-                                                data-group="<?php echo $group_idx; ?>">
-                                            <option value="0">0%</option>
-                                            <?php for($i = 5; $i <= 100; $i+=5): ?>
-                                            <option value="<?php echo $i; ?>" <?php echo getAllocation($conn, $group['ids'][0], 2, 'core', 'instructions') == $i ? 'selected' : '' ?>><?php echo $i; ?>%</option>
-                                            <?php endfor; ?>
-                                        </select>
+                                        <span class="badge badge-lg instructions-total-display" data-designation="2">0%</span>
                                     </td>
                                     <?php else: ?>
                                     <td class="text-center bg-light">
-                                        <select class="form-control form-control-sm alloc-select w-50 mx-auto instructions-select" 
-                                                data-positions='<?php echo json_encode($group['ids']); ?>' 
-                                                data-designation="3"
-                                                data-category="core"
-                                                data-sub="instructions"
-                                                data-group="<?php echo $group_idx; ?>">
-                                            <option value="0">0%</option>
-                                            <?php for($i = 5; $i <= 100; $i+=5): ?>
-                                            <option value="<?php echo $i; ?>" <?php echo getAllocation($conn, $group['ids'][0], 3, 'core', 'instructions') == $i ? 'selected' : '' ?>><?php echo $i; ?>%</option>
-                                            <?php endfor; ?>
-                                        </select>
+                                        <span class="badge badge-lg instructions-total-display" data-designation="3">0%</span>
                                     </td>
                                     <?php endif; ?>
                                 </tr>
@@ -533,7 +503,20 @@ $(document).ready(function(){
             if(hasTwoColumns && colIdx === 2) instrSubYes += parseFloat($sel.val()) || 0;
         });
         
-        // Update Instructions Subtotal
+        // Update Instructions Total display (TER + Instruction)
+        var instrTotalNo = 0, instrTotalYes = 0;
+        $table.find('.instr-sub-select').each(function(){
+            var $sel = $(this);
+            var colIdx = $sel.closest('td').index();
+            if(colIdx === 1) instrTotalNo += parseFloat($sel.val()) || 0;
+            if(hasTwoColumns && colIdx === 2) instrTotalYes += parseFloat($sel.val()) || 0;
+        });
+        $table.find('.instructions-total-display[data-designation="3"]').text(instrTotalNo + '%').removeClass('badge-success badge-warning').addClass(instrTotalNo == 100 ? 'badge-success' : 'badge-warning');
+        if(hasTwoColumns) {
+            $table.find('.instructions-total-display[data-designation="2"]').text(instrTotalYes + '%').removeClass('badge-success badge-warning').addClass(instrTotalYes == 100 ? 'badge-success' : 'badge-warning');
+        }
+        
+        // Update Instructions Subtotal badge
         var $instrRow = $table.find('.instr-subtotal-row');
         if(hasTwoColumns) {
             $instrRow.find('td:eq(1) span').text(instrSubNo + '%').removeClass('badge-success badge-warning').addClass(instrSubNo == 100 ? 'badge-success' : 'badge-warning');
@@ -542,9 +525,9 @@ $(document).ready(function(){
             $instrRow.find('td:eq(1) span').text(instrSubNo + '%').removeClass('badge-success badge-warning').addClass(instrSubNo == 100 ? 'badge-success' : 'badge-warning');
         }
         
-        // Calculate Core Subtotal (Instructions + Research + Extension)
+        // Calculate Core Subtotal (TER + Instruction + Research + Extension)
         var coreSubNo = 0, coreSubYes = 0;
-        $table.find('.instructions-select').each(function(){
+        $table.find('.instr-sub-select').each(function(){
             var $sel = $(this);
             var colIdx = $sel.closest('td').index();
             if(colIdx === 1) coreSubNo += parseFloat($sel.val()) || 0;
@@ -611,7 +594,7 @@ $(document).ready(function(){
         var $table = $('#table_' + groupIdx);
         var hasTwoColumns = $table.find('thead th').length === 3;
         
-        // Calculate Instructions subtotal (TER + Instruction must = 100%)
+        // Calculate Instructions subtotal (TER + Instruction)
         var instrSubNo = 0, instrSubYes = 0;
         $table.find('.instr-sub-select').each(function(){
             var $sel = $(this);
@@ -620,14 +603,13 @@ $(document).ready(function(){
             if(hasTwoColumns && colIdx === 2) instrSubYes += parseFloat($sel.val()) || 0;
         });
         
-        if(instrSubNo != 100 || (hasTwoColumns && instrSubYes != 100)) {
-            showToast("Cannot save! TER + Instruction must total 100%.", "danger");
-            return;
-        }
+        // Removed: TER + Instruction must total 100% restriction
+        // This allows flexible allocation where Instructions Total can be any value
+        // as long as overall Core sub-items still total 100%.
         
-        // Calculate core subtotal (Instructions + Research + Extension)
+        // Calculate core subtotal (TER + Instruction + Research + Extension)
         var coreSubNo = 0, coreSubYes = 0;
-        $table.find('.instructions-select').each(function(){
+        $table.find('.instr-sub-select').each(function(){
             var $sel = $(this);
             var colIdx = $sel.closest('td').index();
             if(colIdx === 1) coreSubNo += parseFloat($sel.val()) || 0;

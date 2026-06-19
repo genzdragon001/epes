@@ -56,7 +56,7 @@
 									</div>
 									<div>
 										<p class="mb-0 font-weight-bold"><?php echo ucwords($row['name']) ?></p>
-										<small class="text-muted">ID: <?php echo $row['id'] ?></small>
+										<small class="text-muted">ID: <?php echo $row['employee_id'] ?></small>
 									</div>
 								</div>
 							</td>

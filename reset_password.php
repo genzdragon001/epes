@@ -22,13 +22,29 @@ if(!isset($_GET['token'])){
 
 $token = $_GET['token'];
 
-// Validate token from database
-$qry = $conn->query("SELECT * FROM users WHERE reset_token = '$token' AND reset_expires > NOW()");
-if($qry->num_rows == 0){
-  die("Invalid or expired token.");
+// Validate token across all 3 user tables (employee_list, evaluator_list, users)
+$token = $_GET['token'];
+$user = null;
+$found_table = null;
+
+$tables = ["employee_list", "evaluator_list", "users"];
+foreach ($tables as $table) {
+	$stmt = $conn->prepare("SELECT * FROM {$table} WHERE reset_token = ? AND reset_expires > NOW()");
+	$stmt->bind_param("s", $token);
+	$stmt->execute();
+	$result = $stmt->get_result();
+	if ($result->num_rows > 0) {
+		$user = $result->fetch_assoc();
+		$found_table = $table;
+		$stmt->close();
+		break;
+	}
+	$stmt->close();
 }
 
-$user = $qry->fetch_assoc();
+if (!$user) {
+	die("Invalid or expired token.");
+}
 ?>
 <?php include 'header.php' ?>
 <body class="hold-transition login-page bg-black">

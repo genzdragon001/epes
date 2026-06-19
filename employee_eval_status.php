@@ -48,7 +48,7 @@ usort($faculty_data, function($a, $b) {
                             <th class="text-center">Total Tasks</th>
                             <th class="text-center">For Verification</th>
                             <th class="text-center">Verified</th>
-                            <th class="text-center">Pending</th>
+                         
                             <th class="text-center" style="width: 120px;">Progress</th>
                         </tr>
                     </thead>
@@ -64,7 +64,7 @@ usort($faculty_data, function($a, $b) {
                             <td class="text-center"><span class="badge badge-secondary"><?= $row['total_tasks'] ?></span></td>
                             <td class="text-center"><span class="badge badge-warning"><?= $row['for_verification'] ?></span></td>
                             <td class="text-center"><span class="badge badge-success"><?= $row['verified'] ?></span></td>
-                            <td class="text-center"><span class="badge badge-danger"><?= $row['pending'] ?></span></td>
+                            
                             <td class="text-center">
                                 <div class="progress mb-0" style="height: 15px;">
                                     <div class="progress-bar bg-success" role="progressbar" style="width: <?= $progress_pct ?>%">

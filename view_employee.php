@@ -1,17 +1,32 @@
 <?php include 'db_connect.php' ?>
 <?php
 if(isset($_GET['id'])){
-	$qry = $conn->query("SELECT *,concat(lastname,', ',firstname,' ',middlename) as name FROM employee_list where id = ".$_GET['id'])->fetch_array();
+	$stmt = $conn->prepare("SELECT *,concat(lastname,', ',firstname,' ',middlename) as name FROM employee_list where id = ?");
+$stmt->bind_param("i", $_GET['id']);
+$stmt->execute();
+$qry = $stmt->get_result()->fetch_array();
 foreach($qry as $k => $v){
 	$$k = $v;
 }
-$designation= $conn->query("SELECT * FROM designation_list where id = $designation_id ");
+$stmt_desig = $conn->prepare("SELECT * FROM designation_list where id = ?");
+$stmt_desig->bind_param("i", $designation_id);
+$stmt_desig->execute();
+$designation = $stmt_desig->get_result();
 $designation = $designation->num_rows > 0 ? $designation->fetch_array()['designation'] : 'Unknown Designation';
-$position= $conn->query("SELECT * FROM position_list where id = $position_id ");
+$stmt_pos = $conn->prepare("SELECT * FROM position_list where id = ?");
+$stmt_pos->bind_param("i", $position_id);
+$stmt_pos->execute();
+$position = $stmt_pos->get_result();
 $position = $position->num_rows > 0 ? $position->fetch_array()['position'] : 'Unknown Position';
-$department= $conn->query("SELECT * FROM department_list where id = $department_id ");
+$stmt_dept = $conn->prepare("SELECT * FROM department_list where id = ?");
+$stmt_dept->bind_param("i", $department_id);
+$stmt_dept->execute();
+$department = $stmt_dept->get_result();
 $department = $department->num_rows > 0 ? $department->fetch_array()['department'] : 'Unknown Department';
-$evaluator= $conn->query("SELECT *,concat(lastname,', ',firstname,' ',middlename) as name FROM evaluator_list where id = $evaluator_id ");
+$stmt_eval = $conn->prepare("SELECT *,concat(lastname,', ',firstname,' ',middlename) as name FROM evaluator_list where id = ?");
+$stmt_eval->bind_param("i", $evaluator_id);
+$stmt_eval->execute();
+$evaluator = $stmt_eval->get_result();
 $evaluator = $evaluator->num_rows > 0 ? $evaluator->fetch_array()['name'] : 'Unknown Evaluator';
 }
 ?>

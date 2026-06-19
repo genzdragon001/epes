@@ -14,9 +14,47 @@
 
     <ul class="navbar-nav ml-auto">
    
-     <p class="text-white" >  <?php echo $_SESSION['current_semester'].' '.$_SESSION['current_year'];?>
+     <p class="text-white" >  <?php echo ($_SESSION['current_semester'] ?? 'N/A') . ' ' . ($_SESSION['current_year'] ?? ''); ?>
      </p>
-      
+     
+      <!-- Notifications Bell -->
+      <?php
+      require_once 'notification_helper.php';
+      $notif_count = get_unread_count($conn, $_SESSION['login_id'], $_SESSION['login_type']);
+      ?>
+      <li class="nav-item dropdown">
+        <a class="nav-link" data-toggle="dropdown" href="javascript:void(0)" title="Notifications">
+          <i class="fas fa-bell"></i>
+          <?php if ($notif_count > 0): ?>
+          <span class="badge badge-danger navbar-badge" id="notif_badge"><?= $notif_count > 99 ? '99+' : $notif_count ?></span>
+          <?php endif; ?>
+        </a>
+        <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right" style="max-height: 400px; overflow-y: auto;">
+          <span class="dropdown-header">Notifications</span>
+          <div class="dropdown-divider"></div>
+          <?php
+          $notifications = get_recent_notifications($conn, $_SESSION['login_id'], $_SESSION['login_type'], 8);
+          if (count($notifications) > 0):
+            foreach ($notifications as $n):
+              $icon = $n['type'] === 'Success' ? 'fa-check-circle text-success' : 
+                     ($n['type'] === 'Warning' ? 'fa-exclamation-triangle text-warning' : 
+                     ($n['type'] === 'Danger' ? 'fa-times-circle text-danger' : 'fa-info-circle text-info'));
+              $time = date('M d, h:i A', strtotime($n['created_at']));
+          ?>
+          <a href="<?= $n['link'] ? $n['link'] : 'index.php?page=notifications' ?>" class="dropdown-item">
+            <i class="fas <?= $icon ?> mr-2"></i> <?= htmlspecialchars($n['title']) ?>
+            <span class="float-right text-muted text-sm"><?= $time ?></span>
+            <br><small class="text-muted"><?= htmlspecialchars(substr($n['message'], 0, 80)) ?><?= strlen($n['message']) > 80 ? '...' : '' ?></small>
+          </a>
+          <div class="dropdown-divider"></div>
+          <?php endforeach; ?>
+          <a href="index.php?page=notifications" class="dropdown-item dropdown-footer">See All Notifications</a>
+          <?php else: ?>
+          <a href="#" class="dropdown-item text-muted text-center">No new notifications</a>
+          <?php endif; ?>
+        </div>
+      </li>
+
       <li class="nav-item">
         <a class="nav-link" data-widget="fullscreen" href="#" role="button">
           <i class="fas fa-expand-arrows-alt"></i>

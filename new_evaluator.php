@@ -1,10 +1,12 @@
 <?php
+require_once 'csrf_helper.php';
 ?>
 <div class="col-lg-12">
 	<div class="card">
 		<div class="card-body">
 			<form action="" id="manage_evaluator">
 				<input type="hidden" name="id" value="<?php echo isset($id) ? $id : '' ?>">
+				<?php echo csrf_field(); ?>
 				<div class="row">
 					<div class="col-md-6 border-right">
 						<div class="form-group">

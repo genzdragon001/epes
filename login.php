@@ -17,7 +17,7 @@ if(isset($_SESSION['login_id'])){
 <html lang="en">
 <?php include 'header.php'; ?>
 <body class="hold-transition login-page bg-black">
-  <h2><b><?php echo $_SESSION['system']['name'] ?> - Admin</b></h2>
+  <h2><b><?php echo $_SESSION['system']['name'] ?> - Login</b></h2>
 <div class="login-box">
   <div class="login-logo">
     <a href="#" class="text-white"></a>
@@ -42,6 +42,14 @@ if(isset($_SESSION['login_id'])){
       <div class="alert alert-danger text-center">
         <i class="fa fa-exclamation-circle fa-2x mb-2"></i>
         <p class="mb-0"><?php echo $_SESSION['verify_error']; unset($_SESSION['verify_error']); ?></p>
+      </div>
+    <?php endif; ?>
+
+    <?php if (isset($_GET['session']) && $_GET['session'] === 'expired'): ?>
+      <div class="alert alert-warning text-center">
+        <i class="fa fa-clock fa-2x mb-2"></i>
+        <p class="mb-0"><strong>Session Expired</strong></p>
+        <small>Your session was closed due to inactivity. Please log in again.</small>
       </div>
     <?php endif; ?>
 
@@ -141,7 +149,15 @@ if(isset($_SESSION['login_id'])){
       error:err=>{
         console.log(err)
         end_load();
-
+        var msg = 'Unable to sign in. Please check your connection and try again.';
+        if (err.status === 403) {
+          msg = 'Session security token expired. Please refresh the page and try again.';
+        } else if (err.status === 500) {
+          msg = 'Server error. Please contact the administrator.';
+        } else if (err.status === 0) {
+          msg = 'Cannot reach server. Please make sure XAMPP is running.';
+        }
+        $('#login-form').prepend('<div class="alert alert-danger">' + msg + '</div>');
       },
       success:function(resp){
         if(resp == 1){
@@ -150,6 +166,8 @@ if(isset($_SESSION['login_id'])){
           $('#login-form').prepend('<div class="alert alert-danger">Account is temporary blocked.</div>')
         }else if(resp == 4){
           $('#login-form').prepend('<div class="alert alert-warning"><i class="fa fa-exclamation-circle"></i> Your account is not yet activated. Please check your email and activate your account before logging in.</div>')
+        }else if(resp == 5){
+          $('#login-form').prepend('<div class="alert alert-warning"><i class="fa fa-exclamation-triangle"></i> Too many login attempts. Please wait a few minutes and try again.</div>')
         }else{
           $('#login-form').prepend('<div class="alert alert-danger">Username or password is incorrect.</div>')
           

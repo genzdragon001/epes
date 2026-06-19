@@ -1,9 +1,14 @@
 <?php 
 include('db_connect.php');
-session_start();
+// session_start(); // db_connect.php now handles session start
+require_once 'csrf_helper.php';
 if(isset($_GET['id'])){
 $type = array("employee_list","evaluator_list","users");
-$user = $conn->query("SELECT * FROM {$type[$_SESSION['login_type']]} where id =".$_GET['id']);
+$tbl = $type[$_SESSION['login_type']];
+$stmt = $conn->prepare("SELECT * FROM $tbl where id = ?");
+$stmt->bind_param("i", $_GET['id']);
+$stmt->execute();
+$user = $stmt->get_result();
 foreach($user->fetch_array() as $k =>$v){
 	$meta[$k] = $v;
 }
@@ -13,8 +18,9 @@ foreach($user->fetch_array() as $k =>$v){
 	<div id="msg"></div>
 	
 	<form action="" id="manage-user">	
-		<input type="hidden" name="id" value="<?php echo isset($meta['id']) ? $meta['id']: '' ?>">
-		<div class="form-group">
+			<input type="hidden" name="id" value="<?php echo isset($meta['id']) ? $meta['id']: '' ?>">
+			<?php echo csrf_field(); ?>
+			<div class="form-group">
 			<label for="name">First Name</label>
 			<input type="text" name="firstname" id="firstname" class="form-control" value="<?php echo isset($meta['firstname']) ? $meta['firstname']: '' ?>" required>
 		</div>
@@ -34,7 +40,7 @@ foreach($user->fetch_array() as $k =>$v){
 
 		<?php if ($_SESSION['login_type'] != 2): ?>
 
-	<div class="form-group">
+	<!-- <div class="form-group">
     <label for="position_id">Position</label>
     <select name="position_id" id="position_id" class="form-control" required>
         <option value="">-- Select Position --</option>
@@ -81,7 +87,7 @@ foreach($user->fetch_array() as $k =>$v){
     </select>
     <small class="text-muted" id="designation_note" style="display:none;">Contract of Service faculty cannot have a designation</small>
 </div>
-<?php endif; ?>
+<?php endif; ?> -->
 		<div class="form-group">
 			<label for="" class="control-label">Avatar</label>
 			<div class="custom-file">

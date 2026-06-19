@@ -9,6 +9,11 @@ if (!defined('DB_CONNECTED')) {
     
     require_once __DIR__ . '/config.php';
     
+    // Ensure session is available for csrf_field() on pages that include db_connect first
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    
     // Enable mysqli error reporting for development (disable in production)
     mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT);
     

@@ -271,7 +271,10 @@ $periods_result = $conn->query("SELECT DISTINCT rating_period FROM renewal_recom
                     </thead>
                     <tbody>
                         <?php $i = 1; foreach($faculty_data as $row):
-                            $check_rec = $conn->query("SELECT * FROM renewal_recommendations WHERE faculty_id = " . $row['id'] . " AND rating_period = '$rating_period'");
+                            $stmt_check = $conn->prepare("SELECT * FROM renewal_recommendations WHERE faculty_id = ? AND rating_period = ?");
+$stmt_check->bind_param("is", $row['id'], $rating_period);
+$stmt_check->execute();
+$check_rec = $stmt_check->get_result();
                             $rec_data = $check_rec->fetch_assoc();
                             
                             $row_class = $row['adjectival'] == 'OUTSTANDING' ? 'table-success' : ($row['adjectival'] == 'VERY SATISFACTORY' ? 'table-primary' : ($row['adjectival'] == 'SATISFACTORY' ? 'table-info' : ($row['adjectival'] == 'UNSATISFACTORY' ? 'table-warning' : '')));

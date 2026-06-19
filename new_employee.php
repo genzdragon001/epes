@@ -1,10 +1,12 @@
 <?php
+require_once 'csrf_helper.php';
 ?>
 <div class="col-lg-12">
 	<div class="card">
 		<div class="card-body">
 			<form action="" id="manage_employee">
 				<input type="hidden" name="id" value="<?php echo isset($id) ? $id : '' ?>">
+				<?php echo csrf_field(); ?>
 				<div class="row">
 					<div class="col-md-6 border-right">
 						<div class="form-group">
@@ -197,7 +199,7 @@
             method:'POST',
             data:{id: '<?php echo isset($id) ? $id : '' ?>'},
             success:function(resp){
-                console.log("Server response:", resp); // ✅ log response to console
+                console.log("Server response:", resp);
                 if(resp == 1){
                     alert_toast("Account successfully unblocked and reset.","success")
                     setTimeout(function(){
@@ -209,13 +211,35 @@
                 }
             },
             error:function(xhr, status, error){
-                console.log("AJAX error:", status, error); // ✅ log AJAX errors
+                console.log("AJAX error:", status, error);
                 alert_toast("An error occurred. Check console for details.","danger")
                 end_load()
             }
         })
     }
 })
+
+$('#position_id').change(function(){
+    var position_id = $(this).val();
+    var cos_position_id = 19;
+    
+    if (position_id == cos_position_id) {
+        $('#designation_id').val(3).trigger('change');
+        $('#designation_id').prop('disabled', true);
+    } else {
+        $('#designation_id').prop('disabled', false);
+    }
+});
+
+$(document).ready(function(){
+    var current_position_id = $('#position_id').val();
+    var cos_position_id = 19;
+    
+    if (current_position_id == cos_position_id) {
+        $('#designation_id').val(3).trigger('change');
+        $('#designation_id').prop('disabled', true);
+    }
+});
 
 
 </script>

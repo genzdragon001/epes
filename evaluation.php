@@ -14,6 +14,31 @@ $nameId = isset($_GET['id']) ? $_GET['id'] : '9999';
 $login_type = $_SESSION['login_type'] ?? -1;
 $is_admin_view = ($login_type == 2);
 
+// Fetch evaluator designation and faculty designation for Strategic Plan restriction
+$eval_desig_id = 0;
+$fac_desig_id = 0;
+$is_vp = false;
+$fac_is_director = false;
+if ($login_type == 1) {
+    $stmt = $conn->prepare("SELECT designation_id FROM evaluator_list WHERE id = ?");
+    $stmt->bind_param("i", $_SESSION['login_id']);
+    $stmt->execute();
+    $stmt->bind_result($eval_desig_id);
+    $stmt->fetch();
+    $stmt->close();
+    $is_vp = ($eval_desig_id == 4);
+}
+// Fetch faculty designation
+$stmt = $conn->prepare("SELECT designation_id FROM employee_list WHERE id = ?");
+$stmt->bind_param("i", $nameId);
+$stmt->execute();
+$stmt->bind_result($fac_desig_id);
+$stmt->fetch();
+$stmt->close();
+$fac_is_director = ($fac_desig_id == 6);
+// Strategic Plan tasks are locked for non-VP evaluators when faculty is Director
+$strat_locked = ($fac_is_director && !$is_vp && !$is_admin_view);
+
 $qry = $conn->query("SELECT CONCAT(firstname, ' ', lastname) AS faculty_name FROM employee_list WHERE id = '$nameId' LIMIT 1");
 
 if ($qry && $qry->num_rows > 0) {
@@ -84,6 +109,7 @@ SELECT
     t.efficiency AS task_efficiency,
     t.timeliness AS task_timeliness,
     t.quality AS task_quality,
+    t.category AS task_category,
     ((((r.efficiency + r.timeliness + r.quality) / 4) / 5) * 100) AS pa
     FROM task_progress tp
     INNER JOIN employee_list e ON tp.faculty_id = e.id
@@ -98,6 +124,8 @@ SELECT
                 echo '<tr><td colspan="7" class="text-center text-muted py-4">No submission yet.</td></tr>';
             else:
             while ($row = $qry->fetch_assoc()):
+                $task_is_strategic = (($row['task_category'] ?? '') === 'strategic');
+                $row_locked = ($strat_locked && $task_is_strategic);
 ?>
     <tr>
         <th class="text-center align-middle"><?= $num++ ?></th>
@@ -119,7 +147,13 @@ SELECT
                 $currentStatus = $row['task_progress'] ?? null;
                 $statusClass = ($currentStatus == 'Verified') ? 'badge-success' : (($currentStatus == 'For Verification') ? 'badge-warning' : 'badge-secondary');
                 ?>
-                <span class="badge <?= $statusClass ?>"><?= $currentStatus ?? 'Pending' ?></span>
+                <span class="badge <?= $statusClass ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= $currentStatus ?? 'Pending' ?></span>
+            <?php elseif ($row_locked): ?>
+                <?php 
+                $currentStatus = $row['task_progress'] ?? null;
+                $statusClass = ($currentStatus == 'Verified') ? 'badge-success' : (($currentStatus == 'For Verification') ? 'badge-warning' : 'badge-secondary');
+                ?>
+                <span class="badge <?= $statusClass ?>" title="Strategic Plan tasks can only be rated by the Vice President"><?= $currentStatus ?? 'Pending' ?> <i class="fas fa-lock ml-1" style="font-size:0.65rem;"></i></span>
             <?php else: ?>
             <div class="dropdown">
                 <?php 
@@ -154,8 +188,8 @@ SELECT
                 $effApplicable = (isset($row['task_efficiency']) && $row['task_efficiency'] === 'Applicable');
                 $currentEff = isset($row['rating_efficiency']) ? $row['rating_efficiency'] : '-';
             ?>
-            <?php if ($is_admin_view): ?>
-                <span class="badge <?= isset($row['rating_efficiency']) ? 'badge-success' : 'badge-secondary' ?>"><?= $effApplicable ? $currentEff : 'N/A' ?></span>
+            <?php if ($is_admin_view || $row_locked): ?>
+                <span class="badge <?= isset($row['rating_efficiency']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= $effApplicable ? $currentEff : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
             <?php else: ?>
             <div class="dropdown">
                 <button class="btn btn-sm <?= isset($row['rating_efficiency']) ? 'btn-success' : 'btn-secondary' ?> dropdown-toggle" 
@@ -202,8 +236,8 @@ SELECT
                 $qualApplicable = (isset($row['task_quality']) && $row['task_quality'] === 'Applicable');
                 $currentQual = isset($row['rating_quality']) ? $row['rating_quality'] : '-';
             ?>
-            <?php if ($is_admin_view): ?>
-                <span class="badge <?= isset($row['rating_quality']) ? 'badge-success' : 'badge-secondary' ?>"><?= $qualApplicable ? $currentQual : 'N/A' ?></span>
+            <?php if ($is_admin_view || $row_locked): ?>
+                <span class="badge <?= isset($row['rating_quality']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= $qualApplicable ? $currentQual : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
             <?php else: ?>
             <div class="dropdown">
                 <button class="btn btn-sm <?= isset($row['rating_quality']) ? 'btn-success' : 'btn-secondary' ?> dropdown-toggle" 
@@ -250,8 +284,8 @@ SELECT
                 $timeApplicable = (isset($row['task_timeliness']) && $row['task_timeliness'] === 'Applicable');
                 $currentTime = isset($row['rating_timeliness']) ? $row['rating_timeliness'] : '-';
             ?>
-            <?php if ($is_admin_view): ?>
-                <span class="badge <?= isset($row['rating_timeliness']) ? 'badge-success' : 'badge-secondary' ?>"><?= $timeApplicable ? $currentTime : 'N/A' ?></span>
+            <?php if ($is_admin_view || $row_locked): ?>
+                <span class="badge <?= isset($row['rating_timeliness']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= $timeApplicable ? $currentTime : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
             <?php else: ?>
             <div class="dropdown">
                 <button class="btn btn-sm <?= isset($row['rating_timeliness']) ? 'btn-success' : 'btn-secondary' ?> dropdown-toggle" 

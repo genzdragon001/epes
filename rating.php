@@ -16,10 +16,10 @@ function getAllocation($conn, $position_id, $designation_id, $category, $sub_cat
     $sql = "SELECT percentage FROM percentage_allocation 
             WHERE position_id = $position_id";
     
-    if ($designation_id) {
+    if ($designation_id && $designation_id > 0) {
         $sql .= " AND designation_id = $designation_id";
     } else {
-        $sql .= " AND designation_id IS NULL";
+        $sql .= " AND (designation_id IS NULL OR designation_id = 0)";
     }
     
     $sql .= " AND category = '$category'";
@@ -65,10 +65,15 @@ $allocations = [];
 $position_ids = $emp_position_id > 0 ? "$emp_position_id, 0" : "0";
 $desig_id = intval($emp_designation_id ?? 0);
 //var_dump($emp_designation_id);
+if ($emp_designation_id && $emp_designation_id > 0) {
+    $desig_condition = "designation_id = " . intval($emp_designation_id);
+} else {
+    $desig_condition = "(designation_id IS NULL OR designation_id = 0)";
+}
 $alloc_qry = $conn->query("
     SELECT * FROM percentage_allocation 
     WHERE position_id = $emp_position_id
-    AND designation_id = $emp_designation_id 
+    AND $desig_condition
     AND is_active = 1
     ORDER BY position_id ASC
 ");
@@ -446,13 +451,13 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                  //     echo $emp_designation_id;
                         if ($emp_designation_id == 4 && !$show_strategic) {
                           //  echo "true";
-                            $desig_qry = $conn->query("SELECT designation FROM designation_list WHERE id = $emp_designation_id");
+                            $desig_qry = $conn->query("SELECT designation FROM designation_list WHERE id = " . intval($emp_designation_id));
                             if ($desig_qry && $desig_row = $desig_qry->fetch_assoc()) {
                                 if (stripos($desig_row['designation'], 'Department Head') !== false || stripos($desig_row['designation'], 'Director') !== false) {
                                     $show_strategic = true;
                                     $str_pct_alloc = $conn->query("SELECT percentage FROM percentage_allocation 
-                                        WHERE position_id = $emp_position_id 
-                                        AND designation_id = $emp_designation_id 
+                                        WHERE position_id = " . intval($emp_position_id) . " 
+                                        AND designation_id = " . intval($emp_designation_id) . " 
                                         AND category = 'strategic' 
                                         AND is_active = 1 LIMIT 1");
                                     if ($str_pct_alloc && $str_row = $str_pct_alloc->fetch_assoc()) {
@@ -569,13 +574,13 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                     if (!$is_cos) {
                         $show_strategic_pct = isset($allocations['strategic']) && $allocations['strategic'] > 0;
                         if ($emp_designation_id > 0 && !$show_strategic_pct) {
-                            $desig_qry2 = $conn->query("SELECT designation FROM designation_list WHERE id = $emp_designation_id");
+                            $desig_qry2 = $conn->query("SELECT designation FROM designation_list WHERE id = " . intval($emp_designation_id));
                             if ($desig_qry2 && $desig_row2 = $desig_qry2->fetch_assoc()) {
                                 if (stripos($desig_row2['designation'], 'Head') !== false || stripos($desig_row2['designation'], 'Director') !== false) {
                                     $show_strategic_pct = true;
                                     $str_pct_alloc = $conn->query("SELECT percentage FROM percentage_allocation 
-                                        WHERE position_id = $emp_position_id 
-                                        AND designation_id = $emp_designation_id 
+                                        WHERE position_id = " . intval($emp_position_id) . " 
+                                        AND designation_id = " . intval($emp_designation_id) . " 
                                         AND category = 'strategic' 
                                         AND is_active = 1 LIMIT 1");
                                     if ($str_pct_alloc && $str_row = $str_pct_alloc->fetch_assoc()) {
@@ -606,20 +611,15 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                     }
                     
                     $core_total_pct = getAllocation($conn, $emp_position_id, $emp_designation_id, 'core', null);
-                   
+                    
                     if ($core_total_pct == 0) {
-                        $core_total_pct = 0;
-                        if ($show_instructions_pct && $inst_ave['count'] > 0) $core_total_pct += $core_pct;
-                        if ($show_research_pct && $res_ave['count'] > 0) $core_total_pct += $res_pct;
-                        if ($show_extension_pct && $ext_ave['count'] > 0) $core_total_pct += $ext_pct;
+                        $core_total_pct = $allocations['core_total'] ?? 0;
                     }
                     
                     if ($emp_position_id == 19) {
                         $core_sum = 0;
                         $core_total_count = 0;
                         
-                    
-
                         if ($show_instructions_pct && $inst_ave['count'] > 0) {
                             $inst_val = floatval($inst_rating['instruction_rating']);
                             $core_sum += $inst_val;
@@ -635,16 +635,21 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                         }
                         $core_function = $core_total_count > 0 ? $core_sum / $core_total_count : 0;
                     } else {
-                        $core_function = 0;
+                        $core_sum = 0;
+                        $core_total_count = 0;
                         if ($show_instructions_pct && $inst_ave['count'] > 0) {
-                            $core_function += floatval($inst_rating['instruction_rating']) * ($inst_pct / 100);
+                            $core_sum += floatval($inst_rating['instruction_rating']);
+                            $core_total_count++;
                         }
                         if ($show_research_pct && $res_ave['count'] > 0) {
-                            $core_function += floatval($res_ave['ave']) * ($res_pct / 100);
+                            $core_sum += floatval($res_rating['ave']);
+                            $core_total_count++;
                         }
                         if ($show_extension_pct && $ext_ave['count'] > 0) {
-                            $core_function += floatval($ext_ave['ave']) * ($ext_pct / 100);
+                            $core_sum += floatval($ext_rating['ave']);
+                            $core_total_count++;
                         }
+                        $core_function = $core_total_count > 0 ? $core_sum / $core_total_count : 0;
                     }
                     $core_weighted = $core_function * ($core_total_pct / 100);
                  //   echo  $core_total_pct ;
@@ -907,25 +912,35 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                             
                             <?php if ($core_count > 0): ?>
                             <?php if ($emp_position_id != 19): ?>
+                            <?php 
+                                $core_avg_display = min(5.00, $core_function);
+                            ?>
                             <tr>
-                                <td class="text-left"><b>Instruction</b></td>
+                                <td class="text-left"><b>Core Functions</b></td>
+                                <td><?php echo $core_total; ?>%</td>
+                                <td><?php echo number_format($core_avg_display, 2); ?></td>
+                                <td><?php echo number_format($core_weighted, 2); ?></td>
+                                <td><?php echo getAdjectivalRating($core_avg_display); ?></td>
+                            </tr>
+                            <tr style="font-size: 0.85rem; background-color: #f8f8f8;">
+                                <td class="text-left">&nbsp;&nbsp;&nbsp;&nbsp;Instruction</td>
                                 <td><?php echo $inst_pct; ?>%</td>
                                 <td><?php echo $inst_rating['instruction_rating']; ?></td>
-                                <td><?php echo number_format(floatval($inst_rating['instruction_rating']) * ($inst_pct / 100), 2); ?></td>
+                                <td></td>
                                 <td><?php echo getAdjectivalRating(floatval($inst_rating['instruction_rating'])); ?></td>
                             </tr>
-                            <tr>
-                                <td class="text-left"><b>Research</b></td>
+                            <tr style="font-size: 0.85rem; background-color: #f8f8f8;">
+                                <td class="text-left">&nbsp;&nbsp;&nbsp;&nbsp;Research</td>
                                 <td><?php echo $res_pct; ?>%</td>
                                 <td><?php echo $res_rating['ave']; ?></td>
-                                <td><?php echo number_format(floatval($res_rating['ave']) * ($res_pct / 100), 2); ?></td>
+                                <td></td>
                                 <td><?php echo getAdjectivalRating(floatval($res_rating['ave'])); ?></td>
                             </tr>
-                            <tr>
-                                <td class="text-left"><b>Extension</b></td>
+                            <tr style="font-size: 0.85rem; background-color: #f8f8f8;">
+                                <td class="text-left">&nbsp;&nbsp;&nbsp;&nbsp;Extension</td>
                                 <td><?php echo $ext_pct; ?>%</td>
                                 <td><?php echo $ext_rating['ave']; ?></td>
-                                <td><?php echo number_format(floatval($ext_rating['ave']) * ($ext_pct / 100), 2); ?></td>
+                                <td></td>
                                 <td><?php echo getAdjectivalRating(floatval($ext_rating['ave'])); ?></td>
                             </tr>
                             <?php else: ?>
@@ -954,7 +969,7 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                             <tr style="font-weight:bold;">
                                 <td class="text-right">TOTAL</td>
                                 <td>100%</td>
-                                <td><?php echo number_format($total, 2); ?></td>
+                                <td></td>
                                 <td><?php echo number_format($total, 2); ?></td>
                                 <td><?php echo getAdjectivalRating($total); ?></td>
                             </tr>
@@ -963,24 +978,23 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                 </div>
 
                 <div class="col-md-4">
-                    <table class="table table-bordered text-center mb-3">
-                        <thead><tr><th colspan="2" class="bg-dark text-white">RATING EQUIVALENT</th></tr></thead>
-                        <tbody>
-                            <tr><td>4.75 - 5.00</td><td><b>OUTSTANDING</b></td></tr>
-                            <tr><td>3.61 - 4.74</td><td><b>VERY SATISFACTORY</b></td></tr>
-                            <tr><td>2.61 - 3.30</td><td><b>SATISFACTORY</b></td></tr>
-                            <tr><td>1.61 - 2.60</td><td><b>UNSATISFACTORY</b></td></tr>
-                            <tr><td>1.60 below</td><td><b>POOR</b></td></tr>
-                        </tbody>
-                    </table>
-
-                    <table class="table table-bordered text-center">
-                        <thead><tr><th>FINAL RATING</th><th>ADJECTIVAL</th></tr></thead>
-                        <tbody>
-                            <tr style="font-weight:bold;">
-                                <td><?php echo number_format($total, 2); ?></td>
-                                <td><?php echo getAdjectivalRating($total); ?></td>
+                    <table class="table table-bordered text-center" style="font-size: 0.75rem;">
+                        <thead>
+                            <tr>
+                                <th colspan="3" class="bg-dark text-white">OVER-ALL RATING</th>
                             </tr>
+                            <tr>
+                                <th>Range</th>
+                                <th>Adjectival</th>
+                                <th>Final Rating</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>4.75 - 5.00</td><td><b>OUTSTANDING</b></td><td rowspan="5" style="vertical-align: middle; font-weight: bold; font-size: 1.1rem;"><?php echo number_format($total, 2); ?><br><small><?php echo getAdjectivalRating($total); ?></small></td></tr>
+                            <tr><td>3.61 - 4.74</td><td><b>VERY SATISFACTORY</b></td></tr>
+                            <tr><td>2.61 - 3.60</td><td><b>SATISFACTORY</b></td></tr>
+                            <tr><td>1.61 - 2.60</td><td><b>UNSATISFACTORY</b></td></tr>
+                            <tr><td>Below 1.61</td><td><b>POOR</b></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -988,7 +1002,10 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
             <?php //endif; ?>
 
             <?php
-            $comment_qry = $conn->query("SELECT comment_text FROM comments WHERE employee_id = '$faculty_id' ORDER BY id DESC LIMIT 1");
+            $stmt_comment = $conn->prepare("SELECT comment_text FROM comments WHERE employee_id = ? ORDER BY id DESC LIMIT 1");
+$stmt_comment->bind_param("i", $faculty_id);
+$stmt_comment->execute();
+$comment_qry = $stmt_comment->get_result();
             $comment = ($comment_qry && $comment_qry->num_rows > 0) ? htmlspecialchars($comment_qry->fetch_assoc()['comment_text']) : "<i>No comment yet.</i>";
             ?>
 

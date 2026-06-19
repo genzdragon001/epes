@@ -12,7 +12,11 @@
 							<select name="employee_id" id="employee_id" class="form-control form-control-sm select2">
 								<option value=""></option>
 								<?php 
-								$employees = $conn->query("SELECT *,concat(lastname,', ',firstname,' ',middlename) as name FROM employee_list where evaluator_id = {$_SESSION['login_id']} order by concat(lastname,', ',firstname,' ',middlename) asc");
+								$login_id = $_SESSION['login_id'] ?? 0;
+$stmt_emps = $conn->prepare("SELECT *,concat(lastname,', ',firstname,' ',middlename) as name FROM employee_list where evaluator_id = ? order by concat(lastname,', ',firstname,' ',middlename) asc");
+$stmt_emps->bind_param("i", $login_id);
+$stmt_emps->execute();
+$employees = $stmt_emps->get_result();
 								while($row=$employees->fetch_assoc()):
 								?>
 								<option value="<?php echo $row['id'] ?>" <?php echo isset($employee_id) && $employee_id == $row['id'] ? 'selected' : '' ?>><?php echo $row['name'] ?></option>

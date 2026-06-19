@@ -2,17 +2,20 @@
 session_start();
 include 'db_connect.php';
 
-$faculty_id = $_SESSION['login_id'];
+$faculty_id = intval($_SESSION['login_id'] ?? 0);
 $period = $_GET['period'] ?? '';
 $target_id = isset($_GET['target_id']) ? intval($_GET['target_id']) : 0;
 
 // Get faculty info
-$faculty = $conn->query("SELECT CONCAT(e.lastname, ', ', e.firstname, ' ', e.middlename) as name, 
+$stmt_fac = $conn->prepare("SELECT CONCAT(e.lastname, ', ', e.firstname, ' ', e.middlename) as name, 
     e.position_id, p.position, e.department_id, d.designation, e.evaluator_id
     FROM employee_list e
     LEFT JOIN position_list p ON e.position_id = p.id
     LEFT JOIN designation_list d ON e.designation_id = d.id
-    WHERE e.id = $faculty_id")->fetch_assoc();
+    WHERE e.id = ?");
+$stmt_fac->bind_param("i", $faculty_id);
+$stmt_fac->execute();
+$faculty = $stmt_fac->get_result()->fetch_assoc();
 
 // Get evaluator info
 $evaluator_name = 'N/A';
@@ -334,7 +337,10 @@ $efficiency_rating = $summary['total'] > 0 ? round(($rating_calc / ($summary['to
             </thead>
             <tbody>
                 <?php 
-                $efficiency_query = $conn->query("SELECT * FROM efficiency_attendance WHERE target_id = $target_id AND faculty_id = $faculty_id AND rating_period = '$period' ORDER BY id");
+                $stmt_eff = $conn->prepare("SELECT * FROM efficiency_attendance WHERE target_id = ? AND faculty_id = ? AND rating_period = ? ORDER BY id");
+$stmt_eff->bind_param("iis", $target_id, $faculty_id, $period);
+$stmt_eff->execute();
+$efficiency_query = $stmt_eff->get_result();
                 $total_rating = 0;
                 $total_percentage = 0;
                 $count = 0;

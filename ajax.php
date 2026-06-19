@@ -40,7 +40,8 @@ $csrf_protected_actions = [
 	'save_function_category', 'delete_function_category',
 	'save_percentage_allocation', 'delete_percentage_allocation',
 	'save_percentage_allocation_quick',
-	'delete_mov'
+	'delete_mov',
+	'update_period', 'cascade_compute'
 ];
 
 if (in_array($action, $csrf_protected_actions)) {
@@ -345,6 +346,78 @@ if($action == 'get_mov_summary'){
 }
 if($action == 'get_faculty_targets_with_movs'){
 	echo $crud->get_faculty_targets_with_movs();
+}
+// Rating period management with period types (IPCR/DP/OPCR)
+if($action == 'update_period'){
+	$update = $crud->update_period();
+	if($update) echo $update;
+}
+if($action == 'cascade_compute'){
+	echo $crud->cascade_compute();
+}
+// IPCR PDF Export
+if($action == 'export_ipcr_pdf'){
+	require_once 'ipcr_generator.php';
+	$generator = new IPCRGenerator();
+	$faculty_id = intval($_GET['faculty_id'] ?? 0);
+	$period = $_GET['period'] ?? '';
+	if ($faculty_id > 0 && !empty($period)) {
+		$generator->exportToPDF($faculty_id, $period, 'D');
+	}
+	exit;
+}
+// DPCR PDF Export
+if($action == 'export_dpcr_pdf'){
+	require_once 'dpcr_generator.php';
+	$generator = new DPCRGenerator();
+	$dept_id = intval($_GET['dept_id'] ?? 0);
+	$period_id = intval($_GET['period_id'] ?? 0);
+	if ($dept_id > 0 && $period_id > 0) {
+		$generator->exportToPDF($dept_id, $period_id, 'D');
+	}
+	exit;
+}
+// OPCR PDF Export
+if($action == 'export_opcr_pdf'){
+	require_once 'opcr_consolidator.php';
+	$generator = new OPCRGenerator();
+	$period_id = intval($_GET['period_id'] ?? 0);
+	if ($period_id > 0) {
+		$generator->exportToPDF($period_id, 'D');
+	}
+	exit;
+}
+// IPCR Excel Export
+if($action == 'export_ipcr_excel'){
+	require_once 'ipcr_generator.php';
+	$generator = new IPCRGenerator();
+	$faculty_id = intval($_GET['faculty_id'] ?? 0);
+	$period = $_GET['period'] ?? '';
+	if ($faculty_id > 0 && !empty($period)) {
+		$generator->exportToExcel($faculty_id, $period);
+	}
+	exit;
+}
+// DPCR Excel Export
+if($action == 'export_dpcr_excel'){
+	require_once 'dpcr_generator.php';
+	$generator = new DPCRGenerator();
+	$dept_id = intval($_GET['dept_id'] ?? 0);
+	$period_id = intval($_GET['period_id'] ?? 0);
+	if ($dept_id > 0 && $period_id > 0) {
+		$generator->exportToExcel($dept_id, $period_id);
+	}
+	exit;
+}
+// OPCR Excel Export
+if($action == 'export_opcr_excel'){
+	require_once 'opcr_consolidator.php';
+	$generator = new OPCRGenerator();
+	$period_id = intval($_GET['period_id'] ?? 0);
+	if ($period_id > 0) {
+		$generator->exportToExcel($period_id);
+	}
+	exit;
 }
 ob_end_flush();
 ?>

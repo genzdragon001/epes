@@ -1,0 +1,36 @@
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+/vendor/
+/node_modules/
+
+# Logs
+*.log
+error_log
+access_log
+
+# Uploads (keep structure, ignore contents where appropriate)
+uploads/ipcr/*
+uploads/dpcr/*
+uploads/movs/*
+!uploads/.htaccess
+!uploads/**/.gitkeep
+
+# Backup files
+backups/*.sql
+!backups/.htaccess
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+.DS_Store
+
+# Generated temp files
+*.tmp
+*.cache
