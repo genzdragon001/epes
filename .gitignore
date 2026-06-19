@@ -13,15 +13,23 @@ error_log
 access_log
 
 # Uploads (keep structure, ignore contents where appropriate)
-uploads/ipcr/*
-uploads/dpcr/*
-uploads/movs/*
+uploads/
 !uploads/.htaccess
 !uploads/**/.gitkeep
 
 # Backup files
-backups/*.sql
+backups/
 !backups/.htaccess
+
+# Large generated files
+*.sql
+!database/migration_*.sql
+all_source_files.txt
+debug_log.txt
+SUMMARY-SHEET-2025.xlsx
+manuscript_text.txt
+epes_db.sql
+database/epes_db.sql
 
 # IDE / OS
 .vscode/
