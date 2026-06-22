@@ -295,6 +295,11 @@ if($action == 'submit_file'){
 	if($submit_file)
 		echo $submit_file;
 }
+if($action == 'submit_na'){
+	$submit_na = $crud->submit_na();
+	if($submit_na)
+		echo $submit_na;
+}
 if($action == 'save_renewal_recommendation'){
 	echo $crud->save_renewal_recommendation();
 }

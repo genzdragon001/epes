@@ -29,9 +29,3 @@
     <p>Archives</p>
   </a>
 </li>
-<li class="nav-item dropdown">
-  <a href="./index.php?page=ipcr_view" class="nav-link nav-ipcr_view">
-    <i class="nav-icon fas fa-file-alt"></i>
-    <p>IPCR Form</p>
-  </a>
-</li>

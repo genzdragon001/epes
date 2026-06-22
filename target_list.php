@@ -167,55 +167,7 @@ while ($row = $alloc_qry->fetch_assoc()) {
                         
                         if ($login_type == 0) {
                             $where .= " AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $emp_position_id)";
-                            $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = $emp_designation_id OR t.designation_id IS NULL)";
-                            
-                            $cat_filters = [];
-                            $has_strategic = isset($allocations['strategic']) && $allocations['strategic'] > 0;
-                            $is_admin_role = false;
-                            $is_director = false;
-                            $is_dean = false;
-                            if ($emp_designation_id > 0) {
-                                $desig_qry = $conn->query("SELECT designation FROM designation_list WHERE id = $emp_designation_id");
-                                if ($desig_qry && $desig_row = $desig_qry->fetch_assoc()) {
-                                    $desig_name = $desig_row['designation'];
-                                    if (stripos($desig_name, 'Dean') !== false) {
-                                        $has_strategic = true;
-                                        $is_admin_role = true;
-                                        $is_dean = true;
-                                    }
-                                    if (stripos($desig_name, 'Head') !== false || 
-                                        stripos($desig_name, 'Vice President') !== false) {
-                                        $has_strategic = true;
-                                        $is_admin_role = true;
-                                    }
-                                    if (stripos($desig_name, 'Director') !== false) {
-                                        $has_strategic = true;
-                                        $is_admin_role = true;
-                                        $is_director = true;
-                                    }
-                                }
-                            }
-                            $has_instructions = isset($allocations['core_instructions']) && $allocations['core_instructions'] > 0;
-                            $has_research = isset($allocations['core_research']) && $allocations['core_research'] > 0 && !$is_cos;
-                            $has_extension = isset($allocations['core_extension']) && $allocations['core_extension'] > 0 && !$is_cos;
-                            $has_support = isset($allocations['support']) && $allocations['support'] > 0;
-                            
-                            if ($is_dean || $is_director) {
-                                $has_instructions = true;
-                                $has_research = true;
-                                $has_extension = true;
-                                $has_support = true;
-                            }
-                            
-                            if ($has_strategic) $cat_filters[] = "t.category = 'strategic'";
-                            if ($has_instructions) $cat_filters[] = "(t.category = 'core' AND (t.sub_category IS NULL OR t.sub_category IN ('instructions','ter','instruction')))";
-                            if ($has_research) $cat_filters[] = "(t.category = 'core' AND t.sub_category = 'research')";
-                            if ($has_extension) $cat_filters[] = "(t.category = 'core' AND t.sub_category = 'extension')";
-                            if ($has_support) $cat_filters[] = "t.category = 'support'";
-                            
-                            if (!empty($cat_filters)) {
-                                $where .= " AND (" . implode(" OR ", $cat_filters) . ")";
-                            }
+                            $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = $emp_designation_id)";
                         }
                         
                         $qry = $conn->query("SELECT t.*, d.designation as designation_name, r.position as rank_name 
@@ -334,9 +286,15 @@ while ($row = $alloc_qry->fetch_assoc()) {
                                     if ($hasSubmission):
                                         $progress_row = $progress_qry->fetch_assoc();
                                         $isVerified = (isset($progress_row['progress']) && $progress_row['progress'] === 'Verified');
+                                        $isNA = (isset($progress_row['progress']) && $progress_row['progress'] === 'N/A');
                                         $filePath = $progress_row['file_path'].".".$progress_row['file_type'];
                                         $fileType = $progress_row['file_type'];
                                 ?>
+                                    <?php if ($isNA): ?>
+                                    <span class="badge badge-secondary mb-1 d-block">
+                                        <i class="fa fa-minus-circle mr-1"></i> N/A
+                                    </span>
+                                    <?php else: ?>
                                     <span class="badge badge-<?= $isVerified ? 'info' : 'success' ?> mb-1 d-block">
                                         <i class="fa fa-<?= $isVerified ? 'check-double' : 'check' ?> mr-1"></i>
                                         <?= $isVerified ? 'Verified' : 'Submitted' ?>
@@ -346,6 +304,7 @@ while ($row = $alloc_qry->fetch_assoc()) {
                                             data-filetype="<?= htmlspecialchars($fileType) ?>">
                                         <i class="fa fa-eye mr-1"></i> View
                                     </button>
+                                    <?php endif; ?>
                                 <?php else: ?>
                                     <span class="badge badge-secondary mb-1 d-block">
                                         <i class="fa fa-clock mr-1"></i> Not Submitted
@@ -353,9 +312,12 @@ while ($row = $alloc_qry->fetch_assoc()) {
                                     <button class="btn btn-primary btn-sm submit-btn" data-task-id="<?php echo $row['id']; ?>">
                                         <i class="fa fa-upload mr-1"></i> Submit
                                     </button>
+                                    <button class="btn btn-outline-secondary btn-sm na-btn" data-task-id="<?php echo $row['id']; ?>">
+                                        N/A
+                                    </button>
                                 <?php endif; ?>
                                 
-                                <?php if ($hasSubmission && !$isVerified): ?>
+                                <?php if ($hasSubmission && !$isVerified && !$isNA): ?>
                                     <div class="dropdown d-inline-block ml-1">
                                         <button class="btn btn-outline-secondary btn-sm dropdown-toggle" 
                                                 type="button" id="actionMenu<?php echo $row['id']; ?>" 
@@ -374,6 +336,12 @@ while ($row = $alloc_qry->fetch_assoc()) {
                                             </button>
                                         </div>
                                     </div>
+                                <?php endif; ?>
+                                
+                                <?php if ($hasSubmission && $isNA): ?>
+                                    <button class="btn btn-outline-danger btn-sm btn-sm mt-1" onclick="delete_file(<?= $row['id'] ?>, <?= $faculty_id ?>)">
+                                        <i class="fa fa-trash mr-1"></i> Remove N/A
+                                    </button>
                                 <?php endif; ?>
                             </td>
                             <?php endif; ?>
@@ -595,6 +563,34 @@ $(document).on('click', '.submit-btn', function(){
     $('#displayRatingPeriod').text('<?= $rating_period ?>');
     $('#submitDocument').val('');
     $('#uploadSubmitModal').modal('show');
+});
+
+$(document).on('click', '.na-btn', function(){
+    var taskId = $(this).data('task-id');
+    if (!confirm('Mark this target as N/A (not applicable)?')) return;
+    start_load();
+    $.ajax({
+        url: 'ajax.php?action=submit_na',
+        method: 'POST',
+        data: {
+            task_id: taskId,
+            rating_period: '<?= $rating_period ?>'
+        },
+        success: function(resp){
+            try {
+                var result = typeof resp === 'string' ? JSON.parse(resp) : resp;
+                if (result.status === 'success') {
+                    alert_toast(result.message || "Target marked as N/A.", 'success');
+                    setTimeout(function(){ location.reload(); }, 1000);
+                } else {
+                    alert_toast(result.message || "Failed to mark as N/A.", 'danger');
+                }
+            } catch (e) {
+                alert_toast("Failed to mark as N/A.", 'danger');
+            }
+            end_load();
+        }
+    });
 });
 
 $('#uploadSubmitForm').submit(function(e){

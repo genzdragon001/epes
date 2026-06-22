@@ -1149,7 +1149,8 @@ Class Action {
 			return 0;
 		}
 		extract($_POST);
-		$progress_id = intval($progress_id);
+		$task_id = intval($task_id ?? 0);
+		$employee_id = intval($faculty_id ?? 0);
 		$value = floatval($value);
 		
 		// Whitelist allowed field names to prevent SQL injection through $field
@@ -1159,20 +1160,26 @@ Class Action {
 			return 0;
 		}
 	
-		// Get task_id and employee_id from task_progress
-		$stmt = $this->db->prepare("SELECT task_id, faculty_id FROM task_progress WHERE id = ?");
-		$stmt->bind_param('i', $progress_id);
-		$stmt->execute();
-		$qry = $stmt->get_result();
-		$stmt->close();
-		if($qry->num_rows > 0){
-			$row = $qry->fetch_assoc();
-			$task_id = $row['task_id'];
-			$employee_id = $row['faculty_id'];
-		} else {
+		if ($task_id === 0 || $employee_id === 0) {
 			return 0;
 		}
-	
+
+		// Get rating_period from POST or fall back to session/DB
+		$rating_period = $rating_period ?? '';
+		if (empty($rating_period)) {
+			$rating_period = $_SESSION['rating_period'] ?? '';
+		}
+		if (empty($rating_period)) {
+			// Fall back to latest active rating period
+			$rp_qry = $this->db->query("SELECT code FROM rating_period ORDER BY id DESC LIMIT 1");
+			if ($rp_qry && $rp_qry->num_rows > 0) {
+				$rating_period = $rp_qry->fetch_assoc()['code'] ?? '';
+			}
+		}
+		if (empty($rating_period)) {
+			$rating_period = 'UNKNOWN';
+		}
+
 		// Determine current period type for rating tracking
 		// Individual ratings are always IPCR-level (DP/OPCR are computed aggregates)
 		$period_type = 'IPCR';
@@ -1276,7 +1283,13 @@ Class Action {
     $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
     $activity_log = '';
 
-    if ($value === 'Verified') {
+    // N/A Verified: skip rating requirement, set progress to 'Verified'
+    $skip_auto_score = false;
+    if ($value === 'N/A Verified') {
+        $value = 'Verified';
+        $skip_auto_score = true;
+        // Skip the rating check below
+    } elseif ($value === 'Verified') {
         $stmt = $this->db->prepare("SELECT efficiency AS task_eff, timeliness AS task_time, quality AS task_qual FROM task_list WHERE id = ? LIMIT 1");
         $stmt->bind_param('i', $id);
         $stmt->execute();
@@ -1383,7 +1396,7 @@ Class Action {
 
     if ($save_status) {
     	// Auto-compute timeliness and efficiency when a task is verified
-    	if ($value === 'Verified') {
+    	if ($value === 'Verified' && !$skip_auto_score) {
     		$this->auto_score_progress($id, $faculty);
     	}
     	$stmt = $this->db->prepare("INSERT INTO login_audit_trail (user_id, username, ip_address, user_agent, login_status, failure_reason) VALUES (?, ?, ?, ?, 'SUCCESS', ?)");
@@ -1577,6 +1590,31 @@ function submit_file() {
 }
 
 	
+	function submit_na() {
+	    header('Content-Type: application/json');
+
+	    $task_id = isset($_POST['task_id']) ? (int) $_POST['task_id'] : 0;
+	    $faculty_id = $_SESSION['login_id'] ?? 0;
+	    $rating_period = isset($_POST['rating_period']) ? $this->db->real_escape_string($_POST['rating_period']) : '';
+
+	    if ($task_id === 0 || $faculty_id === 0) {
+	        echo json_encode(["status" => "error", "message" => "Invalid task or faculty ID."]);
+	        return;
+	    }
+
+	    // Check if a submission already exists
+	    $check = $this->db->query("SELECT id FROM task_progress WHERE task_id = $task_id AND faculty_id = $faculty_id LIMIT 1");
+	    if ($check && $check->num_rows > 0) {
+	        $row = $check->fetch_assoc();
+	        $progressId = (int) $row['id'];
+	        $this->db->query("UPDATE task_progress SET file_path = '', file_type = '', progress = 'N/A', date_created = NOW(), rating_period = '$rating_period' WHERE id = $progressId");
+	    } else {
+	        $this->db->query("INSERT INTO task_progress (task_id, faculty_id, file_path, file_type, progress, date_created, rating_period) VALUES ($task_id, $faculty_id, '', '', 'N/A', NOW(), '$rating_period')");
+	    }
+
+	    echo json_encode(["status" => "success", "message" => "Target marked as N/A."]);
+	}
+
 	function delete_file(){
 		extract($_POST);
 		 // Get user info for audit

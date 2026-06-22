@@ -28,11 +28,11 @@ if ($login_type == 1) {
     $stmt->close();
     $is_vp = ($eval_desig_id == 4);
 }
-// Fetch faculty designation
-$stmt = $conn->prepare("SELECT designation_id FROM employee_list WHERE id = ?");
+// Fetch faculty designation and position
+$stmt = $conn->prepare("SELECT designation_id, position_id FROM employee_list WHERE id = ?");
 $stmt->bind_param("i", $nameId);
 $stmt->execute();
-$stmt->bind_result($fac_desig_id);
+$stmt->bind_result($fac_desig_id, $fac_position_id);
 $stmt->fetch();
 $stmt->close();
 $fac_is_director = ($fac_desig_id == 6);
@@ -100,85 +100,140 @@ SELECT
     tp.date_created,
     CONCAT(e.lastname, ', ', e.firstname, ' ', e.middlename) AS faculty_name,
     
+    t.id AS real_task_id,
     t.success_indicators AS si,
+    t.efficiency AS task_efficiency,
+    t.timeliness AS task_timeliness,
+    t.quality AS task_quality,
+    t.category AS task_category,
+    t.is_active,
     CONCAT(tp.file_path, '.', tp.file_type) AS file_name,
     r.id AS rating_id,
     r.efficiency AS rating_efficiency,
     r.timeliness AS rating_timeliness,
     r.quality AS rating_quality,
-    t.efficiency AS task_efficiency,
-    t.timeliness AS task_timeliness,
-    t.quality AS task_quality,
-    t.category AS task_category,
     ((((r.efficiency + r.timeliness + r.quality) / 4) / 5) * 100) AS pa
-    FROM task_progress tp
-    INNER JOIN employee_list e ON tp.faculty_id = e.id
-    INNER JOIN task_list t ON tp.task_id = t.id
-    LEFT JOIN ratings r ON r.employee_id = tp.faculty_id 
-                AND r.task_id = tp.task_id
-    WHERE e.id = ".$nameId."
-    ORDER BY tp.date_created DESC");
+    FROM task_list t
+    LEFT JOIN task_progress tp ON tp.task_id = t.id AND tp.faculty_id = " . intval($nameId) . "
+    LEFT JOIN employee_list e ON tp.faculty_id = e.id
+    LEFT JOIN ratings r ON r.employee_id = " . intval($nameId) . " AND r.task_id = t.id
+    WHERE t.is_active = 1
+        AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = " . intval($fac_position_id) . ")
+        AND (t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = " . intval($fac_desig_id) . ")
+        AND t.id NOT IN (SELECT task_id FROM target_exemptions WHERE position_id = " . intval($fac_position_id) . ")
+    ORDER BY 
+        CASE WHEN t.category = 'strategic' THEN 0
+             WHEN t.category = 'core' THEN 1
+             WHEN t.category = 'support' THEN 2
+             ELSE 3 END,
+        t.sub_category,
+        t.id");
    
     $num=1;
+    $current_category = '';
+    $current_sub = '';
+    $category_labels = ['strategic' => 'STRATEGIC FUNCTIONS', 'core' => 'CORE FUNCTIONS', 'support' => 'SUPPORT FUNCTIONS'];
+    $category_colors = ['strategic' => 'bg-dark text-white', 'core' => 'bg-secondary text-white', 'support' => 'bg-info text-white'];
+    $sub_labels = ['ter' => 'A.1 Teaching Effectiveness (TER)', 'instructions' => 'A.2 Instructions', 'research' => 'B. Research', 'extension' => 'C. Extension'];
+    $sub_colors = ['ter' => 'table-light', 'instructions' => 'table-light', 'research' => 'table-light', 'extension' => 'table-light'];
             if($qry->num_rows == 0):
-                echo '<tr><td colspan="7" class="text-center text-muted py-4">No submission yet.</td></tr>';
+                echo '<tr><td colspan="7" class="text-center text-muted py-4">No targets assigned to this faculty.</td></tr>';
             else:
             while ($row = $qry->fetch_assoc()):
+                $task_category = $row['task_category'] ?? '';
+                $task_sub = $row['sub_category'] ?? '';
+                // Insert category header when category changes
+                if ($task_category !== $current_category):
+                    $current_category = $task_category;
+                    $current_sub = '';
+                    $label = $category_labels[$task_category] ?? strtoupper($task_category);
+                    $color = $category_colors[$task_category] ?? 'bg-light';
+?>
+    <tr class="<?= $color ?>">
+        <td colspan="7" class="font-weight-bold py-2">
+            <i class="fa fa-tasks mr-2"></i> <?= $label ?>
+        </td>
+    </tr>
+<?php
+                endif;
+                // Insert sub-category header within core when sub changes
+                if ($task_category === 'core' && $task_sub !== $current_sub):
+                    $current_sub = $task_sub;
+                    $sub_label = $sub_labels[$task_sub] ?? ucwords($task_sub);
+                    $sub_color = $sub_colors[$task_sub] ?? 'table-light';
+?>
+    <tr class="<?= $sub_color ?>">
+        <td colspan="7" class="font-weight-bold py-1 pl-4">
+            <i class="fa fa-angle-right mr-2"></i> <?= $sub_label ?>
+        </td>
+    </tr>
+<?php
+                endif;
                 $task_is_strategic = (($row['task_category'] ?? '') === 'strategic');
                 $row_locked = ($strat_locked && $task_is_strategic);
+                $has_submission = !empty($row['progress_id']);
+                $currentStatus = $row['task_progress'] ?? null;
+                $is_na = ($currentStatus === 'N/A');
 ?>
     <tr>
         <th class="text-center align-middle"><?= $num++ ?></th>
         <td class="align-middle"><?= ucwords(htmlspecialchars($row['si'])) ?></td>
         <td class="text-center align-middle">
-        <?php if (!empty($row['file_path']) && !empty($row['file_type'])): ?>
+        <?php if ($has_submission && !empty($row['file_path']) && !empty($row['file_type'])): ?>
         <button type="button" 
            class="btn btn-sm btn-primary view-file-btn"
            data-file="<?= htmlspecialchars($row['file_path'] . '.' . $row['file_type']) ?>"
            data-filetype="<?= htmlspecialchars($row['file_type']) ?>">
            View
         </button>
+        <?php elseif ($is_na): ?>
+            <span class="badge badge-secondary">N/A</span>
         <?php else: ?>
             <span class="text-muted">-</span>
-        <?php endif; ?></td>
+        <?php endif; ?>
+        </td>
         <td class="text-center align-middle">
             <?php if ($is_admin_view): ?>
                 <?php 
-                $currentStatus = $row['task_progress'] ?? null;
-                $statusClass = ($currentStatus == 'Verified') ? 'badge-success' : (($currentStatus == 'For Verification') ? 'badge-warning' : 'badge-secondary');
+                $statusClass = ($currentStatus == 'Verified') ? 'badge-success' : (($currentStatus == 'For Verification') ? 'badge-warning' : ($is_na ? 'badge-secondary' : 'badge-secondary'));
                 ?>
                 <span class="badge <?= $statusClass ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= $currentStatus ?? 'Pending' ?></span>
             <?php elseif ($row_locked): ?>
                 <?php 
-                $currentStatus = $row['task_progress'] ?? null;
-                $statusClass = ($currentStatus == 'Verified') ? 'badge-success' : (($currentStatus == 'For Verification') ? 'badge-warning' : 'badge-secondary');
+                $statusClass = ($currentStatus == 'Verified') ? 'badge-success' : (($currentStatus == 'For Verification') ? 'badge-warning' : ($is_na ? 'badge-secondary' : 'badge-secondary'));
                 ?>
                 <span class="badge <?= $statusClass ?>" title="Strategic Plan tasks can only be rated by the Vice President"><?= $currentStatus ?? 'Pending' ?> <i class="fas fa-lock ml-1" style="font-size:0.65rem;"></i></span>
             <?php else: ?>
             <div class="dropdown">
                 <?php 
-                $currentStatus = $row['task_progress'] ?? null;
-                $statusClass = ($currentStatus == 'Verified') ? 'btn-success' : (($currentStatus == 'For Verification') ? 'btn-warning' : 'btn-secondary');
+                $statusClass = ($currentStatus == 'Verified') ? 'btn-success' : (($currentStatus == 'For Verification') ? 'btn-warning' : ($is_na ? 'btn-info' : 'btn-secondary'));
                 ?>
                 <button class="btn btn-sm <?= $statusClass ?> dropdown-toggle" 
                         type="button" 
-                        id="statusDropdown<?= $row['task_id'] ?>" 
+                        id="statusDropdown<?= $row['real_task_id'] ?>" 
                         data-toggle="dropdown" 
                         aria-haspopup="true" 
                         aria-expanded="false"
-                        data-faculty="<?= $row['faculty'] ?>">
+                        data-faculty="<?= $nameId ?>">
                     <?= $currentStatus ?? 'Pending' ?>
                 </button>
-                <div class="dropdown-menu" aria-labelledby="statusDropdown<?= $row['task_id'] ?>">
+                <div class="dropdown-menu" aria-labelledby="statusDropdown<?= $row['real_task_id'] ?>">
                     <a class="dropdown-item set_status" href="javascript:void(0)" 
-                       data-id="<?= $row['task_id'] ?>" 
-                       data-faculty="<?= $row['faculty'] ?>" 
+                       data-id="<?= $row['real_task_id'] ?>" 
+                       data-faculty="<?= $nameId ?>" 
                        data-value="For Verification">For Verification</a>
                     <div class="dropdown-divider"></div>
                     <a class="dropdown-item set_status" href="javascript:void(0)" 
-                       data-id="<?= $row['task_id'] ?>" 
-                       data-faculty="<?= $row['faculty'] ?>" 
+                       data-id="<?= $row['real_task_id'] ?>" 
+                       data-faculty="<?= $nameId ?>" 
                        data-value="Verified">Verified</a>
+                    <?php if ($is_na): ?>
+                    <div class="dropdown-divider"></div>
+                    <a class="dropdown-item set_status text-info" href="javascript:void(0)" 
+                       data-id="<?= $row['real_task_id'] ?>" 
+                       data-faculty="<?= $nameId ?>" 
+                       data-value="N/A Verified">Verify N/A</a>
+                    <?php endif; ?>
                 </div>
             </div>
             <?php endif; ?>
@@ -187,9 +242,10 @@ SELECT
             <?php 
                 $effApplicable = (isset($row['task_efficiency']) && $row['task_efficiency'] === 'Applicable');
                 $currentEff = isset($row['rating_efficiency']) ? $row['rating_efficiency'] : '-';
+                $ratingDisabled = $is_na || !$has_submission;
             ?>
-            <?php if ($is_admin_view || $row_locked): ?>
-                <span class="badge <?= isset($row['rating_efficiency']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= $effApplicable ? $currentEff : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
+            <?php if ($is_admin_view || $row_locked || $ratingDisabled): ?>
+                <span class="badge <?= isset($row['rating_efficiency']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= ($effApplicable && !$ratingDisabled) ? $currentEff : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
             <?php else: ?>
             <div class="dropdown">
                 <button class="btn btn-sm <?= isset($row['rating_efficiency']) ? 'btn-success' : 'btn-secondary' ?> dropdown-toggle" 
@@ -207,7 +263,8 @@ SELECT
                         <?php for ($i = 5; $i >= 1; $i--): ?>
                             <a class="dropdown-item py-1 set_rating" 
                             href="javascript:void(0)" 
-                            data-id="<?= $row['progress_id'] ?>" 
+                            data-id="<?= $row['real_task_id'] ?>" 
+                            data-faculty="<?= $nameId ?>"
                             data-field="efficiency" 
                             data-value="<?= $i ?>">
                                 <?= $i ?>
@@ -216,7 +273,8 @@ SELECT
                         <div class="dropdown-divider"></div>
                         <div class="input-group input-group-sm">
                             <input type="number" class="form-control form-control-sm custom_rating_input" 
-                                   data-id="<?= $row['progress_id'] ?>" 
+                                   data-id="<?= $row['real_task_id'] ?>" 
+                                   data-faculty="<?= $nameId ?>"
                                    data-field="efficiency"
                                    min="0" max="5" step="0.01"
                                    placeholder="Other (0-5)">
@@ -235,9 +293,10 @@ SELECT
             <?php 
                 $qualApplicable = (isset($row['task_quality']) && $row['task_quality'] === 'Applicable');
                 $currentQual = isset($row['rating_quality']) ? $row['rating_quality'] : '-';
+                $ratingDisabled = $is_na || !$has_submission;
             ?>
-            <?php if ($is_admin_view || $row_locked): ?>
-                <span class="badge <?= isset($row['rating_quality']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= $qualApplicable ? $currentQual : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
+            <?php if ($is_admin_view || $row_locked || $ratingDisabled): ?>
+                <span class="badge <?= isset($row['rating_quality']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= ($qualApplicable && !$ratingDisabled) ? $currentQual : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
             <?php else: ?>
             <div class="dropdown">
                 <button class="btn btn-sm <?= isset($row['rating_quality']) ? 'btn-success' : 'btn-secondary' ?> dropdown-toggle" 
@@ -255,7 +314,8 @@ SELECT
                         <?php for ($i = 5; $i >= 1; $i--): ?>
                             <a class="dropdown-item py-1 set_rating" 
                                href="javascript:void(0)" 
-                               data-id="<?= $row['progress_id'] ?>" 
+                               data-id="<?= $row['real_task_id'] ?>" 
+                               data-faculty="<?= $nameId ?>"
                                data-field="quality" 
                                data-value="<?= $i ?>">
                                 <?= $i ?>
@@ -264,7 +324,8 @@ SELECT
                         <div class="dropdown-divider"></div>
                         <div class="input-group input-group-sm">
                             <input type="number" class="form-control form-control-sm custom_rating_input" 
-                                   data-id="<?= $row['progress_id'] ?>" 
+                                   data-id="<?= $row['real_task_id'] ?>" 
+                                   data-faculty="<?= $nameId ?>"
                                    data-field="quality"
                                    min="0" max="5" step="0.01"
                                    placeholder="Other (0-5)">
@@ -283,9 +344,10 @@ SELECT
             <?php 
                 $timeApplicable = (isset($row['task_timeliness']) && $row['task_timeliness'] === 'Applicable');
                 $currentTime = isset($row['rating_timeliness']) ? $row['rating_timeliness'] : '-';
+                $ratingDisabled = $is_na || !$has_submission;
             ?>
-            <?php if ($is_admin_view || $row_locked): ?>
-                <span class="badge <?= isset($row['rating_timeliness']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= $timeApplicable ? $currentTime : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
+            <?php if ($is_admin_view || $row_locked || $ratingDisabled): ?>
+                <span class="badge <?= isset($row['rating_timeliness']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= ($timeApplicable && !$ratingDisabled) ? $currentTime : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
             <?php else: ?>
             <div class="dropdown">
                 <button class="btn btn-sm <?= isset($row['rating_timeliness']) ? 'btn-success' : 'btn-secondary' ?> dropdown-toggle" 
@@ -303,7 +365,8 @@ SELECT
                         <?php for ($i = 5; $i >= 1; $i--): ?>
                             <a class="dropdown-item py-1 set_rating" 
                                href="javascript:void(0)" 
-                               data-id="<?= $row['progress_id'] ?>" 
+                               data-id="<?= $row['real_task_id'] ?>" 
+                               data-faculty="<?= $nameId ?>"
                                data-field="timeliness" 
                                data-value="<?= $i ?>">
                                 <?= $i ?>
@@ -312,7 +375,8 @@ SELECT
                         <div class="dropdown-divider"></div>
                         <div class="input-group input-group-sm">
                             <input type="number" class="form-control form-control-sm custom_rating_input" 
-                                   data-id="<?= $row['progress_id'] ?>" 
+                                   data-id="<?= $row['real_task_id'] ?>" 
+                                   data-faculty="<?= $nameId ?>"
                                    data-field="timeliness"
                                    min="0" max="5" step="0.01"
                                    placeholder="Other (0-5)">
@@ -407,40 +471,25 @@ if($comment_check && $comment_check->num_rows > 0){
 
 
 $(document).ready(function(){
-    $(".set_rating").click(function(){
-        var progressId = $(this).data("id");   // task_progress.id
-        var field = $(this).data("field");     // efficiency, timeliness, quality
-        var value = $(this).data("value");              // 1-5
-
-        console.log("Clicked rating button:");
-        console.log("Progress ID:", progressId);
-        console.log("Field:", field);
-        console.log("Value:", value);
+    $(document).on("click", ".set_rating", function(){
+        var taskId = $(this).data("id");
+        var facultyId = $(this).data("faculty");
+        var field = $(this).data("field");
+        var value = $(this).data("value");
 
         $.ajax({
             url: "ajax.php?action=save_rating",
             method: "POST",
-            data: { progress_id: progressId, field: field, value: value },
-            beforeSend: function(){
-                console.log("Sending AJAX request...");
-                console.log("Data sent:", { progress_id: progressId, field: field, value: value });
-            },
+            data: { task_id: taskId, faculty_id: facultyId, field: field, value: value },
             success: function(resp){
-                console.log("Server response:", resp);
                 if(resp == 1){
-                    console.log("Rating saved successfully");
                     alert_toast("Rating saved successfully", "success");
                     setTimeout(function(){ location.reload(); }, 1000);
                 } else {
-                    console.log("Failed to save rating");
                     alert_toast("Failed to save rating", "danger");
-                    //setTimeout(function(){ location.reload(); }, 1000);
                 }
             },
             error: function(xhr, status, error){
-                console.error("AJAX Error:", error);
-                console.error("Status:", status);
-                console.error("Response Text:", xhr.responseText);
                 alert_toast("Error occurred during AJAX request", "danger");
             }
         });
@@ -522,7 +571,8 @@ $(document).ready(function(){
 
        // Manual input with onchange
     $(document).on("change", ".custom_rating_input", function(){
-        var progressId = $(this).data("id");
+        var taskId = $(this).data("id");
+        var facultyId = $(this).data("faculty");
         var field = $(this).data("field");
         var value = $(this).val();
 
@@ -534,7 +584,7 @@ $(document).ready(function(){
         $.ajax({
             url: "ajax.php?action=save_rating",
             method: "POST",
-            data: { progress_id: progressId, field: field, value: value },
+            data: { task_id: taskId, faculty_id: facultyId, field: field, value: value },
             success: function(resp){
                 if(resp == 1){
                     alert_toast("Custom rating saved successfully", "success");
@@ -548,7 +598,8 @@ $(document).ready(function(){
 
     $(document).on("click", ".submit-custom-rating", function(){
         var input = $(this).closest('.input-group').find('.custom_rating_input');
-        var progressId = input.data("id");
+        var taskId = input.data("id");
+        var facultyId = input.data("faculty");
         var field = input.data("field");
         var value = input.val();
 
@@ -565,7 +616,7 @@ $(document).ready(function(){
         $.ajax({
             url: "ajax.php?action=save_rating",
             method: "POST",
-            data: { progress_id: progressId, field: field, value: value },
+            data: { task_id: taskId, faculty_id: facultyId, field: field, value: value },
             success: function(resp){
                 if(resp == 1){
                     alert_toast("Rating saved successfully", "success");
