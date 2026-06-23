@@ -9,9 +9,9 @@ switch ($_SESSION['login_type']) {
         exit;
 }
 
-// Fetch latest period — one row governs IPCR, DP, and OPCR
+// Fetch active period
 $period = null;
-$qry = $conn->query("SELECT * FROM rating_period ORDER BY id DESC LIMIT 1");
+$qry = $conn->query("SELECT * FROM rating_period WHERE is_active = 1 LIMIT 1");
 if ($qry && $qry->num_rows > 0) {
     $period = $qry->fetch_assoc();
 }
@@ -30,6 +30,13 @@ while ($row = $cascade_qry->fetch_assoc()) {
 // Count intervention flags
 $intervention_qry = $conn->query("SELECT COUNT(*) as cnt FROM intervention_flags WHERE acknowledged = 0");
 $intervention_count = $intervention_qry->fetch_assoc()['cnt'] ?? 0;
+
+// Fetch all periods for history
+$all_periods = [];
+$hist_qry = $conn->query("SELECT * FROM rating_period ORDER BY year DESC, semester DESC");
+while ($row = $hist_qry->fetch_assoc()) {
+    $all_periods[] = $row;
+}
 ?>
 
 <div class="col-lg-12">
@@ -40,33 +47,32 @@ $intervention_count = $intervention_qry->fetch_assoc()['cnt'] ?? 0;
         <div class="card-body">
 
             <div class="row">
-                <!-- ==================== PERIOD SETTING ==================== -->
+                <!-- ==================== PERIOD FORM ==================== -->
                 <div class="col-md-6">
                     <div class="card card-outline card-primary">
                         <div class="card-header">
-                            <h6 class="card-title"><i class="fa fa-cog"></i> Current Period</h6>
+                            <h6 class="card-title"><i class="fa fa-cog"></i> <span id="formTitle">Set Rating Period</span></h6>
                         </div>
                         <div class="card-body">
-                            <form onsubmit="event.preventDefault(); update_period();">
+                            <form onsubmit="event.preventDefault(); save_period();">
+                                <input type="hidden" name="period_id" id="period_id" value="0">
                                 <div class="form-group">
                                     <label>Semester</label>
-                                    <select name="period_semester" id="period_semester" class="form-control" required>
+                                    <select name="period_semester" id="period_semester" class="form-control" required onchange="autoFillDates()">
                                         <option value="">Select Semester</option>
-                                        <option value="1st Semester" <?= ($period['semester'] ?? '') == '1st Semester' ? 'selected' : '' ?>>1st Semester</option>
-                                        <option value="2nd Semester" <?= ($period['semester'] ?? '') == '2nd Semester' ? 'selected' : '' ?>>2nd Semester</option>
-                                        <option value="Summer" <?= ($period['semester'] ?? '') == 'Summer' ? 'selected' : '' ?>>Summer</option>
+                                        <option value="1st Semester">1st Semester (Jul–Dec designated / Aug–Dec non-desig)</option>
+                                        <option value="2nd Semester">2nd Semester (Jan–Jun designated / Jan–May non-desig)</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
                                     <label>Academic Year</label>
-                                    <select name="period_year" id="period_year" class="form-control" required>
+                                    <select name="period_year" id="period_year" class="form-control" required onchange="autoFillDates()">
                                         <option value="">Select Year</option>
                                         <?php
                                         $cy = date("Y");
-                                        for ($y = $cy - 1; $y < $cy + 10; $y++) {
+                                        for ($y = $cy - 2; $y < $cy + 10; $y++) {
                                             $ay = $y . "-" . ($y + 1);
-                                            $sel = ($period['year'] ?? '') == $ay ? 'selected' : '';
-                                            echo "<option value='$ay' $sel>$ay</option>";
+                                            echo "<option value='$ay'>$ay</option>";
                                         }
                                         ?>
                                     </select>
@@ -74,40 +80,56 @@ $intervention_count = $intervention_qry->fetch_assoc()['cnt'] ?? 0;
                                 <div class="row">
                                     <div class="col-md-6">
                                         <div class="form-group">
-                                            <label>Start Date</label>
-                                            <input type="date" name="period_start" id="period_start" class="form-control"
-                                                   value="<?= $period['start_date'] ?? '' ?>">
+                                            <label>Designated Start <small class="text-muted">(Dept Head, Dean, Director)</small></label>
+                                            <input type="date" name="period_start" id="period_start" class="form-control">
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="form-group">
-                                            <label>End Date</label>
-                                            <input type="date" name="period_end" id="period_end" class="form-control"
-                                                   value="<?= $period['end_date'] ?? '' ?>">
+                                            <label>Designated End <small class="text-muted">(Dept Head, Dean, Director)</small></label>
+                                            <input type="date" name="period_end" id="period_end" class="form-control">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label>Non-Designated Start <small class="text-muted">(COS + no designation)</small></label>
+                                            <input type="date" name="non_desig_start" id="non_desig_start" class="form-control">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label>Non-Designated End <small class="text-muted">(COS + no designation)</small></label>
+                                            <input type="date" name="non_desig_end" id="non_desig_end" class="form-control">
                                         </div>
                                     </div>
                                 </div>
                                 <div class="form-group">
                                     <div class="form-check">
                                         <input type="checkbox" name="period_auto_cascade" id="period_auto_cascade"
-                                               class="form-check-input" value="1"
-                                               <?= ($period['auto_cascade'] ?? 0) ? 'checked' : '' ?>>
-                                        <label class="form-check-label">Auto-cascade: IPCR ratings → DP (per-department) + OPCR (office-wide)</label>
+                                               class="form-check-input" value="1">
+                                        <label class="form-check-label">Auto-cascade: IPCR → DP + OPCR</label>
                                     </div>
                                 </div>
-                                <button type="submit" class="btn btn-primary btn-block">
-                                    <i class="fa fa-save"></i> Save Period (IPCR + DP + OPCR)
-                                </button>
+                                <div class="d-flex" style="gap: 8px;">
+                                    <button type="submit" class="btn btn-primary flex-fill">
+                                        <i class="fa fa-save"></i> <span id="saveBtnLabel">Save Period</span>
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" onclick="clearForm()" id="clearBtn" style="display:none;">
+                                        <i class="fa fa-times"></i> Clear
+                                    </button>
+                                </div>
                             </form>
                         </div>
                     </div>
                 </div>
 
-                <!-- ==================== PERIOD STATUS ==================== -->
+                <!-- ==================== ACTIVE PERIOD STATUS ==================== -->
                 <div class="col-md-6">
-                    <div class="card card-outline card-secondary">
+                    <div class="card card-outline card-success">
                         <div class="card-header">
-                            <h6 class="card-title"><i class="fa fa-info-circle"></i> Status Overview</h6>
+                            <h6 class="card-title"><i class="fa fa-check-circle"></i> Active Period</h6>
                         </div>
                         <div class="card-body">
                             <?php if ($period): ?>
@@ -121,28 +143,28 @@ $intervention_count = $intervention_qry->fetch_assoc()['cnt'] ?? 0;
                                     <td><?= htmlspecialchars($period['year']) ?></td>
                                 </tr>
                                 <tr>
-                                    <td><strong>Date Range</strong></td>
+                                    <td><strong>Code</strong></td>
+                                    <td><code><?= htmlspecialchars($period['code']) ?></code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Designated Faculty</strong><br><small class="text-muted">(Dept Head, Dean, Director)</small></td>
                                     <td>
-                                        <?php if ($period['start_date'] || $period['end_date']): ?>
-                                            <?= $period['start_date'] ? date('M d, Y', strtotime($period['start_date'])) : '—' ?>
-                                            &mdash;
-                                            <?= $period['end_date'] ? date('M d, Y', strtotime($period['end_date'])) : '—' ?>
-                                        <?php else: ?>
-                                            <span class="text-muted">Not set</span>
-                                        <?php endif; ?>
+                                        <?= $period['start_date'] ? date('M d, Y', strtotime($period['start_date'])) : '—' ?>
+                                        &mdash;
+                                        <?= $period['end_date'] ? date('M d, Y', strtotime($period['end_date'])) : '—' ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Non-Designated / COS</strong><br><small class="text-muted">(no designation + Contract of Service)</small></td>
+                                    <td>
+                                        <?= $period['non_desig_start_date'] ? date('M d, Y', strtotime($period['non_desig_start_date'])) : ($period['start_date'] ? date('M d, Y', strtotime($period['start_date'])) : '—') ?>
+                                        &mdash;
+                                        <?= $period['non_desig_end_date'] ? date('M d, Y', strtotime($period['non_desig_end_date'])) : ($period['end_date'] ? date('M d, Y', strtotime($period['end_date'])) : '—') ?>
                                     </td>
                                 </tr>
                                 <tr>
                                     <td><strong>Auto-Cascade</strong></td>
                                     <td><?= $period['auto_cascade'] ? '<span class="badge badge-success">Enabled</span>' : '<span class="badge badge-secondary">Disabled</span>' ?></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Applies To</strong></td>
-                                    <td>
-                                        <span class="badge badge-primary">IPCR</span>
-                                        <span class="badge badge-warning">DP</span>
-                                        <span class="badge badge-danger">OPCR</span>
-                                    </td>
                                 </tr>
                                 <?php if (!empty($cascade_stats)): ?>
                                 <tr>
@@ -166,7 +188,7 @@ $intervention_count = $intervention_qry->fetch_assoc()['cnt'] ?? 0;
                             </table>
                             <?php else: ?>
                             <div class="alert alert-warning">
-                                <i class="fa fa-exclamation-triangle"></i> No rating period has been set. Please configure one above.
+                                <i class="fa fa-exclamation-triangle"></i> No active rating period. Create one using the form.
                             </div>
                             <?php endif; ?>
                         </div>
@@ -192,7 +214,7 @@ $intervention_count = $intervention_qry->fetch_assoc()['cnt'] ?? 0;
             <!-- ==================== PERIOD HISTORY ==================== -->
             <div class="card card-outline card-dark mt-3">
                 <div class="card-header">
-                    <h6 class="card-title"><i class="fa fa-history"></i> Period History</h6>
+                    <h6 class="card-title"><i class="fa fa-history"></i> All Rating Periods</h6>
                 </div>
                 <div class="card-body table-responsive p-0">
                     <table class="table table-sm table-hover">
@@ -200,33 +222,49 @@ $intervention_count = $intervention_qry->fetch_assoc()['cnt'] ?? 0;
                             <tr>
                                 <th>#</th>
                                 <th>Semester</th>
-                                <th>Year</th>
-                                <th>Start</th>
-                                <th>End</th>
+                                <th>AY</th>
+                                <th>Code</th>
+                                <th>Designated</th>
+                                <th>Non-Desig / COS</th>
                                 <th>Cascade</th>
+                                <th>Active</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php 
-                            $hist_qry = $conn->query("SELECT * FROM rating_period ORDER BY id DESC");
-                            if ($hist_qry && $hist_qry->num_rows > 0):
+                            <?php if (!empty($all_periods)):
                                 $num = 1;
-                                while ($h = $hist_qry->fetch_assoc()):
-                                    $is_current = ($period && $period['id'] == $h['id']);
+                                foreach ($all_periods as $h):
+                                    $is_active = ($h['is_active'] == 1);
                             ?>
-                            <tr class="<?= $is_current ? 'table-info' : '' ?>">
+                            <tr class="<?= $is_active ? 'table-success' : '' ?>">
                                 <td><?= $num++ ?></td>
                                 <td><?= htmlspecialchars($h['semester']) ?></td>
                                 <td><?= htmlspecialchars($h['year']) ?></td>
-                                <td><?= $h['start_date'] ? date('M d, Y', strtotime($h['start_date'])) : '—' ?></td>
-                                <td><?= $h['end_date'] ? date('M d, Y', strtotime($h['end_date'])) : '—' ?></td>
+                                <td><code><?= htmlspecialchars($h['code']) ?></code></td>
+                                <td>
+                                    <?= $h['start_date'] ? date('M d, Y', strtotime($h['start_date'])) : '—' ?>
+                                    &ndash;
+                                    <?= $h['end_date'] ? date('M d, Y', strtotime($h['end_date'])) : '—' ?>
+                                </td>
+                                <td>
+                                    <?= $h['non_desig_start_date'] ? date('M d, Y', strtotime($h['non_desig_start_date'])) : ($h['start_date'] ? date('M d, Y', strtotime($h['start_date'])) : '—') ?>
+                                    &ndash;
+                                    <?= $h['non_desig_end_date'] ? date('M d, Y', strtotime($h['non_desig_end_date'])) : ($h['end_date'] ? date('M d, Y', strtotime($h['end_date'])) : '—') ?>
+                                </td>
                                 <td><?= $h['auto_cascade'] ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-secondary">No</span>' ?></td>
+                                <td><?= $is_active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-secondary">—</span>' ?></td>
+                                <td>
+                                    <button class="btn btn-xs btn-info" onclick="editPeriod(<?= $h['id'] ?>)">
+                                        <i class="fa fa-edit"></i> Edit
+                                    </button>
+                                </td>
                             </tr>
                             <?php 
-                                endwhile;
+                                endforeach;
                             else:
                             ?>
-                            <tr><td colspan="6" class="text-center text-muted">No periods yet.</td></tr>
+                            <tr><td colspan="9" class="text-center text-muted">No periods yet. Create one above.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
@@ -238,12 +276,79 @@ $intervention_count = $intervention_qry->fetch_assoc()['cnt'] ?? 0;
 </div>
 
 <script>
-function update_period() {
+// Store all periods as JSON for edit functionality
+var allPeriods = <?= json_encode($all_periods) ?>;
+
+function autoFillDates() {
     var semester = $('#period_semester').val();
     var year = $('#period_year').val();
+    if (!semester || !year) return;
+    
+    var parts = year.split('-');
+    var startYear = parseInt(parts[0]);
+    var endYear = parseInt(parts[1]);
+    
+    if (semester === '1st Semester') {
+        // Designated: Jul 1 – Dec 31 | Non-desig/COS: Aug 1 – Dec 31
+        $('#period_start').val(startYear + '-07-01');
+        $('#period_end').val(startYear + '-12-31');
+        $('#non_desig_start').val(startYear + '-08-01');
+        $('#non_desig_end').val(startYear + '-12-31');
+    } else if (semester === '2nd Semester') {
+        // Designated: Jan 1 – Jun 30 | Non-desig/COS: Jan 1 – May 31
+        $('#period_start').val(endYear + '-01-01');
+        $('#period_end').val(endYear + '-06-30');
+        $('#non_desig_start').val(endYear + '-01-01');
+        $('#non_desig_end').val(endYear + '-05-31');
+    }
+}
+
+function editPeriod(id) {
+    var p = allPeriods.find(function(item) { return item.id == id; });
+    if (!p) return;
+    
+    $('#period_id').val(p.id);
+    $('#period_semester').val(p.semester);
+    $('#period_year').val(p.year);
+    $('#period_start').val(p.start_date || '');
+    $('#period_end').val(p.end_date || '');
+    $('#non_desig_start').val(p.non_desig_start_date || '');
+    $('#non_desig_end').val(p.non_desig_end_date || '');
+    $('#period_auto_cascade').prop('checked', p.auto_cascade == 1);
+    
+    $('#formTitle').text('Edit Rating Period');
+    $('#saveBtnLabel').text('Update Period');
+    $('#clearBtn').show();
+    
+    // Scroll to form
+    $('html, body').animate({ scrollTop: 0 }, 300);
+}
+
+function clearForm() {
+    $('#period_id').val(0);
+    $('#period_semester').val('');
+    $('#period_year').val('');
+    $('#period_start').val('');
+    $('#period_end').val('');
+    $('#non_desig_start').val('');
+    $('#non_desig_end').val('');
+    $('#period_auto_cascade').prop('checked', false);
+    
+    $('#formTitle').text('Set Rating Period');
+    $('#saveBtnLabel').text('Save Period');
+    $('#clearBtn').hide();
+}
+
+function save_period() {
+    var semester = $('#period_semester').val();
+    var year = $('#period_year').val();
+    var periodId = $('#period_id').val();
     var startDate = $('#period_start').val();
     var endDate = $('#period_end').val();
+    var nonDesigStart = $('#non_desig_start').val();
+    var nonDesigEnd = $('#non_desig_end').val();
     var autoCascade = $('#period_auto_cascade').is(':checked') ? 1 : 0;
+    var code = semester.replace(/ /g, '') + '-' + year;
 
     if (!semester || !year) {
         alert_toast("Please fill out semester and year", "danger");
@@ -255,19 +360,22 @@ function update_period() {
         url: "ajax.php?action=update_period",
         method: "POST",
         data: {
-            period_type: 'ALL',
+            period_id: periodId,
             semester: semester,
             year: year,
+            code: code,
             start_date: startDate,
             end_date: endDate,
+            non_desig_start_date: nonDesigStart,
+            non_desig_end_date: nonDesigEnd,
             auto_cascade: autoCascade
         },
         success: function(resp) {
             if (resp == 1) {
-                alert_toast("Period updated (IPCR + DP + OPCR)", "success");
-                setTimeout(function() { location.reload(); }, 1500);
+                alert_toast("Period saved successfully", "success");
+                setTimeout(function() { location.reload(); }, 1000);
             } else {
-                alert_toast("Error: " + resp, "danger");
+                alert_toast("Error saving period", "danger");
                 end_load();
             }
         },
@@ -311,5 +419,4 @@ function trigger_cascade() {
 </script>
 
 <style>
-.card-header { background: linear-gradient(135deg, #17a2b8 0%, #6610f2 100%); color: white; }
 </style>

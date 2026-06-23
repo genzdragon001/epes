@@ -80,7 +80,6 @@ if(isset($_SESSION['login_id'])){
           <label for="">Login As</label>
           <select name="login" id="" class="custom-select custom-select-sm">
             <option value="0">Faculty</option>
-            <option value="1">Dean/Dept Head</option>
             <option value="2">Admin</option>
           </select>
         </div>

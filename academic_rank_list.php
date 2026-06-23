@@ -86,5 +86,4 @@ function delete_academic_rank($id){
 </script>
 
 <style>
-.card-header { background: linear-gradient(135deg, #17a2b8 0%, #6610f2 100%); color: white; }
 </style>

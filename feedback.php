@@ -61,7 +61,7 @@ if ($login_type == 0) {
 
 // Get available rating periods
 $periods = [];
-$rp_qry = $conn->query("SELECT DISTINCT rating_period FROM ratings WHERE period_type = 'IPCR' ORDER BY rating_period DESC");
+$rp_qry = $conn->query("SELECT DISTINCT rating_period FROM ratings WHERE efficiency > 0 AND timeliness > 0 AND quality > 0 ORDER BY rating_period DESC");
 while ($row = $rp_qry->fetch_assoc()) {
     $periods[] = $row['rating_period'];
 }

@@ -51,6 +51,10 @@ while ($row = $alloc_qry->fetch_assoc()) {
     }
     $allocations[$key] = floatval($row['percentage']);
 }
+// Normalize: map core_instruction -> core_instructions (plural) for consistency
+if (isset($allocations['core_instruction']) && !isset($allocations['core_instructions'])) {
+    $allocations['core_instructions'] = $allocations['core_instruction'];
+}
 
 // Define category flags (same as rating.php)
 $has_strategic = isset($allocations['strategic']) && $allocations['strategic'] > 0;
@@ -89,28 +93,11 @@ if ($is_dept_head_or_director && !$show_strategic) {
         $show_strategic = true;
     }
 }
-$alloc_qry = $conn->query("
-    SELECT * FROM percentage_allocation 
-    WHERE position_id = $emp_position_id
-    AND $desig_condition
-    AND is_active = 1
-    ORDER BY position_id ASC
-");
-while ($row = $alloc_qry->fetch_assoc()) {
-    $key = $row['category'];
-    if ($row['sub_category']) {
-        $key .= '_' . $row['sub_category'];
-    }
-    $allocations[$key] = floatval($row['percentage']);
-}
-
 $rating_periods = [];
 $rp_qry = $conn->query("SELECT * FROM rating_period ORDER BY year DESC, semester DESC");
 while ($row = $rp_qry->fetch_assoc()) {
     $rating_periods[] = $row;
 }
-
-$faculty_id = intval($_SESSION['login_id'] ?? 0);
 
 $selected_period = $_GET['period'] ?? '';
 $where_clause = "WHERE r.employee_id = $faculty_id";
@@ -510,7 +497,9 @@ $movs_qry = $conn->query("
                     $supp_val = floatval($supp_ave['ave']);
                     
                     $str_pct = $allocations['strategic'] ?? 0;
-                    $inst_pct = $allocations['core_instructions'] ?? 0;
+                    $ter_pct = $allocations['core_ter'] ?? 0;
+                    $instr_pct_raw = $allocations['core_instructions'] ?? $allocations['core_instruction'] ?? 0;
+                    $inst_pct = $ter_pct + $instr_pct_raw;
                     $core_pct  = $allocations['core_total'] ?? 0;
                     $res_pct = $allocations['core_research'] ?? 0;
                     $ext_pct = $allocations['core_extension'] ?? 0;
@@ -595,23 +584,6 @@ $movs_qry = $conn->query("
                     $str_pct_calc = $show_strategic_pct ? $str_pct : 0;
                     $supp_pct_calc = $show_support_pct ? $supp_pct : 0;
                     $total = ($str_val * ($str_pct_calc / 100)) + $core_weighted + ($supp_val * ($supp_pct_calc / 100));
-                    
-                    error_log("=== ARCHIVES CALCULATION ===");
-                    error_log("Position: $emp_position_id, Designation: $emp_designation_id, is_instructor: $is_instructor, is_cos: $is_cos, has_designation: $has_designation");
-                    if ($has_designation) {
-                        error_log("Formula: WITH designation - Strategic + Core + Support");
-                        error_log("Strategic: pct=$str_pct, contrib=" . ($str_val * ($str_pct / 100)));
-                        error_log("Core: function=$core_function, pct=$core_pct, contrib=" . ($core_function * ($core_pct / 100)));
-                        error_log("Support: pct=$supp_pct, contrib=" . ($supp_val * ($supp_pct / 100)));
-                    } else {
-                        error_log("Formula: WITHOUT designation (Instructor/COS) - Core(90%)(Instr 60% + Res 20% + Ext 20%) + Support(10%)");
-                        error_log("Instruction: rating={$inst_rating['instruction_rating']} × 0.60 = " . ($inst_rating['instruction_rating'] * 0.60));
-                        error_log("Research: {$res_ave['ave']} × 0.20 = " . ($res_ave['ave'] * 0.20));
-                        error_log("Extension: {$ext_ave['ave']} × 0.20 = " . ($ext_ave['ave'] * 0.20));
-                        error_log("Core Function: $core_function × 0.90 = " . ($core_function * 0.90));
-                        error_log("Support: {$supp_ave['ave']} × 0.10 = " . ($supp_ave['ave'] * 0.10));
-                    }
-                    error_log("FINAL TOTAL: $total");
                     
                     $avg_score = $total;
                     ?>

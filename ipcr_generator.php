@@ -70,7 +70,6 @@ class IPCRGenerator {
             LEFT JOIN task_progress tp ON tp.task_id = t.id AND tp.faculty_id = r.employee_id AND tp.rating_period = r.rating_period
             WHERE r.employee_id = ? 
               AND r.rating_period = ?
-              AND r.period_type = 'IPCR'
               AND r.efficiency > 0 AND r.timeliness > 0 AND r.quality > 0
             ORDER BY FIELD(t.category, 'strategic', 'core', 'support'), t.sub_category, t.id
         ");
@@ -668,7 +667,7 @@ class IPCRGenerator {
             // Auto-archive to performance_documents table
             if ($period_id === null) {
                 // Look up period_id from code
-                $stmt = $this->db->prepare("SELECT id FROM rating_period WHERE period_type='IPCR' AND CONCAT(semester, '-', year) = ? LIMIT 1");
+                $stmt = $this->db->prepare("SELECT id FROM rating_period WHERE CONCAT(semester, '-', year) = ? LIMIT 1");
                 $stmt->bind_param('s', $rating_period_code);
                 $stmt->execute();
                 $rp = $stmt->get_result()->fetch_assoc();

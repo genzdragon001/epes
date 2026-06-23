@@ -12,15 +12,16 @@ if (!isset($_SESSION['login_id'])) {
 }
 
 $login_type = $_SESSION['login_type'] ?? -1;
+$is_evaluator_flag = !empty($_SESSION['is_evaluator']);
 
 // Only Dean and Admin can view OPCR
-if ($login_type != 1 && $login_type != 2) {
+if ($login_type != 1 && $login_type != 2 && !($login_type == 0 && $is_evaluator_flag)) {
     echo '<div class="col-lg-12"><div class="alert alert-danger">Access denied. Only Deans and Administrators can view OPCR.</div></div>';
     return;
 }
 
 // If evaluator, restrict Program Head/Dept Head from OPCR
-if ($login_type == 1) {
+if ($login_type == 1 || ($login_type == 0 && $is_evaluator_flag)) {
     require_once 'auth_helper.php';
     if (!is_dean($conn)) {
         echo '<div class="col-lg-12"><div class="alert alert-danger">Access denied. Only Deans can view OPCR forms.</div></div>';
@@ -33,8 +34,7 @@ $opcr_periods = [];
 $opcr_qry = $conn->query("
     SELECT rp.id, rp.semester, rp.year, rp.start_date, rp.end_date
     FROM rating_period rp
-    WHERE rp.period_type = 'OPCR'
-    ORDER BY rp.year DESC, FIELD(rp.semester, '1st Semester', 'Summer', '2nd Semester') DESC
+    ORDER BY rp.year DESC, FIELD(rp.semester, '1st Semester', '2nd Semester') DESC
 ");
 while ($row = $opcr_qry->fetch_assoc()) {
     $opcr_periods[] = $row;

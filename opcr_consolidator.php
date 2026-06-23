@@ -101,7 +101,6 @@ class OPCRGenerator {
                 INNER JOIN ratings r ON r.employee_id = e.id
                 INNER JOIN rating_period rp ON rp.id = ?
                 WHERE r.rating_period = CONCAT(rp.semester, '-', rp.year)
-                  AND r.period_type = 'IPCR'
                 GROUP BY e.department_id
             ) fc ON fc.department_id = cr.department_id
             WHERE cr.target_period_id = ? AND cr.level = 'DP'

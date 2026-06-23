@@ -265,7 +265,7 @@ Class Action {
 	
 	function login() {
 		extract($_POST);
-		$tables = array("employee_list", "evaluator_list", "users");
+		$tables = array("employee_list", "users");
 		$ip_address = $_SERVER['REMOTE_ADDR'] ?? '127.0.0.1';
 		$user_agent = $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown';
 	
@@ -359,6 +359,30 @@ Class Action {
 				}
 			}
 			$_SESSION['login_type'] = $login;
+
+			// If faculty login, check if they have an evaluator designation (Dean, Dept Head, VP, Director)
+			$_SESSION['is_evaluator'] = false;
+			$_SESSION['evaluator_role'] = '';
+			if ($login == 0) {
+				$desig_id = intval($user['designation_id'] ?? 0);
+				$desig_qry = $this->db->query("SELECT designation FROM designation_list WHERE id = $desig_id");
+				if ($desig_qry && $desig_row = $desig_qry->fetch_assoc()) {
+					$desig_name = strtolower($desig_row['designation']);
+					if (strpos($desig_name, 'dean') !== false) {
+						$_SESSION['is_evaluator'] = true;
+						$_SESSION['evaluator_role'] = 'dean';
+					} elseif (strpos($desig_name, 'department head') !== false) {
+						$_SESSION['is_evaluator'] = true;
+						$_SESSION['evaluator_role'] = 'dept_head';
+					} elseif (strpos($desig_name, 'vice president') !== false) {
+						$_SESSION['is_evaluator'] = true;
+						$_SESSION['evaluator_role'] = 'vp';
+					} elseif (strpos($desig_name, 'director') !== false) {
+						$_SESSION['is_evaluator'] = true;
+						$_SESSION['evaluator_role'] = 'director';
+					}
+				}
+			}
 
 			// Session hardening: regenerate session id on privilege change/login
 			session_regenerate_id(true);
@@ -1180,18 +1204,8 @@ Class Action {
 			$rating_period = 'UNKNOWN';
 		}
 
-		// Determine current period type for rating tracking
 		// Individual ratings are always IPCR-level (DP/OPCR are computed aggregates)
 		$period_type = 'IPCR';
-		if (!empty($rating_period)) {
-			// Must match IPCR specifically since DP/OPCR share same semester+year
-			$stmt = $this->db->prepare("SELECT period_type FROM rating_period WHERE period_type = 'IPCR' AND CONCAT(semester, '-', year) = ? LIMIT 1");
-			$stmt->bind_param('s', $rating_period);
-			$stmt->execute();
-			$rp = $stmt->get_result()->fetch_assoc();
-			$stmt->close();
-			$period_type = $rp['period_type'] ?? 'IPCR';
-		}
 	
 		// Check if rating already exists
 		$stmt = $this->db->prepare("SELECT id FROM ratings WHERE task_id = ? AND employee_id = ?");
@@ -1239,7 +1253,7 @@ Class Action {
 				// Update existing comment
 				$comment_row = $check->fetch_assoc();
 				$comment_id = $comment_row['id'];
-				$stmt = $this->db->prepare("UPDATE comments SET comment_text = ?, date_updated = CURRENT_TIMESTAMP WHERE id = ?");
+				$stmt = $this->db->prepare("UPDATE comments SET comment_text = ? WHERE id = ?");
 				$stmt->bind_param('si', $comment, $comment_id);
 			} else {
 				// Insert new comment
@@ -1508,14 +1522,6 @@ Class Action {
     $stmt->close();
 
     $period_type = 'IPCR';
-    if (!empty($rating_period)) {
-    	$stmt = $this->db->prepare("SELECT period_type FROM rating_period WHERE period_type = 'IPCR' AND CONCAT(semester, '-', year) = ? LIMIT 1");
-    	$stmt->bind_param('s', $rating_period);
-    	$stmt->execute();
-    	$rp = $stmt->get_result()->fetch_assoc();
-    	$stmt->close();
-    	$period_type = $rp['period_type'] ?? 'IPCR';
-    }
 
     if ($check && $check->num_rows > 0) {
     	$rating_id = $check->fetch_assoc()['id'];
@@ -1923,14 +1929,41 @@ function submit_file() {
 			return 0; // missing data
 		}
 	
-		// Always update the latest record in rating_period (highest ID)
-		$qry = $this->db->query("UPDATE rating_period 
-								 SET semester = '$semester', year = '$year' 
-								 WHERE id = '1'");
+		$period_id = intval($_POST['period_id'] ?? 0);
+		$start_date = $this->db->real_escape_string($_POST['start_date'] ?? '');
+		$end_date = $this->db->real_escape_string($_POST['end_date'] ?? '');
+		$non_desig_start_date = $this->db->real_escape_string($_POST['non_desig_start_date'] ?? '');
+		$non_desig_end_date = $this->db->real_escape_string($_POST['non_desig_end_date'] ?? '');
+		$auto_cascade = intval($_POST['auto_cascade'] ?? 0);
+		$code = $this->db->real_escape_string($_POST['code'] ?? ($semester . '-' . $year));
+		
+		// Deactivate all periods, then activate the target one
+		$this->db->query("UPDATE rating_period SET is_active = 0");
+		
+		if ($period_id > 0) {
+			// Update existing period
+			$qry = $this->db->query("UPDATE rating_period 
+				SET semester = '$semester', year = '$year', code = '$code',
+				    start_date = " . ($start_date ? "'$start_date'" : "NULL") . ",
+				    end_date = " . ($end_date ? "'$end_date'" : "NULL") . ",
+				    non_desig_start_date = " . ($non_desig_start_date ? "'$non_desig_start_date'" : "NULL") . ",
+			    non_desig_end_date = " . ($non_desig_end_date ? "'$non_desig_end_date'" : "NULL") . ",
+				    auto_cascade = $auto_cascade,
+				    is_active = 1
+				WHERE id = $period_id");
+		} else {
+			// Insert new period
+			$qry = $this->db->query("INSERT INTO rating_period 
+				(semester, year, code, start_date, end_date, non_desig_start_date, non_desig_end_date, auto_cascade, is_active)
+				VALUES ('$semester', '$year', '$code', " . 
+				($start_date ? "'$start_date'" : "NULL") . ", " .
+				($end_date ? "'$end_date'" : "NULL") . ", " .
+				($non_desig_start_date ? "'$non_desig_start_date'" : "NULL") . ", " .
+				($non_desig_end_date ? "'$non_desig_end_date'" : "NULL") . ", $auto_cascade, 1)");
+		}
 	
 		if($qry){
-			$_SESSION['current_semester'] = $semester;
-			$_SESSION['current_year'] = $year;
+			$_SESSION['rating_period'] = $code;
 			return 1;
 		} else {
 			return 0;
@@ -2358,87 +2391,34 @@ function submit_file() {
 	}
 
 	/**
-	 * Update/create rating periods. When period_type='ALL', creates IPCR+DP+OPCR in one save.
-	 */
-	function update_period(){
-		extract($_POST);
-		
-		if(empty($semester) || empty($year)){
-			return 0;
-		}
-		
-		$types_to_update = ['IPCR', 'DP', 'OPCR'];
-		if(!empty($period_type) && $period_type !== 'ALL'){
-			// Single type update
-			$types_to_update = [in_array($period_type, $types_to_update) ? $period_type : 'IPCR'];
-		}
-		
-		$start_date = !empty($start_date) ? $start_date : null;
-		$end_date = !empty($end_date) ? $end_date : null;
-		$auto_cascade = !empty($auto_cascade) ? 1 : 0;
-		$ok = true;
-		
-		foreach($types_to_update as $pt){
-			$code = $pt . '-' . str_replace(' ', '', $semester) . '-' . $year;
-			
-			$stmt = $this->db->prepare(
-				"SELECT id FROM rating_period WHERE period_type = ? AND semester = ? AND year = ? LIMIT 1"
-			);
-			$stmt->bind_param('sss', $pt, $semester, $year);
-			$stmt->execute();
-			$existing = $stmt->get_result();
-			$stmt->close();
-			
-			if($existing && $existing->num_rows > 0){
-				$row = $existing->fetch_assoc();
-				$stmt = $this->db->prepare(
-					"UPDATE rating_period SET code = ?, start_date = ?, end_date = ?, auto_cascade = ? WHERE id = ?"
-				);
-				$stmt->bind_param('sssii', $code, $start_date, $end_date, $auto_cascade, $row['id']);
-			} else {
-				$stmt = $this->db->prepare(
-					"INSERT INTO rating_period (semester, year, code, period_type, start_date, end_date, auto_cascade) 
-					 VALUES (?, ?, ?, ?, ?, ?, ?)"
-				);
-				$stmt->bind_param('ssssssi', $semester, $year, $code, $pt, $start_date, $end_date, $auto_cascade);
-			}
-			$ok = $stmt->execute() && $ok;
-			$stmt->close();
-		}
-		
-		return $ok ? 1 : 0;
-	}
-	
-	/**
 	 * Compute cascading: IPCR → DP (per-department) + IPCR → OPCR (office-wide)
 	 * Both DP and OPCR aggregate from individual IPCR ratings (not chained).
 	 */
 	function cascade_compute(){
 		header('Content-Type: application/json');
 		
-		// Get current active period for each type (latest per type)
-		$periods = [];
-		$qry = $this->db->query(
-			"SELECT id, period_type, semester, year, auto_cascade 
+		// Get active period
+		$period = $this->db->query(
+			"SELECT id, semester, year, auto_cascade 
 			 FROM rating_period 
-			 WHERE (period_type, id) IN (
-				 SELECT period_type, MAX(id) FROM rating_period GROUP BY period_type
-			 )"
-		);
-		while($row = $qry->fetch_assoc()){
-			$periods[$row['period_type']] = $row;
+			 WHERE is_active = 1
+			 LIMIT 1"
+		)->fetch_assoc();
+		
+		if (!$period) {
+			echo json_encode(['status' => 'error', 'message' => 'No active rating period']);
+			return;
 		}
 		
 		$dp_count = 0;
 		$opcr_count = 0;
 		$intervention_count = 0;
 		
+		$ipcr_code = $period['semester'] . '-' . $period['year'];
+		
 		// ---- STEP 1: IPCR → DP ----
-		// For each faculty member with IPCR ratings, compute department average
-		if(isset($periods['IPCR']) && isset($periods['DP']) && $periods['IPCR']['auto_cascade']){
-			$ipcr_id = $periods['IPCR']['id'];
-			$dp_id = $periods['DP']['id'];
-			$ipcr_code = $periods['IPCR']['semester'] . '-' . $periods['IPCR']['year'];
+		if($period['auto_cascade']){
+			$period_id = $period['id'];
 			
 			// Get all departments that have rated faculty
 			$dept_qry = $this->db->query("
@@ -2486,7 +2466,7 @@ function submit_file() {
 							overall_rating = VALUES(overall_rating),
 							computed_at = CURRENT_TIMESTAMP
 					");
-					$stmt->bind_param('iiidddd', $ipcr_id, $dp_id, $dept_id, $eff, $time, $qual, $overall);
+					$stmt->bind_param('iiidddd', $period_id, $period_id, $dept_id, $eff, $time, $qual, $overall);
 					$stmt->execute();
 					$stmt->close();
 					$dp_count++;
@@ -2497,10 +2477,8 @@ function submit_file() {
 		// ---- STEP 2: IPCR → OPCR (directly from ALL individual IPCR ratings) ----
 		// OPCR is the office-wide average of ALL faculty IPCR ratings —
 		// not an average of department DP averages. DP is per-department only.
-		if(isset($periods['IPCR']) && isset($periods['OPCR']) && $periods['IPCR']['auto_cascade']){
-			$ipcr_id = $periods['IPCR']['id'];
-			$opcr_id = $periods['OPCR']['id'];
-			$ipcr_code = $periods['IPCR']['semester'] . '-' . $periods['IPCR']['year'];
+		if($period['auto_cascade']){
+			$ipcr_id = $period['id'];
 			
 			// Aggregate ALL individual IPCR ratings office-wide
 			$opcr_qry = $this->db->query("
@@ -2534,7 +2512,7 @@ function submit_file() {
 						overall_rating = VALUES(overall_rating),
 						computed_at = CURRENT_TIMESTAMP
 				");
-				$stmt->bind_param('iidddd', $ipcr_id, $opcr_id, $eff, $time, $qual, $overall);
+				$stmt->bind_param('iidddd', $ipcr_id, $ipcr_id, $eff, $time, $qual, $overall);
 				$stmt->execute();
 				$stmt->close();
 				$opcr_count = 1;
@@ -2542,12 +2520,12 @@ function submit_file() {
 		}
 		
 		// ---- STEP 3: Intervention Flags (3 consecutive low IPCR) ----
-		// Get all IPCR periods ordered by year, semester
+		// Get all periods ordered by year, semester
 		$ipcr_periods_qry = $this->db->query("
 			SELECT id, semester, year, CONCAT(semester, '-', year) as period_code
 			FROM rating_period 
-			WHERE period_type = 'IPCR' AND is_active = 1
-			ORDER BY year ASC, FIELD(semester, '1st Semester', 'Summer', '2nd Semester')
+			WHERE is_active = 1
+			ORDER BY year ASC, FIELD(semester, '1st Semester', '2nd Semester')
 		");
 		$ipcr_periods = [];
 		while($rp = $ipcr_periods_qry->fetch_assoc()){
@@ -2555,13 +2533,13 @@ function submit_file() {
 		}
 		
 		if(count($ipcr_periods) >= 3){
-			// Get all faculty with ratings across IPCR periods
-			$fac_qry = $this->db->query("SELECT DISTINCT employee_id FROM ratings WHERE period_type = 'IPCR'");
+			// Get all faculty with ratings
+			$fac_qry = $this->db->query("SELECT DISTINCT employee_id FROM ratings WHERE efficiency > 0 AND timeliness > 0 AND quality > 0");
 			while($fac = $fac_qry->fetch_assoc()){
 				$eid = $fac['employee_id'];
 				$ratings_history = [];
 				
-				// Get rating for each IPCR period for this faculty
+				// Get rating for each period for this faculty
 				for($i = 0; $i < count($ipcr_periods); $i++){
 					$pc = $ipcr_periods[$i]['period_code'];
 					$avg_r = $this->db->query("
@@ -2618,7 +2596,7 @@ function submit_file() {
 			'dp_count' => $dp_count,
 			'opcr_count' => $opcr_count,
 			'intervention_count' => $intervention_count,
-			'periods_used' => $periods
+			'period' => $period
 		]);
 	}
 

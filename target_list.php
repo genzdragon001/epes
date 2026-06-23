@@ -425,7 +425,6 @@ while ($row = $alloc_qry->fetch_assoc()) {
 </div>
 
 <style>
-.card-header { background: linear-gradient(135deg, #17a2b8 0%, #6610f2 100%); color: white; }
 table p { margin: unset !important; }
 table td { vertical-align: middle !important; }
 .table-hover tbody tr:hover { background-color: rgba(0,123,255,.05); }

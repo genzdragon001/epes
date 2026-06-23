@@ -1,32 +1,37 @@
 <?php include 'db_connect.php';
 
-// Access: admin (2) or dean (1) only
-if (!isset($_SESSION['login_type']) || ($_SESSION['login_type'] != 2 && $_SESSION['login_type'] != 1)) {
+// Access: admin (2), dean (1), or faculty with evaluator designation
+$login_type = $_SESSION['login_type'] ?? -1;
+$is_evaluator_flag = !empty($_SESSION['is_evaluator']);
+if ($login_type != 2 && $login_type != 1 && !($login_type == 0 && $is_evaluator_flag)) {
     echo "<script>alert('Access denied'); window.location.href='index.php';</script>";
     exit;
 }
 
-$login_type = $_SESSION['login_type'];
 $eval_id = intval($_SESSION['login_id']);
 $is_admin = ($login_type == 2);
+$is_dean = false;
 $dept_id = 0;
 
-if ($login_type == 1) {
-    $stmt = $conn->prepare("SELECT type, department_id FROM evaluator_list WHERE id = ?");
-    $stmt->bind_param("i", $eval_id);
-    $stmt->execute();
-    $stmt->bind_result($eval_type, $dept_id);
-    $stmt->fetch();
-    $stmt->close();
-    $is_dean = ($eval_type == 1);
+if ($login_type == 1 || ($login_type == 0 && $is_evaluator_flag)) {
+    require_once 'auth_helper.php';
+    $is_dean = is_dean($conn);
+    if (!$is_dean) {
+        $stmt = $conn->prepare("SELECT department_id FROM employee_list WHERE id = ?");
+        $stmt->bind_param("i", $eval_id);
+        $stmt->execute();
+        $stmt->bind_result($dept_id);
+        $stmt->fetch();
+        $stmt->close();
+    }
 }
 
 // Get all IPCR periods
 $periods_qry = $conn->query("
     SELECT id, semester, year, CONCAT(semester, ' ', year) as label,
            CONCAT(CASE semester WHEN '1st Semester' THEN '1' WHEN '2nd Semester' THEN '2' WHEN 'Summer' THEN 'S' ELSE '1' END, '-', SUBSTRING(year,3,2), SUBSTRING(year,8,2)) as period_code
-    FROM rating_period WHERE period_type = 'IPCR'
-    ORDER BY year ASC, FIELD(semester, '1st Semester', 'Summer', '2nd Semester')
+    FROM rating_period
+    ORDER BY year ASC, FIELD(semester, '1st Semester', '2nd Semester')
 ");
 $periods = [];
 $period_codes = [];
@@ -44,7 +49,7 @@ $fac_qry = $conn->query("
     FROM employee_list e
     LEFT JOIN department_list d ON e.department_id = d.id
     INNER JOIN ratings r ON r.employee_id = e.id
-    WHERE r.period_type = 'IPCR'
+    WHERE r.efficiency > 0
     $dept_filter
     ORDER BY e.lastname
 ");

@@ -148,7 +148,6 @@ $qry = $conn->query("
     .small-box { border-radius: 10px; }
     .small-box h3 { font-size: 2.5rem; }
     .card { border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-    .card-header { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; border-radius: 10px 10px 0 0; }
     .card-header h5 { margin: 0; font-weight: 600; }
     .table thead th { border-bottom: 2px solid #dee2e6; }
     .badge-pill { font-size: 0.85rem; font-weight: 500; }

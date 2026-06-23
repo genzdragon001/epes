@@ -1,14 +1,33 @@
 <?php
 // === EVALUATOR DASHBOARD (Dean + Dept Head) ===
 $eval_id = intval($_SESSION['login_id']);
-$stmt_type = $conn->prepare("SELECT type, department_id, designation_id FROM evaluator_list WHERE id=?");
-$stmt_type->bind_param("i", $eval_id);
-$stmt_type->execute();
-$stmt_type->bind_result($eval_type, $eval_dept_id, $eval_desig_id);
-$stmt_type->fetch();
-$stmt_type->close();
-$is_dean = ($eval_type == 1);
-$is_vp   = ($eval_desig_id == 4); // Vice President for Administration and Finance
+$eval_dept_id = 0;
+$is_dean = false;
+$is_vp = false;
+
+// Check if this is a merged faculty-evaluator (session-based) or legacy evaluator
+if (!empty($_SESSION['is_evaluator'])) {
+    $eval_role = $_SESSION['evaluator_role'] ?? '';
+    $is_dean = ($eval_role === 'dean');
+    $is_vp = ($eval_role === 'vp');
+    // Get department from employee_list
+    $stmt = $conn->prepare("SELECT department_id FROM employee_list WHERE id = ?");
+    $stmt->bind_param("i", $eval_id);
+    $stmt->execute();
+    $stmt->bind_result($eval_dept_id);
+    $stmt->fetch();
+    $stmt->close();
+} else {
+    // Legacy evaluator (login_type=1)
+    $stmt_type = $conn->prepare("SELECT type, department_id, designation_id FROM evaluator_list WHERE id=?");
+    $stmt_type->bind_param("i", $eval_id);
+    $stmt_type->execute();
+    $stmt_type->bind_result($eval_type, $eval_dept_id, $eval_desig_id);
+    $stmt_type->fetch();
+    $stmt_type->close();
+    $is_dean = ($eval_type == 1);
+    $is_vp   = ($eval_desig_id == 4);
+} // Vice President for Administration and Finance
 
 if($is_dean) {
     $total_faculty      = $conn->query("SELECT COUNT(*) FROM employee_list WHERE id != $eval_id")->fetch_row()[0];
@@ -93,7 +112,7 @@ if(!$is_dean) {
         FROM employee_list e
         LEFT JOIN designation_list d ON e.designation_id=d.id
         LEFT JOIN position_list p ON e.position_id=p.id
-        WHERE e.department_id=$eval_dept_id
+        WHERE e.department_id=$eval_dept_id AND e.id != $eval_id
         ORDER BY e.lastname, e.firstname
     ");
     while($f = $fq->fetch_assoc()) {
@@ -123,6 +142,7 @@ if(!$is_dean) {
 
         $fac_table[] = [
             'name'          => $f['lastname'] . ', ' . $f['firstname'],
+            'faculty_id'    => $f['id'],
             'designation'   => $f['designation_name'] ?? 'Faculty',
             'position'      => $f['position_name'] ?? '',
             'targets'       => $targets,
@@ -146,14 +166,14 @@ $recent = $conn->query("
 
 <!-- 4 STAT CARDS -->
 <div class="row mb-4">
-    <div class="col-xl-3 col-md-6 mb-3">
+    <div class="col-xl-3 col-md-6 col-6 mb-3">
         <div class="stat-card accent-blue">
             <div class="stat-icon blue"><i class="fas fa-users"></i></div>
             <div class="stat-value"><?= $total_faculty ?></div>
             <div class="stat-label">Faculty<?= $is_dean ? ' (All)' : ' (Dept)' ?></div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6 mb-3">
+    <div class="col-xl-3 col-md-6 col-6 mb-3">
         <div class="stat-card accent-amber">
             <div class="stat-icon amber"><i class="fas fa-clock"></i></div>
             <div class="stat-value"><?= $for_verif ?></div>
@@ -163,14 +183,14 @@ $recent = $conn->query("
             <?php endif; ?>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6 mb-3">
+    <div class="col-xl-3 col-md-6 col-6 mb-3">
         <div class="stat-card accent-green">
             <div class="stat-icon green"><i class="fas fa-check-circle"></i></div>
             <div class="stat-value"><?= $verified ?></div>
             <div class="stat-label">Verified</div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6 mb-3">
+    <div class="col-xl-3 col-md-6 col-6 mb-3">
         <div class="stat-card accent-teal">
             <div class="stat-icon teal"><i class="fas fa-chart-line"></i></div>
             <div class="stat-value"><?= $completion_pct ?>%</div>
@@ -186,7 +206,7 @@ $recent = $conn->query("
 <div class="row mb-4">
     <?php if($is_dean): ?>
     <!-- DEAN: Dept Head completion table + Status donut -->
-    <div class="col-lg-8 mb-3">
+    <div class="col-lg-8 col-12 mb-3">
         <div class="chart-card">
             <div class="chart-card-header">
                 <span><i class="fas fa-user-tie mr-2" style="color:#4361ee;"></i>Program / Department Heads</span>
@@ -237,7 +257,7 @@ $recent = $conn->query("
             </div>
         </div>
     </div>
-    <div class="col-lg-4 mb-3">
+    <div class="col-lg-4 col-12 mb-3">
         <div class="chart-card">
             <div class="chart-card-header">
                 <span><i class="fas fa-chart-pie mr-2" style="color:#9b59b6;"></i>Submission Status</span>
@@ -256,7 +276,7 @@ $recent = $conn->query("
     </div>
     <?php else: ?>
     <!-- DEPT HEAD: Faculty table + Status donut -->
-    <div class="col-lg-8 mb-3">
+    <div class="col-lg-8 col-12 mb-3">
         <div class="chart-card">
             <div class="chart-card-header">
                 <span><i class="fas fa-user-graduate mr-2" style="color:#4361ee;"></i>Faculty Completion</span>
@@ -280,7 +300,7 @@ $recent = $conn->query("
                         <?php foreach($fac_table as $ft): 
                             $bar_color = $ft['completion_pct'] >= 70 ? '#27ae60' : ($ft['completion_pct'] >= 40 ? '#f39c12' : '#e74c3c');
                         ?>
-                        <tr>
+                        <tr onclick="window.location.href='index.php?page=evaluation&id=<?= $ft['faculty_id'] ?>'" style="cursor:pointer;">
                             <td>
                                 <strong><?= htmlspecialchars($ft['name']) ?></strong>
                                 <?php if($ft['is_director']): ?>
@@ -310,7 +330,7 @@ $recent = $conn->query("
             </div>
         </div>
     </div>
-    <div class="col-lg-4 mb-3">
+    <div class="col-lg-4 col-12 mb-3">
         <div class="chart-card">
             <div class="chart-card-header">
                 <span><i class="fas fa-chart-pie mr-2" style="color:#9b59b6;"></i>Submission Status</span>

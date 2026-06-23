@@ -1,17 +1,18 @@
 <?php include'db_connect.php';
 
-switch ($_SESSION['login_type']){
-    case 0: echo "<script>alert('Invalid Credential');
+// Allow: admin (2), legacy evaluator (1), or faculty with evaluator designation (0 + is_evaluator)
+$login_type = $_SESSION['login_type'] ?? -1;
+$is_evaluator_flag = !empty($_SESSION['is_evaluator']);
+if ($login_type == 0 && !$is_evaluator_flag) {
+    echo "<script>alert('Invalid Credential');
     window.location.href = 'index.php';
 </script>";
-    break;
-    
+    exit;
 }
 
 $nameId = isset($_GET['id']) ? $_GET['id'] : '9999';
 
 // Admin (login_type 2) is view-only — no rating, status changes, or comments
-$login_type = $_SESSION['login_type'] ?? -1;
 $is_admin_view = ($login_type == 2);
 
 // Fetch evaluator designation and faculty designation for Strategic Plan restriction
@@ -667,14 +668,12 @@ $(document).ready(function(){
                 if(resp == 1){
                     console.log("💾 Comment saved successfully in database");
                     alert_toast("Comment saved successfully!", "success");
-                    $('#commentText').val(''); // Clear textarea
-                    console.log("📝 Textarea cleared");
                     
                     console.log("🕒 Scheduling page reload in 1500ms");
-                    // Reload comments section after a brief delay
+                    // Reload page to show updated comment
                     setTimeout(function(){
                         console.log("🔄 Reloading page...");
-                        location.reload(); // Or use AJAX to refresh just comments
+                        location.reload();
                     }, 1500);
                 } else {
                     console.log("❌ Failed to save comment - server returned:", resp);

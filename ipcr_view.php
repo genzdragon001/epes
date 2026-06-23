@@ -19,14 +19,15 @@ $login_id   = $_SESSION['login_id'] ?? 0;
 $faculty_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 // Faculty can only view their own IPCR
-if ($login_type == 0) {
+$is_evaluator_flag = !empty($_SESSION['is_evaluator']);
+if ($login_type == 0 && !$is_evaluator_flag) {
     $faculty_id = $login_id;
-} elseif ($login_type == 1) {
+} elseif ($login_type == 1 || ($login_type == 0 && $is_evaluator_flag)) {
     // Program Head/Dept Head can only view IPCR of faculty in their department
     require_once 'auth_helper.php';
     if (!is_dean($conn)) {
         // Restrict faculty list to same department as the evaluator
-        $stmt = $conn->prepare("SELECT department_id FROM evaluator_list WHERE id = ? LIMIT 1");
+        $stmt = $conn->prepare("SELECT department_id FROM employee_list WHERE id = ? LIMIT 1");
         $stmt->bind_param('i', $login_id);
         $stmt->execute();
         $eval_dept = $stmt->get_result()->fetch_assoc();
@@ -52,7 +53,7 @@ $periods = [];
 $rp_qry = $conn->query("
     SELECT DISTINCT rating_period 
     FROM ratings 
-    WHERE period_type = 'IPCR' 
+    WHERE efficiency > 0 AND timeliness > 0 AND quality > 0
     ORDER BY rating_period DESC
 ");
 while ($row = $rp_qry->fetch_assoc()) {
@@ -103,10 +104,10 @@ if ($faculty_id > 0 && !empty($selected_period)) {
                             // Restrict Program Head/Dept Head to faculty in their department
                             $faculty_where = '';
                             $dept_param = null;
-                            if ($login_type == 1) {
+                            if ($login_type == 1 || ($login_type == 0 && !empty($_SESSION['is_evaluator']))) {
                                 require_once 'auth_helper.php';
                                 if (!is_dean($conn)) {
-                                    $stmt = $conn->prepare("SELECT department_id FROM evaluator_list WHERE id = ? LIMIT 1");
+                                    $stmt = $conn->prepare("SELECT department_id FROM employee_list WHERE id = ? LIMIT 1");
                                     $stmt->bind_param('i', $login_id);
                                     $stmt->execute();
                                     $eval_dept = $stmt->get_result()->fetch_assoc();

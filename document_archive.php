@@ -12,7 +12,8 @@ if (!isset($_SESSION['login_id'])) {
 }
 
 $login_type = $_SESSION['login_type'] ?? -1;
-if ($login_type != 1 && $login_type != 2) {
+$is_evaluator_flag = !empty($_SESSION['is_evaluator']);
+if ($login_type != 1 && $login_type != 2 && !($login_type == 0 && $is_evaluator_flag)) {
     echo '<div class="col-lg-12"><div class="alert alert-danger">Access denied.</div></div>';
     return;
 }
@@ -20,11 +21,11 @@ if ($login_type != 1 && $login_type != 2) {
 // Determine evaluator restrictions
 $eval_dept_id = 0;
 $is_dean = false;
-if ($login_type == 1) {
+if ($login_type == 1 || ($login_type == 0 && $is_evaluator_flag)) {
     require_once 'auth_helper.php';
     $is_dean = is_dean($conn);
     if (!$is_dean) {
-        $stmt = $conn->prepare("SELECT department_id FROM evaluator_list WHERE id = ? LIMIT 1");
+        $stmt = $conn->prepare("SELECT department_id FROM employee_list WHERE id = ? LIMIT 1");
         $stmt->bind_param('i', $_SESSION['login_id']);
         $stmt->execute();
         $eval_dept = $stmt->get_result()->fetch_assoc();
@@ -54,7 +55,7 @@ $dq = $conn->query("SELECT id, department FROM department_list ORDER BY departme
 while ($d = $dq->fetch_assoc()) $departments[] = $d;
 
 $periods = [];
-$pq = $conn->query("SELECT id, semester, year, period_type FROM rating_period ORDER BY year DESC, FIELD(semester, '1st Semester', 'Summer', '2nd Semester') DESC");
+$pq = $conn->query("SELECT id, semester, year FROM rating_period ORDER BY year DESC, FIELD(semester, '1st Semester', '2nd Semester') DESC");
 while ($p = $pq->fetch_assoc()) $periods[] = $p;
 
 // Stats
@@ -127,7 +128,7 @@ while ($t = $tq->fetch_assoc()) $by_type[$t['document_type']] = $t['cnt'];
                         <select class="form-control" onchange="applyFilter()" id="filter_period">
                             <option value="">All Periods</option>
                             <?php foreach ($periods as $p): $sel = ($filter_period == $p['id']) ? 'selected' : ''; ?>
-                            <option value="<?= $p['id'] ?>" <?= $sel ?>><?= htmlspecialchars($p['semester'] . ' ' . $p['year'] . ' (' . $p['period_type'] . ')') ?></option>
+                            <option value="<?= $p['id'] ?>" <?= $sel ?>><?= htmlspecialchars($p['semester'] . ' ' . $p['year']) ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>

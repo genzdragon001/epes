@@ -31,20 +31,18 @@ while($d = $dq->fetch_assoc()) {
 $other_submissions = $total_submissions - $verified_tasks - $for_verification;
 
 // Cascading DP data for horizontal bar
-$dp_period = $conn->query("SELECT id FROM rating_period WHERE period_type='DP' ORDER BY id DESC LIMIT 1")->fetch_assoc();
-$dp_id = $dp_period ? $dp_period['id'] : 0;
+$active_rp = $conn->query("SELECT id FROM rating_period WHERE is_active = 1 LIMIT 1")->fetch_assoc();
+$active_rp_id = $active_rp ? $active_rp['id'] : 0;
 $cascade_labels = [];
 $cascade_scores = [];
-$cq = $conn->query("SELECT cr.department_id, d.department, cr.overall_rating FROM cascading_ratings cr LEFT JOIN department_list d ON cr.department_id=d.id WHERE cr.level='DP' AND cr.target_period_id=$dp_id ORDER BY cr.overall_rating DESC");
+$cq = $conn->query("SELECT cr.department_id, d.department, cr.overall_rating FROM cascading_ratings cr LEFT JOIN department_list d ON cr.department_id=d.id WHERE cr.level='DP' AND cr.target_period_id=$active_rp_id ORDER BY cr.overall_rating DESC");
 while($c = $cq->fetch_assoc()) {
     $cascade_labels[] = $c['department'] ?? 'Dept #'.$c['department_id'];
     $cascade_scores[] = round((float)$c['overall_rating'], 2);
 }
 
 // OPCR
-$opcr_period = $conn->query("SELECT id FROM rating_period WHERE period_type='OPCR' ORDER BY id DESC LIMIT 1")->fetch_assoc();
-$opcr_id = $opcr_period ? $opcr_period['id'] : 0;
-$opcr = $conn->query("SELECT overall_rating FROM cascading_ratings WHERE level='OPCR' AND target_period_id=$opcr_id ORDER BY computed_at DESC LIMIT 1")->fetch_assoc();
+$opcr = $conn->query("SELECT overall_rating FROM cascading_ratings WHERE level='OPCR' AND target_period_id=$active_rp_id ORDER BY computed_at DESC LIMIT 1")->fetch_assoc();
 
 $completion_pct = $total_submissions > 0 ? round(($verified_tasks/$total_submissions)*100) : 0;
 $adj_label = $avg_rating >= 4.75 ? 'Outstanding' : ($avg_rating >= 3.61 ? 'Very Satisfactory' : ($avg_rating >= 2.61 ? 'Satisfactory' : ($avg_rating >= 1.61 ? 'Unsatisfactory' : 'Poor')));
@@ -52,14 +50,14 @@ $adj_label = $avg_rating >= 4.75 ? 'Outstanding' : ($avg_rating >= 3.61 ? 'Very 
 
 <!-- 4 STAT CARDS -->
 <div class="row mb-4">
-    <div class="col-xl-3 col-md-6 mb-3">
+    <div class="col-xl-3 col-md-6 col-6 mb-3">
         <div class="stat-card accent-blue">
             <div class="stat-icon blue"><i class="fas fa-users"></i></div>
             <div class="stat-value"><?= $total_employees ?></div>
             <div class="stat-label">Total Faculty</div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6 mb-3">
+    <div class="col-xl-3 col-md-6 col-6 mb-3">
         <div class="stat-card accent-green">
             <div class="stat-icon green"><i class="fas fa-check-circle"></i></div>
             <div class="stat-value"><?= $verified_tasks ?></div>
@@ -67,7 +65,7 @@ $adj_label = $avg_rating >= 4.75 ? 'Outstanding' : ($avg_rating >= 3.61 ? 'Very 
             <div class="stat-sub <?= $completion_pct >= 70 ? 'green' : 'amber' ?>"><?= $completion_pct ?>% completion</div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6 mb-3">
+    <div class="col-xl-3 col-md-6 col-6 mb-3">
         <div class="stat-card accent-amber">
             <div class="stat-icon amber"><i class="fas fa-clock"></i></div>
             <div class="stat-value"><?= $for_verification ?></div>
@@ -77,7 +75,7 @@ $adj_label = $avg_rating >= 4.75 ? 'Outstanding' : ($avg_rating >= 3.61 ? 'Very 
             <?php endif; ?>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6 mb-3">
+    <div class="col-xl-3 col-md-6 col-6 mb-3">
         <div class="stat-card accent-purple">
             <div class="stat-icon purple"><i class="fas fa-star"></i></div>
             <div class="stat-value"><?= number_format($avg_rating, 2) ?></div>
@@ -97,7 +95,7 @@ $adj_label = $avg_rating >= 4.75 ? 'Outstanding' : ($avg_rating >= 3.61 ? 'Very 
 
 <!-- CHARTS ROW 1: Department Completion + Submission Status -->
 <div class="row mb-4">
-    <div class="col-lg-8 mb-3">
+    <div class="col-lg-8 col-12 mb-3">
         <div class="chart-card">
             <div class="chart-card-header">
                 <span><i class="fas fa-building mr-2" style="color:#4361ee;"></i>Department Completion</span>
@@ -110,7 +108,7 @@ $adj_label = $avg_rating >= 4.75 ? 'Outstanding' : ($avg_rating >= 3.61 ? 'Very 
             </div>
         </div>
     </div>
-    <div class="col-lg-4 mb-3">
+    <div class="col-lg-4 col-12 mb-3">
         <div class="chart-card">
             <div class="chart-card-header">
                 <span><i class="fas fa-chart-pie mr-2" style="color:#9b59b6;"></i>Submission Status</span>
@@ -131,7 +129,7 @@ $adj_label = $avg_rating >= 4.75 ? 'Outstanding' : ($avg_rating >= 3.61 ? 'Very 
 
 <!-- CHARTS ROW 2: DP Cascading + OPCR -->
 <div class="row mb-4">
-    <div class="col-lg-8 mb-3">
+    <div class="col-lg-8 col-12 mb-3">
         <div class="chart-card">
             <div class="chart-card-header">
                 <span><i class="fas fa-sitemap mr-2" style="color:#1abc9c;"></i>DP Cascading Scores</span>
@@ -148,7 +146,7 @@ $adj_label = $avg_rating >= 4.75 ? 'Outstanding' : ($avg_rating >= 3.61 ? 'Very 
             </div>
         </div>
     </div>
-    <div class="col-lg-4 mb-3">
+    <div class="col-lg-4 col-12 mb-3">
         <div class="chart-card">
             <div class="chart-card-header">
                 <span><i class="fas fa-trophy mr-2" style="color:#f39c12;"></i>OPCR Score</span>

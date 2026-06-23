@@ -36,6 +36,12 @@
   </a>
 </li>
 <li class="nav-item dropdown">
+  <a href="./index.php?page=target_list" class="nav-link nav-target_list">
+    <i class="nav-icon fas fa-bullseye"></i>
+    <p>Targets Management</p>
+  </a>
+</li>
+<li class="nav-item dropdown">
   <a href="./index.php?page=function_categories" class="nav-link nav-function_categories">
     <i class="nav-icon fas fa-tasks"></i>
     <p>Function Categories</p>

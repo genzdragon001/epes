@@ -8,7 +8,12 @@
       </li>
     <?php endif; ?>
       <li>
-        <a class="nav-link text-white"  href="./" role="button"> <large><b><?php echo $_SESSION['system']['name'] ?></b></large></a>
+        <a class="nav-link text-white"  href="./" role="button">
+          <large><b>
+            <span class="topbar-full"><?php echo $_SESSION['system']['name'] ?></span>
+            <span class="topbar-short">FPDES</span>
+          </b></large>
+        </a>
       </li>
     </ul>
 
@@ -92,4 +97,53 @@
         width: 25px;
         object-fit: cover;
     }
+    .topbar-short { display: none; }
+    @media (max-width: 767px) {
+        .topbar-full { display: none; }
+        .topbar-short { display: inline; }
+    }
+    /* ── Global gradient card headers ── */
+    .card-outline .card-header,
+    .card-outline.card-primary > .card-header,
+    .card-outline.card-info > .card-header,
+    .card-outline.card-success > .card-header,
+    .card-outline.card-secondary > .card-header,
+    .card-outline.card-dark > .card-header,
+    .card-outline.card-warning > .card-header,
+    .card-outline.card-danger > .card-header {
+        background: linear-gradient(135deg, #17a2b8 0%, #6610f2 100%) !important;
+        color: #fff !important;
+        border-bottom: none;
+    }
+    .card-outline .card-header .card-title,
+    .card-outline .card-header h5,
+    .card-outline .card-header h6 {
+        color: #fff !important;
+    }
+    .card-outline .card-header .btn {
+        border-color: rgba(255,255,255,0.4);
+        color: #fff;
+    }
+    .card-outline .card-header .btn:hover {
+        background: rgba(255,255,255,0.15);
+        border-color: #fff;
+    }
+    /* Make "Add New" buttons (btn-default) solid white background with dark text on gradient headers */
+    .card-outline .card-header .btn-default,
+    .card-outline .card-header .btn.btn-default {
+        background: #fff !important;
+        color: #495057 !important;
+        border-color: #fff !important;
+        font-weight: 600;
+    }
+    .card-outline .card-header .btn-default:hover {
+        background: #f8f9fa !important;
+        color: #1a1a2e !important;
+        border-color: #fff !important;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    /* Exceptions: keep original header for cards that already have custom styling */
+    .chart-card .chart-card-header { background: #fff !important; color: #1a1a2e !important; border-bottom: 1px solid #e9ecef !important; }
+    .archive-header { /* keep custom gradient */ }
+    .card.card-outline.card-success .card-header[style] { /* keep inline styles */ }
   </style>

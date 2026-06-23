@@ -48,7 +48,7 @@ $period_label = $_SESSION['current_semester'] . ' ' . $_SESSION['current_year'];
 
 <?php if($emp_type == 2): ?>
   <?php include 'includes/admin/home_content.php'; ?>
-<?php elseif($emp_type == 1): ?>
+<?php elseif($emp_type == 1 || ($emp_type == 0 && !empty($_SESSION['is_evaluator']))): ?>
   <?php include 'includes/evaluator/home_content.php'; ?>
 <?php else: ?>
   <?php include 'includes/faculty/home_content.php'; ?>
@@ -203,9 +203,110 @@ $period_label = $_SESSION['current_semester'] . ' ' . $_SESSION['current_year'];
 }
 
 /* ── Responsive ── */
-@media (max-width: 768px) {
-    .stat-card { padding: 14px 12px; }
-    .stat-value { font-size: 1.3rem; }
+@media (max-width: 991px) {
+    /* Stat cards: 2 per row on tablet */
+    .stat-card { padding: 16px 14px; }
+    .stat-value { font-size: 1.4rem; }
+    .stat-label { font-size: 0.72rem; }
+    .stat-icon { width: 36px; height: 36px; font-size: 1rem; margin-bottom: 8px; }
+}
+
+@media (max-width: 767px) {
+    /* Header: stack vertically */
+    .d-flex.justify-content-between.align-items-center.mb-4 {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 8px;
+    }
+    .d-flex.justify-content-between.align-items-center.mb-4 .badge {
+        align-self: flex-start;
+    }
+
+    /* Stat cards: full width, compact, square */
+    .stat-card { 
+        padding: 12px 14px; 
+        margin-bottom: 8px; 
+        aspect-ratio: 1 / 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .stat-value { font-size: 1.25rem; }
+    .stat-label { font-size: 0.7rem; letter-spacing: 0.3px; }
+    .stat-sub { font-size: 0.68rem; }
+    .stat-icon { width: 32px; height: 32px; font-size: 0.9rem; margin-bottom: 6px; border-radius: 8px; }
+
+    /* Chart cards: full width, reduced height */
     .chart-card-body { padding: 10px; }
+    .chart-card-header { padding: 10px 14px; font-size: 0.82rem; flex-wrap: wrap; gap: 4px; }
+    .chart-wrap[style*="height:300px"] { height: 220px !important; }
+    .chart-wrap[style*="height:280px"] { height: 200px !important; }
+
+    /* Donut charts: smaller */
+    canvas[id$="Donut"] { max-width: 180px !important; max-height: 180px !important; }
+    canvas[id$="RadarChart"] { max-width: 260px !important; max-height: 220px !important; }
+
+    /* Tables: horizontal scroll, compact */
+    .table-responsive, div[style*="overflow-x:auto"] { -webkit-overflow-scrolling: touch; }
+    .table-flat, .table-sm { font-size: 0.75rem !important; }
+    .table-flat th, .table-sm th { padding: 6px 8px !important; }
+    .table-flat td, .table-sm td { padding: 5px 8px !important; }
+
+    /* Activity list: compact */
+    .activity-item { padding: 8px 12px; font-size: 0.78rem; gap: 6px; }
+    .activity-name { font-size: 0.76rem; }
+    .activity-status { font-size: 0.7rem; }
+    .activity-time { font-size: 0.68rem; min-width: 36px; }
+
+    /* OPCR badge: stack */
+    .opcr-badge { flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px 14px; }
+    .opcr-badge strong { font-size: 1.1rem; }
+
+    /* Alert banner: compact */
+    .alert-banner { padding: 8px 12px; font-size: 0.8rem; }
+
+    /* Legend dots: wrap */
+    .d-flex.justify-content-center[style*="gap:16px"],
+    .d-flex.flex-wrap.justify-content-center[style*="gap:12px"] {
+        gap: 8px !important;
+        font-size: 0.7rem !important;
+    }
+
+    /* Row spacing: tighter */
+    .row.mb-4 { margin-bottom: 12px !important; }
+    .mb-3 { margin-bottom: 8px !important; }
+
+    /* OPCR score: smaller */
+    .chart-card-body.text-center div[style*="font-size:3.5rem"] {
+        font-size: 2.5rem !important;
+    }
+}
+
+@media (max-width: 575px) {
+    /* Extra small: even more compact */
+    .stat-card { padding: 10px 12px; }
+    .stat-value { font-size: 1.15rem; }
+    .stat-icon { width: 28px; height: 28px; font-size: 0.8rem; }
+
+    h4.mb-0 { font-size: 1.1rem; }
+
+    .chart-wrap[style*="height:300px"] { height: 180px !important; }
+    .chart-wrap[style*="height:280px"] { height: 160px !important; }
+    canvas[id$="Donut"] { max-width: 150px !important; max-height: 150px !important; }
+    canvas[id$="RadarChart"] { max-width: 220px !important; max-height: 180px !important; }
+
+    .chart-card-header { font-size: 0.78rem; }
+    .chart-card-header small { display: none; }
+
+    .activity-item { padding: 6px 10px; }
+    .activity-name { max-width: 140px; }
+
+    /* Sidebar role label: short form */
+    .brand-link h3 { font-size: 1rem; }
+}
+.role-short { display: none; }
+@media (max-width: 767px) {
+    .role-full { display: none; }
+    .role-short { display: inline; }
 }
 </style>

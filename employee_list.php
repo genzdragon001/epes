@@ -92,7 +92,6 @@
 </div>
 
 <style>
-.card-header { background: linear-gradient(135deg, #007bff 0%, #6610f2 100%); color: white; }
 .card-title { margin: 0; font-weight: 600; }
 .avatar-initial {
     width: 40px;

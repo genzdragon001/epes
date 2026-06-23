@@ -34,7 +34,7 @@ $verification_pct = $submitted > 0 ? round(($verified/$submitted)*100) : 0;
 
 <!-- 4 STAT CARDS -->
 <div class="row mb-4">
-    <div class="col-xl-3 col-md-6 mb-3">
+    <div class="col-xl-3 col-md-6 col-6 mb-3">
         <div class="stat-card accent-blue">
             <div class="stat-icon blue"><i class="fas fa-tasks"></i></div>
             <div class="stat-value"><?= $submitted ?>/<?= $total_targets ?></div>
@@ -44,14 +44,14 @@ $verification_pct = $submitted > 0 ? round(($verified/$submitted)*100) : 0;
             </div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6 mb-3">
+    <div class="col-xl-3 col-md-6 col-6 mb-3">
         <div class="stat-card accent-amber">
             <div class="stat-icon amber"><i class="fas fa-clock"></i></div>
             <div class="stat-value"><?= $for_verif ?></div>
             <div class="stat-label">Awaiting Review</div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6 mb-3">
+    <div class="col-xl-3 col-md-6 col-6 mb-3">
         <div class="stat-card accent-green">
             <div class="stat-icon green"><i class="fas fa-check-circle"></i></div>
             <div class="stat-value"><?= $verified ?></div>
@@ -61,7 +61,7 @@ $verification_pct = $submitted > 0 ? round(($verified/$submitted)*100) : 0;
             </div>
         </div>
     </div>
-    <div class="col-xl-3 col-md-6 mb-3">
+    <div class="col-xl-3 col-md-6 col-6 mb-3">
         <div class="stat-card accent-purple">
             <div class="stat-icon purple"><i class="fas fa-star"></i></div>
             <div class="stat-value"><?= $ipcr_score ? number_format($ipcr_score, 2) : '—' ?></div>
@@ -75,7 +75,7 @@ $verification_pct = $submitted > 0 ? round(($verified/$submitted)*100) : 0;
 
 <!-- CHARTS ROW: Submission Status + Rating Radar -->
 <div class="row mb-4">
-    <div class="col-lg-5 mb-3">
+    <div class="col-lg-5 col-12 mb-3">
         <div class="chart-card">
             <div class="chart-card-header">
                 <span><i class="fas fa-chart-pie mr-2" style="color:#9b59b6;"></i>Submission Status</span>
@@ -94,7 +94,7 @@ $verification_pct = $submitted > 0 ? round(($verified/$submitted)*100) : 0;
             </div>
         </div>
     </div>
-    <div class="col-lg-7 mb-3">
+    <div class="col-lg-7 col-12 mb-3">
         <div class="chart-card">
             <div class="chart-card-header">
                 <span><i class="fas fa-compass mr-2" style="color:#4361ee;"></i>Rating Dimensions</span>

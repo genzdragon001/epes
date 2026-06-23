@@ -128,7 +128,6 @@ class DPCRGenerator {
             LEFT JOIN designation_list dg ON e.designation_id = dg.id
             WHERE e.department_id = ?
               AND r.rating_period = ?
-              AND r.period_type = 'IPCR'
               AND r.efficiency > 0 AND r.timeliness > 0 AND r.quality > 0
             GROUP BY e.id, t.category, t.sub_category
             ORDER BY e.lastname, e.firstname, FIELD(t.category, 'strategic', 'core', 'support'), t.sub_category
@@ -154,7 +153,7 @@ class DPCRGenerator {
         
         $stmt = $this->db->prepare("
             SELECT id FROM rating_period 
-            WHERE period_type = 'OPCR' AND semester = ? AND year = ? 
+            WHERE semester = ? AND year = ? 
             LIMIT 1
         ");
         $stmt->bind_param('ss', $dp_period['semester'], $dp_period['year']);
