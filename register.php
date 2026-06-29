@@ -185,7 +185,7 @@ if(isset($_SESSION['login_id']))
 
         <div class="row">
           <div class="col-6">
-            <a href="landing.php" class="btn btn-secondary btn-block">
+            <a href="landing" class="btn btn-secondary btn-block">
               <i class="fa fa-arrow-left"></i> Home
             </a>
           </div>
@@ -200,7 +200,7 @@ if(isset($_SESSION['login_id']))
       <div class="text-center mt-4">
         <small class="text-muted">
           <i class="fa fa-sign-in-alt"></i> Already have an account? 
-          <a href="login.php" class="text-primary">Login here</a>
+          <a href="login" class="text-primary">Login here</a>
         </small>
       </div>
     </div>
@@ -297,7 +297,7 @@ $(document).ready(function() {
                                 <i class="fa fa-check-circle fa-3x mb-3"></i>
                                 <h5>Registration Successful!</h5>
                                 <p>Check your email to verify your account.</p>
-                                <a href="login.php" class="btn btn-primary mt-3">
+                                <a href="login" class="btn btn-primary mt-3">
                                     <i class="fa fa-sign-in-alt"></i> Click here to Login
                                 </a>
                             </div>

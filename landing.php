@@ -290,10 +290,10 @@ if (isset($_SESSION['login_id'])) {
       documentation, evaluation, and reporting.
     </p>
     <div class="hero-buttons">
-      <a href="login.php" class="btn btn-landing-login">
+      <a href="login" class="btn btn-landing-login">
         <i class="fas fa-sign-in-alt mr-2"></i> Login
       </a>
-      <a href="register.php" class="btn btn-landing-register">
+      <a href="register" class="btn btn-landing-register">
         <i class="fas fa-user-plus mr-2"></i> Register
       </a>
     </div>
@@ -394,7 +394,7 @@ if (isset($_SESSION['login_id'])) {
 <section class="cta-section">
   <h2>Ready to Get Started?</h2>
   <p>Access the system to document, evaluate, and generate performance reports.</p>
-  <a href="login.php" class="btn btn-landing-login">
+  <a href="login" class="btn btn-landing-login">
     <i class="fas fa-sign-in-alt mr-2"></i> Login to the System
   </a>
 </section>
@@ -404,9 +404,9 @@ if (isset($_SESSION['login_id'])) {
   <div class="footer-name"><?php echo htmlspecialchars($_SESSION['system']['name']); ?></div>
   <div class="footer-sub">DEBESMSCAT &middot; Version <?php echo EPES_VERSION; ?></div>
   <div class="footer-links">
-    <a href="login.php">Login</a>
-    <a href="register.php">Register</a>
-    <a href="forgot_password.php">Forgot Password</a>
+    <a href="login">Login</a>
+    <a href="register">Register</a>
+    <a href="forgot_password">Forgot Password</a>
   </div>
   <p class="copyright">
     &copy; <?php echo date('Y'); ?> Dr. Emilio B. Espinosa Sr. Memorial State College of Agriculture and Technology. All rights reserved.

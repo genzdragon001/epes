@@ -180,7 +180,7 @@ if(isset($_SESSION['login_id']))
         </div>
         <div class="row">
           <div class="col-6">
-            <a href="landing.php" class="btn btn-secondary btn-block">
+            <a href="landing" class="btn btn-secondary btn-block">
               <i class="fa fa-arrow-left"></i> Home
             </a>
           </div>
@@ -195,7 +195,7 @@ if(isset($_SESSION['login_id']))
       <div class="text-center mt-4">
         <small class="text-muted">
           <i class="fa fa-info-circle"></i> Remember your password? 
-          <a href="login.php" class="text-primary">Login here</a>
+          <a href="login" class="text-primary">Login here</a>
         </small>
       </div>
     </div>

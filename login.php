@@ -232,20 +232,20 @@ if(isset($_SESSION['login_id'])){
       <!-- Register button -->
       <div class="row mt-3">
         <div class="col-12">
-          <a href="register.php" class="btn btn-secondary btn-block">Register</a>
+          <a href="register" class="btn btn-secondary btn-block">Register</a>
         </div>
       </div>
 
        <!-- Forgot Password link -->
        <div class="row mt-3">
         <div class="col-12 text-center">
-          <a href="forgot_password.php" class="text-primary">Forgot Password?</a>
+          <a href="forgot_password" class="text-primary">Forgot Password?</a>
         </div>
       </div>
 
       <!-- Back to Home link -->
       <div class="auth-back-link">
-          <a href="landing.php"><i class="fas fa-arrow-left mr-1"></i> Back to Home</a>
+          <a href="landing"><i class="fas fa-arrow-left mr-1"></i> Back to Home</a>
       </div>
     </div>
     <!-- /.login-card-body -->

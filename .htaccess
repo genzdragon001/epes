@@ -51,6 +51,14 @@ Options -Indexes
 #     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 # </IfModule>
 
+# Hide .php extensions — /login instead of /login.php
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME}\.php -f
+    RewriteRule ^(.*)$ $1.php [L]
+</IfModule>
+
 # Cache static assets
 <IfModule mod_expires.c>
     ExpiresActive On
