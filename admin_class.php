@@ -288,15 +288,28 @@ Class Action {
 			return 5; // Rate limited — too many attempts from this IP
 		}
 	
-		// Choose table based on login type
-		$table = $tables[$login] ?? "users";
-	
-		// Query user by email (prepared statement)
-		$stmt = $this->db->prepare("SELECT *, CONCAT(firstname,' ',lastname) AS name FROM {$table} WHERE email = ? LIMIT 1");
+		// Choose table: check users (admin) first, then employee_list (faculty)
+		// Auto-detect — no dropdown needed
+		$stmt = $this->db->prepare("SELECT *, CONCAT(firstname,' ',lastname) AS name FROM users WHERE email = ? LIMIT 1");
 		$stmt->bind_param('s', $email);
 		$stmt->execute();
 		$qry = $stmt->get_result();
 		$stmt->close();
+
+		if ($qry->num_rows > 0) {
+			// Admin login
+			$login = 2;
+			$table = "users";
+		} else {
+			// Fall back to faculty/employee
+			$login = 0;
+			$table = "employee_list";
+			$stmt = $this->db->prepare("SELECT *, CONCAT(firstname,' ',lastname) AS name FROM {$table} WHERE email = ? LIMIT 1");
+			$stmt->bind_param('s', $email);
+			$stmt->execute();
+			$qry = $stmt->get_result();
+			$stmt->close();
+		}
 	
 		if ($qry->num_rows === 0) {
 			// Log attempt with unknown email

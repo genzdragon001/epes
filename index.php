@@ -85,7 +85,7 @@
  // Update timestamp for active user
 
 	if(!isset($_SESSION['login_id']))
-	    header('location:login.php');
+	    header('location:landing.php');
 
     // First-login check: redirect to password change + privacy consent if needed
     if (isset($_SESSION['login_id']) && isset($_SESSION['login_type'])) {

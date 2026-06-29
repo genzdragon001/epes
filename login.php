@@ -16,14 +16,153 @@ if(isset($_SESSION['login_id'])){
 <!DOCTYPE html>
 <html lang="en">
 <?php include 'header.php'; ?>
-<body class="hold-transition login-page bg-black">
-  <h2><b><?php echo $_SESSION['system']['name'] ?> - Login</b></h2>
-<div class="login-box">
-  <div class="login-logo">
-    <a href="#" class="text-white"></a>
+<body class="hold-transition login-page auth-page-bg">
+<style>
+  /* ── Auth Pages Shared Style ── */
+  .auth-page-bg {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+  }
+  .auth-system-name {
+    text-align: center;
+    margin-bottom: 1.5rem;
+    width: 100%;
+    max-width: 400px;
+  }
+  .auth-system-name h2 {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #fff;
+    margin: 0;
+    line-height: 1.4;
+  }
+  .auth-system-name .auth-subtitle {
+    font-size: 0.85rem;
+    color: rgba(255,255,255,0.5);
+    margin-top: 0.3rem;
+  }
+  .auth-card {
+    width: 400px;
+    max-width: 100%;
+    border: none;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+  }
+  .auth-card-header {
+    background: linear-gradient(135deg, #17a2b8 0%, #6610f2 100%) !important;
+    color: #fff !important;
+    border-bottom: none !important;
+    padding: 1.2rem 1.5rem;
+    text-align: center;
+  }
+  .auth-card-header h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 0;
+    color: #fff !important;
+  }
+  .auth-card .card-body {
+    padding: 1.8rem 1.5rem;
+  }
+  .auth-card .form-control {
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    padding: 0.65rem 0.75rem;
+    font-size: 0.95rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .auth-card .form-control:focus {
+    border-color: #17a2b8;
+    box-shadow: 0 0 0 0.15rem rgba(23,162,184,0.15);
+  }
+  .auth-card .input-group-text {
+    border-radius: 0 8px 8px 0;
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-left: none;
+  }
+  .auth-card .input-group .form-control:first-child {
+    border-radius: 8px 0 0 8px;
+  }
+  .auth-card .btn-primary {
+    background: linear-gradient(135deg, #17a2b8 0%, #6610f2 100%);
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    padding: 0.65rem;
+    font-size: 1rem;
+    transition: opacity 0.2s, box-shadow 0.2s;
+  }
+  .auth-card .btn-primary:hover {
+    opacity: 0.92;
+    box-shadow: 0 4px 15px rgba(23,162,184,0.3);
+  }
+  .auth-card .btn-secondary {
+    border-radius: 8px;
+    font-weight: 600;
+    padding: 0.65rem;
+    font-size: 1rem;
+    background: #e9ecef;
+    border: 1px solid #dee2e6;
+    color: #495057;
+  }
+  .auth-card .btn-secondary:hover {
+    background: #dee2e6;
+    color: #1a1a2e;
+  }
+  .auth-card .custom-select {
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    padding: 0.55rem 0.75rem;
+    font-size: 0.95rem;
+  }
+  .auth-card .custom-select:focus {
+    border-color: #17a2b8;
+    box-shadow: 0 0 0 0.15rem rgba(23,162,184,0.15);
+  }
+  .auth-back-link {
+    text-align: center;
+    margin-top: 1.2rem;
+    width: 100%;
+    max-width: 400px;
+  }
+  .auth-back-link a {
+    color: #6c757d;
+    font-size: 0.9rem;
+    text-decoration: none;
+    transition: color 0.2s;
+  }
+  .auth-back-link a:hover {
+    color: #17a2b8;
+  }
+  .auth-card .alert {
+    border-radius: 8px;
+    font-size: 0.9rem;
+  }
+  .auth-card .icheck-primary label { color: #495057; }
+  .auth-card .login-box-msg,
+  .auth-card .text-muted { color: #6c757d !important; }
+  @media (max-width: 768px) {
+    .auth-system-name h2 { font-size: 1.15rem; }
+    .auth-card { width: 100%; }
+  }
+</style>
+  <div class="auth-system-name">
+    <h2><?php echo htmlspecialchars($_SESSION['system']['name']); ?></h2>
+    <div class="auth-subtitle">Login to your account</div>
   </div>
+<div class="login-box" style="width:400px;max-width:100%;">
   <!-- /.login-logo -->
-  <div class="card">
+  <div class="card auth-card">
+    <div class="card-header auth-card-header">
+      <h3><i class="fas fa-sign-in-alt mr-2"></i> Sign In</h3>
+    </div>
     <div class="card-body login-card-body">
     <?php if (isset($_SESSION['verified'])): ?>
     <div class="alert alert-success text-center">
@@ -76,25 +215,12 @@ if(isset($_SESSION['login_id'])){
             </div>
           </div>
         </div>
-        <div class="form-group mb-3">
-          <label for="">Login As</label>
-          <select name="login" id="" class="custom-select custom-select-sm">
-            <option value="0">Faculty</option>
-            <option value="2">Admin</option>
-          </select>
+        <div class="icheck-primary mb-3">
+          <input type="checkbox" name="remember" id="remember" value="1">
+          <label for="remember">
+            Remember Me
+          </label>
         </div>
-        <div class="row">
-          <div class="col-8">
-            <div class="icheck-primary">
-              <input type="checkbox" name="remember" id="remember" value="1">
-              <label for="remember">
-                Remember Me
-              </label>
-            </div>
-          </div>
-      
-        </div>
-         <!-- /.col -->
          <div class="row mt-3">
          <div class="col-12">
             <button type="submit" class="btn btn-primary btn-block">Sign In</button>
@@ -115,6 +241,11 @@ if(isset($_SESSION['login_id'])){
         <div class="col-12 text-center">
           <a href="forgot_password.php" class="text-primary">Forgot Password?</a>
         </div>
+      </div>
+
+      <!-- Back to Home link -->
+      <div class="auth-back-link">
+          <a href="landing.php"><i class="fas fa-arrow-left mr-1"></i> Back to Home</a>
       </div>
     </div>
     <!-- /.login-card-body -->

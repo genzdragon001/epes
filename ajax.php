@@ -52,8 +52,12 @@ if (in_array($action, $csrf_protected_actions)) {
 			http_response_code(403);
 			die('CSRF validation failed');
 		}
-		// Regenerate token after use to prevent reuse
-		unset($_SESSION['csrf_token']);
+		// Regenerate token after use to prevent reuse — but NOT for login,
+		// because failed attempts stay on the same page with the same form.
+		// On successful login the page redirects and gets a fresh token anyway.
+		if (!in_array($action, ['login', 'login2'])) {
+			unset($_SESSION['csrf_token']);
+		}
 	} else {
 		// For other protected actions, accept either CSRF token or X-Requested-With header
 		// (jQuery sends X-Requested-With on all AJAX calls, which can't be spoofed cross-origin)
