@@ -23,13 +23,15 @@ backups/
 
 # Large generated files
 *.sql
-!database/migration_*.sql
 all_source_files.txt
 debug_log.txt
 SUMMARY-SHEET-2025.xlsx
 manuscript_text.txt
 epes_db.sql
 database/epes_db.sql
+
+# Database folder (schema/migrations kept out of version control)
+database/
 
 # IDE / OS
 .vscode/
