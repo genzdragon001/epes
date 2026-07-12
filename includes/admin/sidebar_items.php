@@ -54,21 +54,9 @@
   </a>
 </li>
 <li class="nav-item dropdown">
-  <a href="./index.php?page=sample_evaluation" class="nav-link nav-sample_evaluation">
-    <i class="nav-icon fas fa-file-alt"></i>
-    <p>Sample Evaluation</p>
-  </a>
-</li>
-<li class="nav-item dropdown">
   <a href="./index.php?page=rating_period" class="nav-link nav-rating_period">
     <i class="nav-icon fas fa-calendar-alt"></i>
     <p>Rating Period</p>
-  </a>
-</li>
-<li class="nav-item dropdown">
-  <a href="./index.php?page=data_migration" class="nav-link nav-data_migration">
-    <i class="nav-icon fas fa-database"></i>
-    <p>Data Migration</p>
   </a>
 </li>
 <li class="nav-item">

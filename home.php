@@ -301,12 +301,6 @@ $period_label = $_SESSION['current_semester'] . ' ' . $_SESSION['current_year'];
     .activity-item { padding: 6px 10px; }
     .activity-name { max-width: 140px; }
 
-    /* Sidebar role label: short form */
     .brand-link h3 { font-size: 1rem; }
-}
-.role-short { display: none; }
-@media (max-width: 767px) {
-    .role-full { display: none; }
-    .role-short { display: inline; }
 }
 </style>

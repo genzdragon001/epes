@@ -32,6 +32,10 @@ while ($row = $alloc_qry->fetch_assoc()) {
     }
     $allocations[$key] = floatval($row['percentage']);
 }
+// Normalize: map core_instruction -> core_instructions (plural) for consistency
+if (isset($allocations['core_instruction']) && !isset($allocations['core_instructions'])) {
+    $allocations['core_instructions'] = $allocations['core_instruction'];
+}
 
 // Build category filters
 $cat_filters = [];

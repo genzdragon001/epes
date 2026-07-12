@@ -36,9 +36,9 @@ if($is_dean) {
     $for_verif          = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.id!=$eval_id AND tp.progress='For Verification'")->fetch_row()[0];
 } else {
     $total_faculty      = $conn->query("SELECT COUNT(*) FROM employee_list WHERE department_id=$eval_dept_id")->fetch_row()[0];
-    $total_submissions  = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id")->fetch_row()[0];
-    $verified           = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id AND tp.progress='Verified'")->fetch_row()[0];
-    $for_verif          = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id AND tp.progress='For Verification'")->fetch_row()[0];
+    $total_submissions  = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id AND e.id != $eval_id")->fetch_row()[0];
+    $verified           = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id AND e.id != $eval_id AND tp.progress='Verified'")->fetch_row()[0];
+    $for_verif          = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id AND e.id != $eval_id AND tp.progress='For Verification'")->fetch_row()[0];
 }
 
 $other_submissions = $total_submissions - $verified - $for_verif;

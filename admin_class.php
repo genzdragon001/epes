@@ -377,6 +377,14 @@ Class Action {
 			$_SESSION['is_evaluator'] = false;
 			$_SESSION['evaluator_role'] = '';
 			if ($login == 0) {
+				// Directors who are NOT evaluators must not be auto-elevated to
+				// evaluator / Department Head panel access. Dennis Corlet (id 16)
+				// is a Director (TAEx) but not a department head/evaluator.
+				$non_evaluator_directors = [16];
+				if (in_array($uid, $non_evaluator_directors, true)) {
+					$_SESSION['is_evaluator'] = false;
+					$_SESSION['evaluator_role'] = '';
+				} else {
 				$desig_id = intval($user['designation_id'] ?? 0);
 				$desig_qry = $this->db->query("SELECT designation FROM designation_list WHERE id = $desig_id");
 				if ($desig_qry && $desig_row = $desig_qry->fetch_assoc()) {
@@ -394,6 +402,7 @@ Class Action {
 						$_SESSION['is_evaluator'] = true;
 						$_SESSION['evaluator_role'] = 'director';
 					}
+				}
 				}
 			}
 
@@ -2341,6 +2350,10 @@ function submit_file() {
 				$key .= '_' . $row['sub_category'];
 			}
 			$allocations[$key] = floatval($row['percentage']);
+		}
+		// Normalize: map core_instruction -> core_instructions (plural) for consistency
+		if (isset($allocations['core_instruction']) && !isset($allocations['core_instructions'])) {
+			$allocations['core_instructions'] = $allocations['core_instruction'];
 		}
 		
 		// Build category filters (same as target_list.php)

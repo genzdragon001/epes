@@ -336,7 +336,12 @@ function calcInstructionRating($tasks, $conn, $position_id, $designation_id, $fa
         if ($expected_instr_count < 0) $expected_instr_count = 0;
     }
     
-    $divisor = $expected_instr_count > 0 ? $expected_instr_count : ($instruction_count > 0 ? $instruction_count : 1);
+    // Divide the instruction average by the number of INSTRUCTION (non-TER) tasks that have
+    // verified submissions — consistent with calcAverage/calcResearchAverage/calcExtensionAverage,
+    // which all divide by the count of submitted tasks. Using the full expected-count denominator
+    // (including TER and unsubmitted tasks) understated the instruction rating and, combined with
+    // TER's 50% weight, dragged the over-all rating down for faculty with few verified tasks.
+    $divisor = $instruction_count > 0 ? $instruction_count : 1;
     
     $instruction_div = $instruction_count > 0 ? $instruction_sum / $divisor : 0;
     
@@ -718,10 +723,11 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                     $ext_active = ($ext_ave['count'] > 0);
                     $supp_active = ($supp_ave['count'] > 0);
                     
-                    // For COS, use instruction_rating instead of inst_ave
-                    if ($emp_position_id == 19) {
-                        $inst_val = floatval($inst_rating['instruction_rating']);
-                    }
+                    // Use the display-consistent instruction rating (TER 50% + Instruction 50%)
+                    // for ALL positions — including non-COS — so the over-all rating matches the
+                    // section rating shown above (instead of a simple TER+Instruction pool, which
+                    // double-weights TER and diverges from the printed split).
+                    $inst_val = floatval($inst_rating['instruction_rating']);
                     
                     // core_total_pct already computed as $core_total_display above
                     $core_total_pct = $core_total_display;

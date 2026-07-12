@@ -3,16 +3,16 @@
   	
     <a href="./" class="brand-link">
         <?php if(($_SESSION['login_type'] ?? -1) == 2): ?>
-        <h3 class="text-center p-0 m-0"><b><span class="role-full">ADMIN</span><span class="role-short">A</span></b></h3>
+        <h3 class="text-center p-0 m-0"><b>ADMIN</b></h3>
         <?php elseif(($_SESSION['login_type'] ?? -1) == 1): ?>
-        <h3 class="text-center p-0 m-0"><b><span class="role-full">Evaluator</span><span class="role-short">E</span></b></h3>
+        <h3 class="text-center p-0 m-0"><b>Evaluator</b></h3>
         <?php elseif(!empty($_SESSION['is_evaluator'])): 
             $er = $_SESSION['evaluator_role'] ?? '';
             $role_label = ($er === 'dean') ? 'Dean' : (($er === 'vp') ? 'VP' : (($er === 'director') ? 'Director' : 'Dept Head'));
         ?>
-        <h3 class="text-center p-0 m-0"><b><span class="role-full"><?= $role_label ?></span><span class="role-short"><?= substr($role_label, 0, 1) ?></span></b></h3>
+        <h3 class="text-center p-0 m-0"><b><?= $role_label ?></b></h3>
         <?php else: ?>
-        <h3 class="text-center p-0 m-0"><b><span class="role-full">Employee</span><span class="role-short">E</span></b></h3>
+        <h3 class="text-center p-0 m-0"><b>Employee</b></h3>
         <?php endif; ?>
     </a>
       

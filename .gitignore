@@ -42,3 +42,6 @@ Thumbs.db
 # Generated temp files
 *.tmp
 *.cache
+
+# Agent working dir
+.hermes/

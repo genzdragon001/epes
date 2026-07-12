@@ -134,6 +134,10 @@ class IPCRGenerator {
             if ($row['sub_category']) $key .= '_' . $row['sub_category'];
             $allocations[$key] = floatval($row['percentage']);
         }
+        // Normalize: map core_instruction -> core_instructions (plural) for consistency
+        if (isset($allocations['core_instruction']) && !isset($allocations['core_instructions'])) {
+            $allocations['core_instructions'] = $allocations['core_instruction'];
+        }
         return $allocations;
     }
     
