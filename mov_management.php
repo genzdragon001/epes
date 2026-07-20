@@ -78,7 +78,7 @@ $target_query = "SELECT DISTINCT t.id,
     LEFT JOIN target_exemptions te ON t.id = te.task_id AND te.position_id = $position_id
     WHERE t.is_active = 1
     AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id)
-    AND (t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = $designation_id)
+    AND " . task_designation_match($designation_id) . "
     AND te.id IS NULL
     $category_where
     ORDER BY t.category, t.sub_category, t.mfo";

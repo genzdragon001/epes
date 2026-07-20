@@ -99,7 +99,6 @@ $adj_label = $avg_rating >= 4.75 ? 'Outstanding' : ($avg_rating >= 3.61 ? 'Very 
         <div class="chart-card">
             <div class="chart-card-header">
                 <span><i class="fas fa-building mr-2" style="color:#4361ee;"></i>Department Completion</span>
-                <small class="text-muted"><?= $period_label ?></small>
             </div>
             <div class="chart-card-body">
                 <div class="chart-wrap" style="height:300px;">

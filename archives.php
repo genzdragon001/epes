@@ -243,7 +243,7 @@ $movs_qry = $conn->query("
                     if ($is_cos) {
                         $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0)";
                     } elseif ($emp_designation_id && $emp_designation_id > 0) {
-                        $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = $emp_designation_id)";
+                        $where .= " AND " . task_designation_match($emp_designation_id);
                     } else {
                         $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0)";
                     }

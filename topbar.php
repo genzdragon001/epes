@@ -18,10 +18,7 @@
     </ul>
 
     <ul class="navbar-nav ml-auto">
-   
-     <p class="text-white" >  <?php echo ($_SESSION['current_semester'] ?? 'N/A') . ' ' . ($_SESSION['current_year'] ?? ''); ?>
-     </p>
-     
+
       <!-- Notifications Bell -->
       <?php
       require_once 'notification_helper.php';

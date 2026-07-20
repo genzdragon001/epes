@@ -12,7 +12,7 @@
         ?>
         <h3 class="text-center p-0 m-0"><b><?= $role_label ?></b></h3>
         <?php else: ?>
-        <h3 class="text-center p-0 m-0"><b>Employee</b></h3>
+        <h3 class="text-center p-0 m-0"><b>Faculty</b></h3>
         <?php endif; ?>
     </a>
       

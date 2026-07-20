@@ -43,7 +43,14 @@ $qry = $stmt->get_result()->fetch_array();
 					}else if(resp == 2){
 						$('#msg').html('<div class="alert alert-danger"><i class="fa fa-exclamation-triangle"></i> designation already exist.</div>')
 						end_load()
+					}else{
+						$('#msg').html('<div class="alert alert-danger"><i class="fa fa-exclamation-triangle"></i> An error occurred while saving.</div>')
+						end_load()
 					}
+				},
+				error:function(){
+					$('#msg').html('<div class="alert alert-danger"><i class="fa fa-exclamation-triangle"></i> An error occurred while saving.</div>')
+					end_load()
 				}
 			})
 		})

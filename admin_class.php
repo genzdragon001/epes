@@ -878,10 +878,16 @@ Class Action {
 	function save_designation(){
 		extract($_POST);
 		$designation_name = $_POST['designation'] ?? '';
+		$description = $_POST['description'] ?? '';
 		$id = isset($id) ? intval($id) : null;
 		
-		$chk_stmt = $this->db->prepare("SELECT * FROM designation_list WHERE designation = ? AND id != ?");
-		$chk_stmt->bind_param('si', $designation_name, $id);
+		if(empty($id)){
+			$chk_stmt = $this->db->prepare("SELECT * FROM designation_list WHERE designation = ?");
+			$chk_stmt->bind_param('s', $designation_name);
+		} else {
+			$chk_stmt = $this->db->prepare("SELECT * FROM designation_list WHERE designation = ? AND id != ?");
+			$chk_stmt->bind_param('si', $designation_name, $id);
+		}
 		$chk_stmt->execute();
 		$chk = $chk_stmt->get_result()->num_rows;
 		$chk_stmt->close();
@@ -889,14 +895,13 @@ Class Action {
 		if($chk > 0){
 			return 2;
 		}
-		$user_ids_str = isset($user_ids) ? implode(',', $user_ids) : '';
 		
 		if(empty($id)){
-			$stmt = $this->db->prepare("INSERT INTO designation_list (designation, user_ids) VALUES (?, ?)");
-			$stmt->bind_param('ss', $designation_name, $user_ids_str);
+			$stmt = $this->db->prepare("INSERT INTO designation_list (designation, description) VALUES (?, ?)");
+			$stmt->bind_param('ss', $designation_name, $description);
 		} else {
-			$stmt = $this->db->prepare("UPDATE designation_list SET designation=?, user_ids=? WHERE id=?");
-			$stmt->bind_param('ssi', $designation_name, $user_ids_str, $id);
+			$stmt = $this->db->prepare("UPDATE designation_list SET designation=?, description=? WHERE id=?");
+			$stmt->bind_param('ssi', $designation_name, $description, $id);
 		}
 		$save = $stmt->execute();
 		$stmt->close();
@@ -1107,26 +1112,79 @@ Class Action {
 			return 1;
 	}
 	function save_task(){
-		extract($_POST);
-		$task_name = $_POST['task'] ?? '';
-		$id = isset($id) ? intval($id) : null;
-		$category = $_POST['category'] ?? '';
-		$efficiency = $_POST['efficiency'] ?? '';
-		$timeliness = $_POST['timeliness'] ?? '';
-		$quality = $_POST['quality'] ?? '';
-		
-		if(empty($id)){
-			$stmt = $this->db->prepare("INSERT INTO task_list (task, category, efficiency, timeliness, quality, date_created) VALUES (?, ?, ?, ?, ?, NOW())");
-			$stmt->bind_param('sssss', $task_name, $category, $efficiency, $timeliness, $quality);
-		} else {
-			$stmt = $this->db->prepare("UPDATE task_list SET task=?, category=?, efficiency=?, timeliness=?, quality=? WHERE id=?");
-			$stmt->bind_param('sssssi', $task_name, $category, $efficiency, $timeliness, $quality, $id);
-		}
-		$save = $stmt->execute();
-		$stmt->close();
-	
-		if($save){
+		$this->db->begin_transaction();
+		try {
+			extract($_POST);
+			$id           = isset($id) ? intval($id) : null;
+			$category     = $_POST['category'] ?? '';
+			$sub_category = $_POST['sub_category'] ?? null;
+			$quality      = $_POST['quality'] ?? 'Applicable';
+			$timeliness   = $_POST['timeliness'] ?? 'Applicable';
+			$efficiency   = $_POST['efficiency'] ?? 'Applicable';
+			$success      = $_POST['success_indicators'] ?? '';
+			$targets      = $_POST['targets_measures'] ?? '';
+			$major_output = $_POST['major_output'] ?? null;
+			$mfo          = isset($_POST['mfo']) && is_numeric($_POST['mfo']) ? intval($_POST['mfo']) : 0;
+			$academic_rank_id = isset($_POST['academic_rank_id']) && intval($_POST['academic_rank_id']) > 0
+				? intval($_POST['academic_rank_id']) : null;
+			$is_active    = (isset($_POST['is_active']) && $_POST['is_active'] === '0') ? 0 : 1;
+
+			// designation: 0/NULL/empty = "All designations"
+			$designation_id = 0;
+			$designations   = [];
+			if (isset($_POST['designation_id'])) {
+				$raw = is_array($_POST['designation_id']) ? $_POST['designation_id'] : [$_POST['designation_id']];
+				foreach ($raw as $dv) {
+					$dv = intval($dv);
+					if ($dv > 0) { $designation_id = $dv; $designations[] = $dv; }
+				}
+			}
+
+			if (empty($id)) {
+				$created_by = (isset($_SESSION['login_id']) && intval($_SESSION['login_id']) > 0)
+					? intval($_SESSION['login_id']) : null;
+				$stmt = $this->db->prepare(
+					"INSERT INTO task_list
+					 (mfo, designation_id, academic_rank_id, category, sub_category, major_output,
+					  success_indicators, targets_measures, quality, timeliness, efficiency, is_active, created_by, date_created)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
+				);
+				$stmt->bind_param('iiisssssssssi',
+					$mfo, $designation_id, $academic_rank_id, $category, $sub_category, $major_output,
+					$success, $targets, $quality, $timeliness, $efficiency, $is_active, $created_by);
+			} else {
+				$stmt = $this->db->prepare(
+					"UPDATE task_list SET mfo=?, designation_id=?, academic_rank_id=?, category=?, sub_category=?,
+					 major_output=?, success_indicators=?, targets_measures=?, quality=?, timeliness=?, efficiency=?,
+					 is_active=? WHERE id=?"
+				);
+				$stmt->bind_param('iiisssssssssi',
+					$mfo, $designation_id, $academic_rank_id, $category, $sub_category, $major_output,
+					$success, $targets, $quality, $timeliness, $efficiency, $is_active, $id);
+			}
+			$stmt->execute();
+			$task_id = empty($id) ? $this->db->insert_id : $id;
+			$stmt->close();
+
+			// Refresh junction rows for this task
+			$del = $this->db->prepare("DELETE FROM task_designations WHERE task_id = ?");
+			$del->bind_param('i', $task_id);
+			$del->execute();
+			$del->close();
+			if (!empty($designations)) {
+				$ins = $this->db->prepare("INSERT INTO task_designations (task_id, designation_id) VALUES (?, ?)");
+				foreach (array_unique($designations) as $did) {
+					$ins->bind_param('ii', $task_id, $did);
+					$ins->execute();
+				}
+				$ins->close();
+			}
+
+			$this->db->commit();
 			return 1;
+		} catch (Exception $e) {
+			$this->db->rollback();
+			return $e->getMessage();
 		}
 	}
 	
@@ -2392,7 +2450,7 @@ function submit_file() {
 			LEFT JOIN target_exemptions te ON t.id = te.task_id AND te.position_id = $position_id
 			WHERE t.is_active = 1
 			AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id)
-			AND (t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = $designation_id)
+			AND " . task_designation_match($designation_id) . "
 			AND te.id IS NULL
 			$category_where
 			ORDER BY t.category, t.sub_category, t.mfo");

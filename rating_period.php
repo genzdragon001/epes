@@ -109,7 +109,7 @@ while ($row = $hist_qry->fetch_assoc()) {
                                     <div class="form-check">
                                         <input type="checkbox" name="period_auto_cascade" id="period_auto_cascade"
                                                class="form-check-input" value="1">
-                                        <label class="form-check-label">Auto-cascade: IPCR → DP + OPCR</label>
+                                        <label class="form-check-label">Auto-cascade: Compute DP + OPCR from IPCR</label>
                                     </div>
                                 </div>
                                 <div class="d-flex" style="gap: 8px;">
@@ -199,7 +199,7 @@ while ($row = $hist_qry->fetch_assoc()) {
             <!-- ==================== CASCADE BUTTON ==================== -->
             <div class="card card-outline card-success mt-3">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h6 class="card-title mb-0"><i class="fa fa-arrow-circle-up"></i> Cascading: IPCR → DP + OPCR</h6>
+                    <h6 class="card-title mb-0"><i class="fa fa-arrow-circle-up"></i> Cascading: IPCR &rarr; DP + OPCR</h6>
                     <button class="btn btn-sm btn-success" onclick="trigger_cascade()">
                         <i class="fa fa-calculator"></i> Compute Now
                     </button>

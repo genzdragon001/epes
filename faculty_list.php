@@ -92,7 +92,7 @@ function computeWeightedRating($conn, $faculty_id, $position_id, $designation_id
     $where = "t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id)";
     $where .= " AND t.id NOT IN (SELECT task_id FROM target_exemptions WHERE position_id = $position_id)";
     if ($is_cos) $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0)";
-    elseif ($designation_id > 0) $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = $designation_id)";
+    elseif ($designation_id > 0) $where .= " AND " . task_designation_match($designation_id);
     else $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0)";
     if (!empty($cat_filters)) $where .= " AND (" . implode(" OR ", $cat_filters) . ")";
 

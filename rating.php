@@ -68,9 +68,24 @@ while ($row = $cat_qry->fetch_assoc()) {
 $allocations = [];
 $position_ids = $emp_position_id > 0 ? "$emp_position_id, 0" : "0";
 $desig_id = intval($emp_designation_id ?? 0);
-//var_dump($emp_designation_id);
-if ($emp_designation_id && $emp_designation_id > 0) {
-    $desig_condition = "designation_id = " . intval($emp_designation_id);
+
+// Effective allocation designation. If this employee's designation has no
+// percentage_allocation rows for their position (e.g. Dean, designation_id=1,
+// whose targets haven't been configured yet), fall back to the base Faculty
+// designation (id=3) so they still see the position's default targets.
+// Remove this fallback once the designation's own targets are entered.
+$FACULTY_DESIG_ID = 3;
+$alloc_desig_id = $desig_id;
+if ($desig_id > 0) {
+    $chk = $conn->query("SELECT COUNT(*) AS n FROM percentage_allocation WHERE position_id = $emp_position_id AND designation_id = $desig_id AND is_active = 1");
+    $has_own_alloc = $chk ? (int)$chk->fetch_assoc()['n'] : 0;
+    if ($has_own_alloc == 0 && !$is_cos) {
+        $alloc_desig_id = $FACULTY_DESIG_ID;
+    }
+}
+
+if ($alloc_desig_id > 0) {
+    $desig_condition = "designation_id = " . intval($alloc_desig_id);
 } else {
     $desig_condition = "(designation_id IS NULL OR designation_id = 0)";
 }
@@ -121,12 +136,19 @@ if ($has_support) $cat_filters[] = "t.category = 'support'";
 
 $where = "t.is_active = 1";
 $where .= " AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $emp_position_id)";
-$where .= " AND t.id NOT IN (SELECT task_id FROM target_exemptions WHERE position_id = $emp_position_id)";
+// Exclusions: exempt a task if it is exempted for this position, OR exempted for
+// this employee's designation (target_exemptions.designation_id). Deans and other
+// designated staff can thus have specific targets excluded from their rating sheet.
+if (!empty($emp_designation_id) && $emp_designation_id > 0) {
+    $where .= " AND t.id NOT IN (SELECT task_id FROM target_exemptions WHERE position_id = $emp_position_id OR designation_id = " . intval($emp_designation_id) . ")";
+} else {
+    $where .= " AND t.id NOT IN (SELECT task_id FROM target_exemptions WHERE position_id = $emp_position_id)";
+}
 
 if ($is_cos) {
     $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0)";
 } elseif (!empty($emp_designation_id) && $emp_designation_id > 0) {
-    $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = " . intval($emp_designation_id) . ")";
+    $where .= " AND " . task_designation_match($emp_designation_id);
 } else {
     $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0)";
 }
@@ -384,7 +406,7 @@ function calcResearchAverage($tasks, $conn, $position_id, $designation_id, $facu
         AND t.sub_category = 'research'
         AND t.is_active = 1
         AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id)
-        AND t.designation_id $desig_cond
+        AND " . task_designation_match($designation_id) . "
         AND t.id NOT IN (
             SELECT tp.task_id FROM task_progress tp 
             WHERE tp.faculty_id = " . intval($faculty_id) . " AND tp.progress = 'N/A'
@@ -422,7 +444,7 @@ function calcExtensionAverage($tasks, $conn, $position_id, $designation_id, $fac
         AND t.sub_category = 'extension'
         AND t.is_active = 1
         AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id)
-        AND t.designation_id $desig_cond
+        AND " . task_designation_match($designation_id) . "
         AND t.id NOT IN (
             SELECT tp.task_id FROM task_progress tp 
             WHERE tp.faculty_id = " . intval($faculty_id) . " AND tp.progress = 'N/A'
@@ -547,7 +569,7 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                 }
             }
 
-            $core_total_display = getAllocation($conn, $emp_position_id, $emp_designation_id, 'core', null);
+            $core_total_display = getAllocation($conn, $emp_position_id, $alloc_desig_id, 'core', null);
             if ($core_total_display == 0) {
                 $core_total_display = $core_pct;
             }
@@ -656,10 +678,7 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
 
   
     <tr class="table-info">
-        <td class="text-end"><b>Strategic Function Average</b></td>
-        <td></td><td></td>
-        <td></td>
-        <td></td>
+        <td colspan="5" class="text-end"><b>Strategic Function Average</b></td>
         <td class="text-center"><b><?php echo $str_ave['ave']; ?></b></td>
     </tr>
    
@@ -735,43 +754,40 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                     // Compute core_function as a WEIGHTED average of sub-categories
                     // Sub-category percentages are WITHIN core (sum to 100% of core):
                     //   Instruction (TER+Instructions) = 70%, Research = 10%, Extension = 20%
+                    // No redistribution: missing sub-categories count as 0
                     $core_weighted_sum = 0;
-                    $core_weighted_pct = 0;
+                    $core_total_sub_pct = 0;
                     
-                    if ($show_instructions_pct && $inst_active) {
-                        $core_weighted_sum += $inst_val * $inst_pct;
-                        $core_weighted_pct += $inst_pct;
+                    if ($show_instructions_pct) {
+                        $core_weighted_sum += ($inst_active ? $inst_val : 0) * $inst_pct;
+                        $core_total_sub_pct += $inst_pct;
                     }
-                    if ($show_research_pct && $res_active) {
-                        $core_weighted_sum += $res_val * $res_pct;
-                        $core_weighted_pct += $res_pct;
+                    if ($show_research_pct) {
+                        $core_weighted_sum += ($res_active ? $res_val : 0) * $res_pct;
+                        $core_total_sub_pct += $res_pct;
                     }
-                    if ($show_extension_pct && $ext_active) {
-                        $core_weighted_sum += $ext_val * $ext_pct;
-                        $core_weighted_pct += $ext_pct;
+                    if ($show_extension_pct) {
+                        $core_weighted_sum += ($ext_active ? $ext_val : 0) * $ext_pct;
+                        $core_total_sub_pct += $ext_pct;
                     }
                     
-                    // core_function = weighted average of active sub-categories (within core, out of 100)
-                    $core_function = $core_weighted_pct > 0 ? $core_weighted_sum / $core_weighted_pct : 0;
+                    // core_function = weighted average (no redistribution for missing)
+                    $core_function = $core_total_sub_pct > 0 ? $core_weighted_sum / $core_total_sub_pct : 0;
                     
                     // The effective core percentage = the full core_total_pct (e.g. 60% if designated, 90% if not)
                     $core_effective_pct = $core_total_pct;
                     $core_weighted = $core_function * ($core_effective_pct / 100);
+                    // For display: whether any sub-category is active
+                    $core_weighted_pct = ($inst_active || $res_active || $ext_active) ? $core_total_sub_pct : 0;
                     
-                    // Compute total: Strategic + Core + Support (percentages sum to 100)
-                    // Only include categories that have verified submissions; redistribute if any missing
-                    $str_pct_calc = ($show_strategic_pct && $str_active) ? $str_pct : 0;
-                    $core_pct_calc = ($core_weighted_pct > 0) ? $core_effective_pct : 0;
-                    $supp_pct_calc = ($show_support_pct && $supp_active) ? $supp_pct : 0;
+                    // Compute total: Strategic + Core + Support (no redistribution)
+                    // Sum of portions; missing categories count as 0
+                    $str_portion = ($str_active ? $str_val * ($str_pct / 100) : 0);
+                    $core_portion = $core_weighted;  // already = core_function * (core_effective_pct / 100)
+                    $supp_portion = ($supp_active ? $supp_val * ($supp_pct / 100) : 0);
                     
-                    $total_active_pct = $str_pct_calc + $core_pct_calc + $supp_pct_calc;
-                    
-                    if ($total_active_pct > 0) {
-                        // Redistribute: scale to 100% so faculty isn't penalized for missing categories
-                        $total = (($str_val * $str_pct_calc) + ($core_function * $core_pct_calc) + ($supp_val * $supp_pct_calc)) / $total_active_pct;
-                    } else {
-                        $total = 0;
-                    }
+                    $total = $str_portion + $core_portion + $supp_portion;
+                    $total_portion = $total;
                     ?>
 
                     <?php if ($show_instructions || $show_research || $show_extension): ?>
@@ -824,10 +840,7 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                         <tr><td colspan="5" class="text-muted"><em>(No verified submissions)</em></td></tr>
                         <?php endif; ?>
                         <tr class="table-info">
-                            <td class="text-end"><b>TER</b></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
+                            <td colspan="4" class="text-end"><b>TER</b></td>
                             <td class="text-center"><b><?php echo $inst_rating['ter_ave']; ?></b></td>
                         </tr>
                     
@@ -855,19 +868,13 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                         <tr><td colspan="5" class="text-muted"><em>(No verified submissions)</em></td></tr>
                         <?php endif; ?>
                         <tr class="table-info">
-                            <td class="text-end"><b>Instructions (Sum ÷ <?php echo $inst_rating['divisor']; ?>)</b></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
+                            <td colspan="4" class="text-end"><b>Instructions (Sum ÷ <?php echo $inst_rating['divisor']; ?>)</b></td>
                             <td class="text-center"><b><?php echo $inst_rating['instruction_div']; ?></b></td>
                         </tr>
                         
                         <?php if ($inst_ave['count'] > 0): ?>
                         <tr class="table-info">
-                            <td class="text-end"><b>Instruction(Average)</b></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
+                            <td colspan="4" class="text-end"><b>Instruction(Average)</b></td>
                             <td class="text-center"><b><?php echo $inst_rating['instruction_rating']; ?></b></td>
                         </tr>
                         <?php endif; ?>
@@ -1002,72 +1009,76 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                                 
                         // var_dump($show_strategic_pct);
                                 ?>
-                            <?php if ($show_strategic_pct && $str_active): ?>
+                            <?php if ($show_strategic_pct): ?>
                             <tr>
                                 <td class="text-left"><b>Strategic Functions</b></td>
-                                <td><?php echo $str_pct_calc; ?>%</td>
-                                <td><?php echo $str_ave['ave']; ?></td>
-                                <td><?php echo number_format($str_val * ($str_pct_calc / 100), 2); ?></td>
-                                <td><?php echo getAdjectivalRating($str_val); ?></td>
+                                <td><?php echo $str_pct; ?>%</td>
+                                <td><?php echo $str_active ? $str_ave['ave'] : 'N/A'; ?></td>
+                                <td><?php echo $str_active ? number_format($str_val * ($str_pct / 100), 2) : '0.00'; ?></td>
+                                <td><?php echo $str_active ? getAdjectivalRating($str_val) : 'NO RATING'; ?></td>
                             </tr>
                             <?php endif; ?>
                             
-                            <?php if ($core_weighted_pct > 0): ?>
+                            <?php if ($core_weighted_pct > 0 || $show_instructions_pct || $show_research_pct || $show_extension_pct): ?>
                             <?php 
                                 $core_avg_display = min(5.00, $core_function);
                             ?>
                             <tr>
                                 <td class="text-left"><b>Core Functions</b></td>
-                                <td><?php echo $core_pct_calc; ?>%</td>
-                                <td><?php echo number_format($core_avg_display, 2); ?></td>
-                                <td><?php echo number_format($core_weighted, 2); ?></td>
-                                <td><?php echo getAdjectivalRating($core_avg_display); ?></td>
+                                <td><?php echo $core_effective_pct; ?>%</td>
+                                <td><?php echo $core_weighted_pct > 0 ? number_format($core_avg_display, 2) : 'N/A'; ?></td>
+                                <td><?php echo $core_weighted_pct > 0 ? number_format($core_weighted, 2) : '0.00'; ?></td>
+                                <td><?php echo $core_weighted_pct > 0 ? getAdjectivalRating($core_avg_display) : 'NO RATING'; ?></td>
                             </tr>
-                            <?php if ($show_instructions_pct && $inst_active): ?>
+                            <?php if ($show_instructions_pct): ?>
                             <tr style="font-size: 0.85rem; background-color: #f8f8f8;">
                                 <td class="text-left">&nbsp;&nbsp;&nbsp;&nbsp;Instruction</td>
                                 <td><?php echo $inst_pct; ?>%</td>
-                                <td><?php echo $emp_position_id == 19 ? $inst_rating['instruction_rating'] : $inst_ave['ave']; ?></td>
+                                <td><?php echo $inst_active ? ($emp_position_id == 19 ? $inst_rating['instruction_rating'] : $inst_ave['ave']) : 'N/A'; ?></td>
                                 <td></td>
-                                <td><?php echo getAdjectivalRating(floatval($emp_position_id == 19 ? $inst_rating['instruction_rating'] : $inst_ave['ave'])); ?></td>
+                                <td><?php echo $inst_active ? getAdjectivalRating(floatval($emp_position_id == 19 ? $inst_rating['instruction_rating'] : $inst_ave['ave'])) : 'NO RATING'; ?></td>
                             </tr>
                             <?php endif; ?>
-                            <?php if ($show_research_pct && $res_active): ?>
+                            <?php if ($show_research_pct): ?>
                             <tr style="font-size: 0.85rem; background-color: #f8f8f8;">
                                 <td class="text-left">&nbsp;&nbsp;&nbsp;&nbsp;Research</td>
                                 <td><?php echo $res_pct; ?>%</td>
-                                <td><?php echo $res_rating['ave']; ?></td>
+                                <td><?php echo $res_active ? $res_rating['ave'] : 'N/A'; ?></td>
                                 <td></td>
-                                <td><?php echo getAdjectivalRating(floatval($res_rating['ave'])); ?></td>
+                                <td><?php echo $res_active ? getAdjectivalRating(floatval($res_rating['ave'])) : 'NO RATING'; ?></td>
                             </tr>
                             <?php endif; ?>
-                            <?php if ($show_extension_pct && $ext_active): ?>
+                            <?php if ($show_extension_pct): ?>
                             <tr style="font-size: 0.85rem; background-color: #f8f8f8;">
                                 <td class="text-left">&nbsp;&nbsp;&nbsp;&nbsp;Extension</td>
                                 <td><?php echo $ext_pct; ?>%</td>
-                                <td><?php echo $ext_rating['ave']; ?></td>
+                                <td><?php echo $ext_active ? $ext_rating['ave'] : 'N/A'; ?></td>
                                 <td></td>
-                                <td><?php echo getAdjectivalRating(floatval($ext_rating['ave'])); ?></td>
+                                <td><?php echo $ext_active ? getAdjectivalRating(floatval($ext_rating['ave'])) : 'NO RATING'; ?></td>
                             </tr>
                             <?php endif; ?>
                             <?php endif; ?>
                            
-                            <?php if ($supp_pct_calc > 0 && $supp_active): ?>
+                            <?php if ($show_support_pct && $supp_pct > 0): ?>
                             <tr>
                                 <td class="text-left"><b>Support Functions</b></td>
-                                <td><?php echo $supp_pct_calc; ?>%</td>
-                                <td><?php echo $supp_ave['ave']; ?></td>
-                                <td><?php echo number_format($supp_val * ($supp_pct_calc / 100), 2); ?></td>
-                                <td><?php echo getAdjectivalRating($supp_val); ?></td>
+                                <td><?php echo $supp_pct; ?>%</td>
+                                <td><?php echo $supp_active ? $supp_ave['ave'] : 'N/A'; ?></td>
+                                <td><?php echo $supp_active ? number_format($supp_val * ($supp_pct / 100), 2) : '0.00'; ?></td>
+                                <td><?php echo $supp_active ? getAdjectivalRating($supp_val) : 'NO RATING'; ?></td>
                             </tr>
                             <?php endif; ?>
                             
+                            <?php
+                            // Display total: includes all shown categories (even without verified submissions)
+                            $display_total_pct = ($show_strategic_pct ? $str_pct : 0) + ($show_instructions_pct || $show_research_pct || $show_extension_pct ? $core_effective_pct : 0) + ($show_support_pct && $supp_pct > 0 ? $supp_pct : 0);
+                            ?>
                             <tr style="font-weight:bold;">
                                 <td class="text-right">TOTAL</td>
-                                <td><?php echo $total_active_pct > 0 ? number_format($total_active_pct, 0) : 0; ?>%</td>
+                                <td><?php echo number_format($display_total_pct, 0); ?>%</td>
                                 <td></td>
-                                <td><?php echo number_format($total, 2); ?></td>
-                                <td><?php echo getAdjectivalRating($total); ?></td>
+                                <td><?php echo number_format($total_portion, 2); ?></td>
+                                <td><?php echo getAdjectivalRating($total_portion); ?></td>
                             </tr>
                         </tbody>
                     </table>
@@ -1086,7 +1097,7 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
                             </tr>
                         </thead>
                         <tbody>
-                            <tr><td>4.75 - 5.00</td><td><b>OUTSTANDING</b></td><td rowspan="5" style="vertical-align: middle; font-weight: bold; font-size: 1.1rem;"><?php echo number_format($total, 2); ?><br><small><?php echo getAdjectivalRating($total); ?></small></td></tr>
+                            <tr><td>4.75 - 5.00</td><td><b>OUTSTANDING</b></td><td rowspan="5" style="vertical-align: middle; font-weight: bold; font-size: 1.1rem;"><?php echo number_format($total_portion, 2); ?><br><small><?php echo getAdjectivalRating($total_portion); ?></small></td></tr>
                             <tr><td>3.61 - 4.74</td><td><b>VERY SATISFACTORY</b></td></tr>
                             <tr><td>2.61 - 3.60</td><td><b>SATISFACTORY</b></td></tr>
                             <tr><td>1.61 - 2.60</td><td><b>UNSATISFACTORY</b></td></tr>

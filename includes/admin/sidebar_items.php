@@ -62,7 +62,7 @@
 <li class="nav-item">
   <a href="#" class="nav-link nav-edit_employee">
     <i class="nav-icon fas fa-user-friends"></i>
-    <p>Employees<i class="right fas fa-angle-left"></i></p>
+    <p>Faculty<i class="right fas fa-angle-left"></i></p>
   </a>
   <ul class="nav nav-treeview">
     <li class="nav-item">

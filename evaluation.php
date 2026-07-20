@@ -120,7 +120,7 @@ SELECT
     LEFT JOIN ratings r ON r.employee_id = " . intval($nameId) . " AND r.task_id = t.id
     WHERE t.is_active = 1
         AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = " . intval($fac_position_id) . ")
-        AND (t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = " . intval($fac_desig_id) . ")
+        AND " . task_designation_match($fac_desig_id) . "
         AND t.id NOT IN (SELECT task_id FROM target_exemptions WHERE position_id = " . intval($fac_position_id) . ")
     ORDER BY 
         CASE WHEN t.category = 'strategic' THEN 0
@@ -175,18 +175,24 @@ SELECT
                 $has_submission = !empty($row['progress_id']);
                 $currentStatus = $row['task_progress'] ?? null;
                 $is_na = ($currentStatus === 'N/A');
+                // Resolve the real on-disk file (file_path may or may not include the extension)
+                $real_file = ($has_submission && !empty($row['file_path']))
+                    ? epes_real_file_path($row['file_path'], $row['file_type'])
+                    : null;
 ?>
     <tr>
         <th class="text-center align-middle"><?= $num++ ?></th>
         <td class="align-middle"><?= ucwords(htmlspecialchars($row['si'])) ?></td>
         <td class="text-center align-middle">
-        <?php if ($has_submission && !empty($row['file_path']) && !empty($row['file_type'])): ?>
+        <?php if ($real_file): ?>
         <button type="button" 
            class="btn btn-sm btn-primary view-file-btn"
-           data-file="<?= htmlspecialchars($row['file_path'] . '.' . $row['file_type']) ?>"
+           data-file="<?= htmlspecialchars($real_file) ?>"
            data-filetype="<?= htmlspecialchars($row['file_type']) ?>">
            View
         </button>
+        <?php elseif ($has_submission && !empty($row['file_path'])): ?>
+            <span class="badge badge-warning" title="File record exists but the file is missing on the server">Missing</span>
         <?php elseif ($is_na): ?>
             <span class="badge badge-secondary">N/A</span>
         <?php else: ?>

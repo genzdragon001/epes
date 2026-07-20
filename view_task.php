@@ -1,17 +1,25 @@
 <?php 
 include 'db_connect.php';
 if(isset($_GET['id'])){
-    $qry = $conn->query("SELECT t.*, d.designation as designation_name, r.position as rank_name 
+    $qry = $conn->query("SELECT t.*, r.position as rank_name 
         FROM task_list t 
-        LEFT JOIN designation_list d ON t.designation_id = d.id 
         LEFT JOIN position_list r ON t.academic_rank_id = r.id 
         WHERE t.id = ".$_GET['id'])->fetch_array();
     foreach($qry as $k => $v){
         $$k = $v;
     }
+    // Gather all assigned designations (legacy column + junction table)
+    $desig_names = [];
+    if (!empty($designation_id)) {
+        $dn = $conn->query("SELECT designation FROM designation_list WHERE id = " . intval($designation_id));
+        if ($dn && $row = $dn->fetch_assoc()) $desig_names[] = $row['designation'];
+    }
+    $dj = $conn->query("SELECT d.designation FROM task_designations td JOIN designation_list d ON d.id = td.designation_id WHERE td.task_id = " . intval($_GET['id']));
+    while ($dj && $row = $dj->fetch_assoc()) $desig_names[] = $row['designation'];
+    $desig_names = array_values(array_unique($desig_names));
+    $designation_label = empty($desig_names) ? 'All Designations' : implode(', ', $desig_names);
 }
-?>
-<div class="container-fluid">
+?><div class="container-fluid">
     <div class="col-lg-12">
         <div class="row">
             <div class="col-md-6">
@@ -37,8 +45,8 @@ if(isset($_GET['id'])){
                 </dl>
                 <?php endif; ?>
                 <dl>
-                    <dt><b class="border-bottom border-primary">Designation</b></dt>
-                    <dd><?php echo htmlspecialchars($designation_name ?? 'All Designations') ?></dd>
+                    <dt><b class="border-bottom border-primary">Designation(s)</b></dt>
+                    <dd><?php echo htmlspecialchars($designation_label ?? 'All Designations') ?></dd>
                 </dl>
                 <dl>
                     <dt><b class="border-bottom border-primary">Academic Rank</b></dt>
@@ -128,7 +136,7 @@ if(isset($_GET['id'])){
                         </thead>
                         <tbody>
                             <?php while($sub = $submissions->fetch_assoc()): 
-                                $filePath = $sub['file_path'].".".$sub['file_type'];
+                                $filePath = epes_real_file_path($sub['file_path'], $sub['file_type']) ?: '';
                                 $isVerified = ($sub['progress'] === 'Verified');
                             ?>
                                 <tr>

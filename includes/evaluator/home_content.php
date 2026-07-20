@@ -31,14 +31,14 @@ if (!empty($_SESSION['is_evaluator'])) {
 
 if($is_dean) {
     $total_faculty      = $conn->query("SELECT COUNT(*) FROM employee_list WHERE id != $eval_id")->fetch_row()[0];
-    $total_submissions  = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.id!=$eval_id")->fetch_row()[0];
-    $verified           = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.id!=$eval_id AND tp.progress='Verified'")->fetch_row()[0];
-    $for_verif          = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.id!=$eval_id AND tp.progress='For Verification'")->fetch_row()[0];
+    $total_submissions  = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.id!=$eval_id $period_filter")->fetch_row()[0];
+    $verified           = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.id!=$eval_id AND tp.progress='Verified' $period_filter")->fetch_row()[0];
+    $for_verif          = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.id!=$eval_id AND tp.progress='For Verification' $period_filter")->fetch_row()[0];
 } else {
     $total_faculty      = $conn->query("SELECT COUNT(*) FROM employee_list WHERE department_id=$eval_dept_id")->fetch_row()[0];
-    $total_submissions  = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id AND e.id != $eval_id")->fetch_row()[0];
-    $verified           = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id AND e.id != $eval_id AND tp.progress='Verified'")->fetch_row()[0];
-    $for_verif          = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id AND e.id != $eval_id AND tp.progress='For Verification'")->fetch_row()[0];
+    $total_submissions  = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id AND e.id != $eval_id $period_filter")->fetch_row()[0];
+    $verified           = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id AND e.id != $eval_id AND tp.progress='Verified' $period_filter")->fetch_row()[0];
+    $for_verif          = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id AND e.id != $eval_id AND tp.progress='For Verification' $period_filter")->fetch_row()[0];
 }
 
 $other_submissions = $total_submissions - $verified - $for_verif;
@@ -72,7 +72,7 @@ if($is_dean) {
                 SELECT COUNT(*) as cnt FROM task_list t
                 WHERE t.is_active=1
                 AND (t.academic_rank_id IS NULL OR t.academic_rank_id=0 OR t.academic_rank_id=$fpos)
-                AND (t.designation_id IS NULL OR t.designation_id=0 OR t.designation_id=$fdes)
+                AND " . task_designation_match($fdes) . "
                 AND t.id NOT IN (SELECT task_id FROM target_exemptions WHERE position_id=$fpos)
             ");
             $targets_total += (int)$tq->fetch_assoc()['cnt'];
@@ -84,7 +84,7 @@ if($is_dean) {
                    SUM(CASE WHEN tp.progress='Verified' THEN 1 ELSE 0 END) as verified
             FROM task_progress tp
             INNER JOIN employee_list e ON tp.faculty_id = e.id
-            WHERE e.department_id = $dh_dept_id
+            WHERE e.department_id = $dh_dept_id $period_filter
         ");
         $subs = $sq->fetch_assoc();
         $submitted_cnt = (int)$subs['submitted'];
@@ -125,7 +125,7 @@ if(!$is_dean) {
             SELECT COUNT(*) as cnt FROM task_list t
             WHERE t.is_active=1
             AND (t.academic_rank_id IS NULL OR t.academic_rank_id=0 OR t.academic_rank_id=$fpos)
-            AND (t.designation_id IS NULL OR t.designation_id=0 OR t.designation_id=$fdes)
+            AND " . task_designation_match($fdes) . "
             AND t.id NOT IN (SELECT task_id FROM target_exemptions WHERE position_id=$fpos)
         ");
         $targets = (int)$tq->fetch_assoc()['cnt'];
@@ -134,7 +134,7 @@ if(!$is_dean) {
         $sq = $conn->query("
             SELECT COUNT(DISTINCT task_id) as submitted,
                    SUM(CASE WHEN progress='Verified' THEN 1 ELSE 0 END) as verified
-            FROM task_progress WHERE faculty_id=$fid
+            FROM task_progress WHERE faculty_id=$fid $period_filter
         ");
         $subs = $sq->fetch_assoc();
         $submitted_cnt = (int)$subs['submitted'];
@@ -155,13 +155,19 @@ if(!$is_dean) {
 }
 
 // Recent activity
-$recent = $conn->query("
+$recent_where = [];
+if (!$is_dean) $recent_where[] = "e.department_id=$eval_dept_id";
+if ($period_filter !== '') {
+    $recent_where[] = "(" . substr($period_filter, strlen(" AND ")) . ")";
+}
+$recent_sql = "
     SELECT e.lastname, e.firstname, tp.progress, tp.date_created
     FROM task_progress tp
     INNER JOIN employee_list e ON tp.faculty_id=e.id
-    " . ($is_dean ? "" : "WHERE e.department_id=$eval_dept_id") . "
+    " . (count($recent_where) ? "WHERE " . implode(" AND ", $recent_where) : "") . "
     ORDER BY tp.date_created DESC LIMIT 6
-");
+";
+$recent = $conn->query($recent_sql);
 ?>
 
 <!-- 4 STAT CARDS -->

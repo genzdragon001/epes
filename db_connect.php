@@ -52,9 +52,65 @@ if (!defined('DB_CONNECTED')) {
         global $conn;
         return $conn;
     }
+
+    /**
+     * Match a task to a faculty designation, accounting for BOTH the legacy
+     * single-int column (task_list.designation_id) and the multi-designation
+     * junction table (task_designations). A task matches when its legacy
+     * designation is NULL/0 ("All"), equals the faculty designation, OR it has
+     * a junction row for the faculty designation.
+     * @param mixed $desig_val The int designation id of the faculty
+     * @return string SQL fragment (no leading AND)
+     */
+    function task_designation_match($desig_val) {
+        $desig_val = intval($desig_val);
+        return "(t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = $desig_val
+                 OR EXISTS (SELECT 1 FROM task_designations td WHERE td.task_id = t.id AND td.designation_id = $desig_val))";
+    }
     
     /**
+     * Resolve the on-disk path for an uploaded MOV/submission file.
+     *
+     * The task_progress.file_path column is inconsistent across the dataset:
+     * most legacy rows store the path WITH the extension (e.g. "uploads/xxx.pdf"),
+     * while newer rows store it WITHOUT (e.g. "uploads/xxx"). This helper returns
+     * the real existing file path so view/download links always work, instead of
+     * blindly appending "." . file_type (which produced broken double-extension
+     * links like "uploads/xxx.pdf.pdf").
+     *
+     * @param string $file_path  Stored task_progress.file_path (may or may not include extension)
+     * @param string $file_type  Stored task_progress.file_type (extension without dot)
+     * @return string|null       Existing web path, or null if no file can be resolved
+     */
+    function epes_real_file_path($file_path, $file_type = '') {
+        $file_path = (string)($file_path ?? '');
+        $file_type = strtolower(trim((string)($file_type ?? ''), '.'));
+        if ($file_path === '') return null;
+
+        // Normalise to a web path (strip any leading drive/absolute prefix; keep "uploads/...")
+        $web = $file_path;
+        if (strpos($web, './') === 0) $web = substr($web, 2);
+        $web = ltrim($web, '/');
+
+        // 1. Stored path already points at an existing file -> use as-is
+        if (file_exists($web)) return $web;
+
+        // 2. Extension already present but file missing -> nothing else to try
+        if ($file_type !== '' && substr($web, -strlen('.' . $file_type)) === '.' . $file_type) {
+            return null;
+        }
+
+        // 3. No extension stored -> try appending file_type (newer convention)
+        if ($file_type !== '') {
+            $candidate = $web . '.' . $file_type;
+            if (file_exists($candidate)) return $candidate;
+        }
+        return null;
+    }
+
+    /**
      * Execute prepared statement safely
+
      * @param mysqli $conn Database connection
      * @param string $sql SQL query with placeholders
      * @param string $types Parameter types (s=string, i=integer, d=double, b=blob)

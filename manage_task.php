@@ -6,15 +6,22 @@ $academic_ranks = $conn->query("SELECT * FROM position_list ORDER BY position AS
 
 if(isset($_GET['id'])){
     $stmt = $conn->prepare("SELECT * FROM task_list where id = ?");
-$stmt->bind_param("i", $_GET['id']);
-$stmt->execute();
-$qry = $stmt->get_result()->fetch_array();
+    $stmt->bind_param("i", $_GET['id']);
+    $stmt->execute();
+    $qry = $stmt->get_result()->fetch_array();
     foreach($qry as $k => $v){
         $$k = $v;
     }
+    // Load currently-assigned designations (junction). Empty (designation_id=0/NULL) = All.
+    $assigned_desigs = [];
+    if (!empty($designation_id)) {
+        $assigned_desigs[] = $designation_id;
+    }
+    $tdq = $conn->query("SELECT designation_id FROM task_designations WHERE task_id = " . intval($_GET['id']));
+    while ($td = $tdq->fetch_assoc()) { $assigned_desigs[] = $td['designation_id']; }
+    $assigned_desigs = array_values(array_unique($assigned_desigs));
 }
-?>
-<div class="container-fluid">
+?><div class="container-fluid">
     <form action="" id="manage-output">
         <input type="hidden" name="id" value="<?php echo isset($id) ? $id : '' ?>">
 
@@ -41,28 +48,34 @@ $qry = $stmt->get_result()->fetch_array();
                     </select>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-4">
                 <div class="form-group">
-                    <label><b>Designation</b></label>
-                    <select class="form-control form-control-sm" name="designation_id" id="designation_id">
-                        <option value="">-- All Designations --</option>
-                        <?php while($d = $designations->fetch_assoc()): ?>
-                        <option value="<?php echo $d['id'] ?>" <?php echo (isset($designation_id) && $designation_id == $d['id']) ? "selected" : "" ?>><?php echo $d['designation'] ?></option>
+                    <label><b>Designation(s)</b></label>
+                    <select class="form-control form-control-sm select2" name="designation_id[]" id="designation_id" multiple="multiple" style="width:100%;">
+                        <?php
+                        $desigs2 = $conn->query("SELECT * FROM designation_list ORDER BY designation ASC");
+                        while($d = $desigs2->fetch_assoc()):
+                            $sel = (in_array($d['id'], $assigned_desigs ?? [])) ? "selected" : "";
+                        ?>
+                        <option value="<?php echo $d['id'] ?>" <?php echo $sel ?>><?php echo $d['designation'] ?></option>
                         <?php endwhile; ?>
                     </select>
-                    <small class="text-muted">Leave empty to apply to all designations</small>
+                    <small class="text-muted">Leave empty to apply to <b>All Designations</b>. Select multiple (e.g. Dept Head + Dean) as needed.</small>
                 </div>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <div class="form-group">
                     <label><b>Academic Rank</b></label>
                     <select class="form-control form-control-sm" name="academic_rank_id" id="academic_rank_id">
                         <option value="">-- All Academic Ranks --</option>
-                        <?php while($r = $academic_ranks->fetch_assoc()): ?>
+                        <?php
+                        $ranks2 = $conn->query("SELECT * FROM position_list ORDER BY position ASC");
+                        while($r = $ranks2->fetch_assoc()):
+                        ?>
                         <option value="<?php echo $r['id'] ?>" <?php echo (isset($academic_rank_id) && $academic_rank_id == $r['id']) ? "selected" : "" ?>><?php echo $r['position'] ?></option>
                         <?php endwhile; ?>
                     </select>
-                    <small class="text-muted">Leave empty to apply to all academic ranks</small>
+                    <small class="text-muted">Optional</small>
                 </div>
             </div>
         </div>
@@ -125,6 +138,16 @@ $('#task_category').change(function(){
     } else {
         $('#sub_category_wrapper').hide();
         $('#task_sub_category').val('');
+    }
+});
+
+$(document).ready(function(){
+    if ($.fn.select2) {
+        $('#designation_id').select2({
+            placeholder: 'All Designations (leave empty)',
+            allowClear: true,
+            width: '100%'
+        });
     }
 });
 
