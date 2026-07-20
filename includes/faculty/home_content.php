@@ -20,10 +20,11 @@ $for_verif       = $conn->query("SELECT COUNT(*) FROM task_progress WHERE facult
 $other_status    = $submitted - $verified - $for_verif;
 $not_submitted   = max(0, $total_targets - $submitted);
 
-// IPCR rating
-$ipcr = $conn->query("SELECT AVG((efficiency+timeliness+quality)/3) as overall, COUNT(*) as cnt FROM ratings WHERE employee_id=$emp_id AND efficiency>0 AND timeliness>0 AND quality>0 $period_filter")->fetch_assoc();
-$ipcr_score = $ipcr['cnt'] > 0 ? round($ipcr['overall'], 2) : null;
-$ipcr_adj   = $ipcr_score ? ($ipcr_score >= 4.75 ? 'Outstanding' : ($ipcr_score >= 3.61 ? 'Very Satisfactory' : ($ipcr_score >= 2.61 ? 'Satisfactory' : ($ipcr_score >= 1.61 ? 'Unsatisfactory' : 'Poor')))) : 'Not Rated';
+// IPCR rating — use the same weighted computation as rating.php
+require_once 'includes/rating_functions.php';
+$ipcr_period_code = $selected_period['code'] ?? '';
+$ipcr_score = computeWeightedRating($conn, $emp_id, $emp_position_id, $emp_designation_id, $ipcr_period_code);
+$ipcr_adj = $ipcr_score !== null ? getAdjectivalRating($ipcr_score) : 'Not Rated';
 
 $submission_pct = $total_targets > 0 ? round(($submitted/$total_targets)*100) : 0;
 $verification_pct = $submitted > 0 ? round(($verified/$submitted)*100) : 0;
@@ -60,9 +61,9 @@ $recent = $conn->query("SELECT tp.progress, tp.date_created, t.success_indicator
     <div class="col-6 col-md-3 mb-2">
         <div class="stat-card accent-purple">
             <div class="stat-icon purple"><i class="fas fa-star"></i></div>
-            <div class="stat-value"><?= $ipcr_score ? number_format($ipcr_score, 2) : '—' ?></div>
+            <div class="stat-value"><?= $ipcr_score !== null ? number_format($ipcr_score, 2) : '—' ?></div>
             <div class="stat-label">IPCR Rating</div>
-            <div class="stat-sub <?= $ipcr_score >= 3.61 ? 'green' : ($ipcr_score >= 2.61 ? 'amber' : 'red') ?>"><?= $ipcr_adj ?></div>
+            <div class="stat-sub <?= ($ipcr_score ?? 0) >= 3.61 ? 'green' : (($ipcr_score ?? 0) >= 2.61 ? 'amber' : 'red') ?>"><?= $ipcr_score !== null ? $ipcr_adj : 'Not Rated' ?></div>
         </div>
     </div>
 </div>
