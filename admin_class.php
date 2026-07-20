@@ -1286,7 +1286,8 @@ Class Action {
 
 		// Individual ratings are always IPCR-level (DP/OPCR are computed aggregates)
 		$period_type = 'IPCR';
-	
+		$evaluator_id = intval($_SESSION['login_id'] ?? 0);
+
 		// Check if rating already exists
 		$stmt = $this->db->prepare("SELECT id FROM ratings WHERE task_id = ? AND employee_id = ?");
 		$stmt->bind_param('ii', $task_id, $employee_id);
@@ -1302,8 +1303,12 @@ Class Action {
 			$stmt->close();
 			return 1;
 		} else {
-			$stmt = $this->db->prepare("INSERT INTO ratings (task_id, employee_id, {$field}, rating_period, period_type) VALUES (?, ?, ?, ?, ?)");
-			$stmt->bind_param('iidss', $task_id, $employee_id, $value, $rating_period, $period_type);
+			// Initialize all NOT NULL columns: unrated fields default to 0, remarks to ''
+			$efficiency_val = ($field === 'efficiency') ? $value : 0;
+			$timeliness_val = ($field === 'timeliness') ? $value : 0;
+			$quality_val = ($field === 'quality') ? $value : 0;
+			$stmt = $this->db->prepare("INSERT INTO ratings (task_id, employee_id, evaluator_id, efficiency, timeliness, quality, remarks, rating_period, period_type) VALUES (?, ?, ?, ?, ?, ?, '', ?, ?)");
+			$stmt->bind_param('iiidddss', $task_id, $employee_id, $evaluator_id, $efficiency_val, $timeliness_val, $quality_val, $rating_period, $period_type);
 			$stmt->execute();
 			$stmt->close();
 			return 1;
@@ -1590,9 +1595,11 @@ Class Action {
     $stmt->close();
 
     // Mirror into ratings table so IPCR/DPCR/OPCR views pick them up
+    // IMPORTANT: Only fill in fields that the evaluator hasn't manually set yet.
+    // Unconditionally overwriting would destroy manually-entered ratings.
     $quality_default = 5;
     $stmt = $this->db->prepare("
-    	SELECT id FROM ratings
+    	SELECT id, efficiency, timeliness, quality FROM ratings
     	WHERE task_id = ? AND employee_id = ?
     	LIMIT 1
     ");
@@ -1602,24 +1609,66 @@ Class Action {
     $stmt->close();
 
     $period_type = 'IPCR';
+    $evaluator_id = intval($_SESSION['login_id'] ?? 0);
 
     if ($check && $check->num_rows > 0) {
-    	$rating_id = $check->fetch_assoc()['id'];
-    	$stmt = $this->db->prepare("
-    		UPDATE ratings
-    		SET efficiency = ?, timeliness = ?, quality = ?, rating_period = ?, period_type = ?
-    		WHERE id = ?
-    	");
-    	$stmt->bind_param('ddsssi', $efficiency_rating, $timeliness_rating, $quality_default, $rating_period, $period_type, $rating_id);
+    	$existing = $check->fetch_assoc();
+    	$rating_id = $existing['id'];
+
+    	// Only auto-fill efficiency if evaluator hasn't set it (0 or empty)
+    	$has_eff = !empty($existing['efficiency']) && floatval($existing['efficiency']) > 0;
+    	$has_time = !empty($existing['timeliness']) && floatval($existing['timeliness']) > 0;
+    	$has_qual = !empty($existing['quality']) && floatval($existing['quality']) > 0;
+
+    	// Build UPDATE with only the fields that need auto-filling
+    	$sets = [];
+    	$types = '';
+    	$params = [];
+    	if (!$has_eff && $efficiency_rating !== null) {
+    		$sets[] = 'efficiency = ?';
+    		$types .= 'd';
+    		$params[] = $efficiency_rating;
+    	}
+    	if (!$has_time && $timeliness_rating !== null) {
+    		$sets[] = 'timeliness = ?';
+    		$types .= 'd';
+    		$params[] = $timeliness_rating;
+    	}
+    	if (!$has_qual) {
+    		$sets[] = 'quality = ?';
+    		$types .= 'd';
+    		$params[] = $quality_default;
+    	}
+    	// Always update rating_period + period_type
+    	$sets[] = 'rating_period = ?';
+    	$types .= 's';
+    	$params[] = $rating_period;
+    	$sets[] = 'period_type = ?';
+    	$types .= 's';
+    	$params[] = $period_type;
+
+    	if (count($sets) > 0) {
+    		$types .= 'i';
+    		$params[] = $rating_id;
+    		$sql = "UPDATE ratings SET " . implode(', ', $sets) . " WHERE id = ?";
+    		$stmt = $this->db->prepare($sql);
+    		$stmt->bind_param($types, ...$params);
+    		$stmt->execute();
+    		$stmt->close();
+    	}
     } else {
+    	// No existing rating row — insert with auto-scored values
     	$stmt = $this->db->prepare("
-    		INSERT INTO ratings (task_id, employee_id, efficiency, timeliness, quality, rating_period, period_type)
-    		VALUES (?, ?, ?, ?, ?, ?, ?)
+    		INSERT INTO ratings (task_id, employee_id, evaluator_id, efficiency, timeliness, quality, remarks, rating_period, period_type)
+    		VALUES (?, ?, ?, ?, ?, ?, '', ?, ?)
     	");
-    	$stmt->bind_param('iidddss', $task_id, $faculty_id, $efficiency_rating, $timeliness_rating, $quality_default, $rating_period, $period_type);
+    	$eff_ins = $efficiency_rating ?? 0;
+    	$time_ins = $timeliness_rating ?? 0;
+    	$stmt->bind_param('iiidddss', $task_id, $faculty_id, $evaluator_id, $eff_ins, $time_ins, $quality_default, $rating_period, $period_type);
+    	$stmt->execute();
+    	$stmt->close();
     }
-    $stmt->execute();
-    $stmt->close();
+
     }
 
 function submit_file() {
