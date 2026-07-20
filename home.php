@@ -130,7 +130,14 @@ if ($active_period) {
     <div>
         <h4 class="mb-0" style="font-weight:700; color:#1a1a2e;"><?= htmlspecialchars($_SESSION['login_name'] ?? 'User') ?></h4>
         <span class="text-muted" style="font-size:0.85rem;">
-            <?= $emp_type == 2 ? 'Administrator' : ($emp_type == 1 ? 'Evaluator' : 'Faculty') ?>
+            <?php
+            if ($emp_type == 2) echo 'Administrator';
+            elseif ($emp_type == 1) echo 'Evaluator';
+            elseif (!empty($_SESSION['is_evaluator'])) {
+                $role = $_SESSION['evaluator_role'] ?? 'evaluator';
+                echo ucfirst($role) . ' & Faculty';
+            } else echo 'Faculty';
+            ?>
             <?php if($emp_type != 2 && $period_label !== 'No period set'): ?>&middot; <?= htmlspecialchars($period_label) ?><?php endif; ?>
         </span>
     </div>
@@ -151,7 +158,25 @@ if ($active_period) {
 
 <?php if($emp_type == 2): ?>
   <?php include 'includes/admin/home_content.php'; ?>
-<?php elseif($emp_type == 1 || ($emp_type == 0 && !empty($_SESSION['is_evaluator']))): ?>
+<?php elseif($emp_type == 1): ?>
+  <?php include 'includes/evaluator/home_content.php'; ?>
+<?php elseif($emp_type == 0 && !empty($_SESSION['is_evaluator'])): ?>
+  <!-- Merged Faculty + Evaluator: show BOTH dashboards, clearly separated -->
+  <div class="dashboard-section-divider">
+      <span class="dashboard-section-title"><i class="fas fa-user-graduate mr-1"></i>My Faculty Dashboard</span>
+      <small class="text-muted">Your targets, submissions, and IPCR rating</small>
+  </div>
+  <?php include 'includes/faculty/home_content.php'; ?>
+
+  <div class="dashboard-section-divider mt-4">
+      <span class="dashboard-section-title"><i class="fas fa-user-tie mr-1"></i>
+      <?php
+      $role = $_SESSION['evaluator_role'] ?? 'evaluator';
+      echo ucfirst($role);
+      ?>
+      Dashboard</span>
+      <small class="text-muted">Faculty under your supervision</small>
+  </div>
   <?php include 'includes/evaluator/home_content.php'; ?>
 <?php else: ?>
   <?php include 'includes/faculty/home_content.php'; ?>
@@ -159,6 +184,28 @@ if ($active_period) {
 
 <!-- ===== MODERN DASHBOARD STYLES ===== -->
 <style>
+/* ── Section Divider ── */
+.dashboard-section-divider {
+    border-top: 2px solid #e9ecef;
+    padding-top: 14px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.dashboard-section-divider:first-child {
+    border-top: none;
+    padding-top: 0;
+}
+.dashboard-section-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #1a1a2e;
+}
+@media (max-width: 767px) {
+    .dashboard-section-title { font-size: 0.95rem; }
+}
+
 /* ── Stat Cards ── */
 .stat-card {
     background: #fff;
