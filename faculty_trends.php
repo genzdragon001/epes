@@ -6,12 +6,11 @@
 include 'db_connect.php';
 require_once 'includes/period_builder.php';
 
-session_start();
+// Auth check
 if (!isset($_SESSION['login_id'])) {
-    header('Location: login.php');
+    header('location:login.php');
     exit;
 }
-require_once 'login_check.php';
 
 $login_type = $_SESSION['login_type'] ?? -1;
 $login_id   = intval($_SESSION['login_id'] ?? 0);
