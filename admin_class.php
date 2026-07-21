@@ -2805,6 +2805,7 @@ function submit_file() {
 	 * Returns "1" on success, "0" on failure.
 	 */
 	function update_period(){
+		header('Content-Type: application/json');
 		extract($_POST);
 		$period_id = intval($period_id ?? 0);
 		$semester  = $this->db->real_escape_string($semester ?? '');
@@ -2816,7 +2817,9 @@ function submit_file() {
 		$non_desig_end_date   = $this->db->real_escape_string($non_desig_end_date ?? '');
 		$auto_cascade = intval($auto_cascade ?? 0);
 
-		if (empty($semester) || empty($year)) return 0;
+		if (empty($semester) || empty($year)) {
+			return json_encode(['status' => 'error', 'message' => 'Semester and year are required']);
+		}
 
 		// Auto-build code if not supplied
 		if (empty($code)) {
@@ -2824,39 +2827,47 @@ function submit_file() {
 		}
 
 		if ($period_id > 0) {
-			// UPDATE existing
+			// UPDATE existing — allow semester/year change but check for duplicates
+			// (same semester+year on a DIFFERENT id)
+			$dup_check = $this->db->query("SELECT COUNT(*) as c FROM rating_period WHERE semester = '$semester' AND year = '$year' AND id != $period_id");
+			if ($dup_check && intval($dup_check->fetch_assoc()['c']) > 0) {
+				return json_encode(['status' => 'error', 'message' => 'A rating period for ' . stripslashes($semester) . ' ' . stripslashes($year) . ' already exists']);
+			}
 			$sql = "UPDATE rating_period SET
-						semester = '$semester',
-						year = '$year',
-						code = '$code',
-						start_date = " . ($start_date ? "'$start_date'" : "NULL") . ",
-						end_date = " . ($end_date ? "'$end_date'" : "NULL") . ",
-						non_desig_start_date = " . ($non_desig_start_date ? "'$non_desig_start_date'" : "NULL") . ",
-						non_desig_end_date = " . ($non_desig_end_date ? "'$non_desig_end_date'" : "NULL") . ",
-						auto_cascade = $auto_cascade
+					semester = '$semester',
+					year = '$year',
+					code = '$code',
+					start_date = " . ($start_date ? "'$start_date'" : "NULL") . ",
+					end_date = " . ($end_date ? "'$end_date'" : "NULL") . ",
+					non_desig_start_date = " . ($non_desig_start_date ? "'$non_desig_start_date'" : "NULL") . ",
+					non_desig_end_date = " . ($non_desig_end_date ? "'$non_desig_end_date'" : "NULL") . ",
+					auto_cascade = $auto_cascade
 					WHERE id = $period_id";
 		} else {
-			// INSERT new — default active = 1 (initializes the period system).
-			// If another active period exists, deactivate it so only one is active.
+			// INSERT new — check for duplicates first
+			$dup_check = $this->db->query("SELECT COUNT(*) as c FROM rating_period WHERE semester = '$semester' AND year = '$year'");
+			if ($dup_check && intval($dup_check->fetch_assoc()['c']) > 0) {
+				return json_encode(['status' => 'error', 'message' => 'A rating period for ' . stripslashes($semester) . ' ' . stripslashes($year) . ' already exists']);
+			}
 			$active_check = $this->db->query("SELECT COUNT(*) as c FROM rating_period WHERE is_active = 1");
 			$has_active = $active_check ? intval($active_check->fetch_assoc()['c']) : 0;
 			$set_active = $has_active > 0 ? 0 : 1;
 			$sql = "INSERT INTO rating_period
-						(semester, year, code, start_date, end_date, non_desig_start_date, non_desig_end_date, auto_cascade, period_type, is_active)
+					(semester, year, code, start_date, end_date, non_desig_start_date, non_desig_end_date, auto_cascade, period_type, is_active)
 					VALUES
-						('$semester', '$year', '$code',
-						 " . ($start_date ? "'$start_date'" : "NULL") . ",
-						 " . ($end_date ? "'$end_date'" : "NULL") . ",
-						 " . ($non_desig_start_date ? "'$non_desig_start_date'" : "NULL") . ",
-						 " . ($non_desig_end_date ? "'$non_desig_end_date'" : "NULL") . ",
-						 $auto_cascade, 'IPCR', $set_active)";
+					('$semester', '$year', '$code',
+					 " . ($start_date ? "'$start_date'" : "NULL") . ",
+					 " . ($end_date ? "'$end_date'" : "NULL") . ",
+					 " . ($non_desig_start_date ? "'$non_desig_start_date'" : "NULL") . ",
+					 " . ($non_desig_end_date ? "'$non_desig_end_date'" : "NULL") . ",
+					 $auto_cascade, 'IPCR', $set_active)";
 		}
 
 		$qry = $this->db->query($sql);
 		if ($qry) {
-			return 1;
+			return json_encode(['status' => 'success', 'message' => 'Period saved successfully']);
 		}
-		return 0;
+		return json_encode(['status' => 'error', 'message' => 'Database error: ' . $this->db->error]);
 	}
 
 	/**

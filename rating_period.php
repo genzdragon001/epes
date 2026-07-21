@@ -375,11 +375,16 @@ function submitEditPeriod() {
         },
         success: function(resp) {
             end_load();
-            if (resp == 1) {
-                alert_toast("Period updated successfully", "success");
-                $('#editPeriodModal').modal('hide');
-                setTimeout(function() { location.reload(); }, 800);
-            } else {
+            try {
+                var r = typeof resp === 'string' ? JSON.parse(resp) : resp;
+                if (r.status === 'success') {
+                    alert_toast(r.message || "Period updated successfully", "success");
+                    $('#editPeriodModal').modal('hide');
+                    setTimeout(function() { location.reload(); }, 800);
+                } else {
+                    alert_toast(r.message || "Error updating period", "error");
+                }
+            } catch(e) {
                 alert_toast("Error updating period", "error");
             }
         },
@@ -478,10 +483,16 @@ function save_period() {
             auto_cascade: autoCascade
         },
         success: function(resp) {
-            if (resp == 1) {
-                alert_toast("Period saved successfully", "success");
-                setTimeout(function() { location.reload(); }, 1000);
-            } else {
+            try {
+                var r = typeof resp === 'string' ? JSON.parse(resp) : resp;
+                if (r.status === 'success') {
+                    alert_toast(r.message || "Period saved successfully", "success");
+                    setTimeout(function() { location.reload(); }, 1000);
+                } else {
+                    alert_toast(r.message || "Error saving period", "error");
+                    end_load();
+                }
+            } catch(e) {
                 alert_toast("Error saving period", "error");
                 end_load();
             }
