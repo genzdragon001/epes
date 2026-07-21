@@ -4,6 +4,7 @@
  * Accessible by faculty (own IPCR), dean, and admin
  */
 include 'db_connect.php';
+require_once 'includes/period_builder.php';
 require_once 'ipcr_generator.php';
 
 // Auth check
@@ -48,34 +49,25 @@ if ($login_type == 0 && !$is_evaluator_flag) {
     }
 }
 
-// Get available rating periods for dropdown
+// Get available rating periods for dropdown from the canonical rating_period table
 $periods = [];
-$rp_qry = $conn->query("
-    SELECT DISTINCT rating_period 
-    FROM ratings 
-    WHERE rating_period != '' 
-      AND rating_period IS NOT NULL
-      AND (efficiency > 0 OR timeliness > 0 OR quality > 0)
-    ORDER BY rating_period DESC
+$all_periods_qry = $conn->query("
+    SELECT CONCAT(semester, ' ', year) as label, code
+    FROM rating_period 
+    ORDER BY year ASC, 
+             FIELD(semester, '1st Semester', '2nd Semester', 'Summer')
 ");
-while ($row = $rp_qry->fetch_assoc()) {
-    $periods[] = $row['rating_period'];
+while ($row = $all_periods_qry->fetch_assoc()) {
+    $periods[$row['label']] = $row['code'];
 }
 
-// Deduplicate: prefer canonical format (1stSemester-YYYY-YYYY) over legacy formats
-$seen = [];
-$deduped = [];
-foreach ($periods as $p) {
-    $key = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($p));
-    if (!isset($seen[$key])) {
-        $seen[$key] = true;
-        $deduped[] = $p;
-    }
+$first_code = $periods ? array_values($periods)[0] : '';
+$selected_period = $_GET['period'] ?? ($period_filter ?? $first_code);
+$selected_label = '';
+if (!empty($selected_period)) {
+    $selected_label = array_search($selected_period, $periods);
+    if ($selected_label === false) $selected_label = $selected_period;
 }
-$periods = $deduped;
-
-// Default to most recent period
-$selected_period = $_GET['period'] ?? ($periods[0] ?? '');
 
 // Get faculty info for display
 $faculty_name = '';
@@ -163,10 +155,10 @@ if ($faculty_id > 0 && !empty($selected_period)) {
                     <div class="form-group">
                         <label>Rating Period</label>
                         <select id="period_select" class="form-control" onchange="updateView()">
-                            <?php foreach ($periods as $p): 
-                                $sel = ($p == $selected_period) ? 'selected' : '';
+                            <?php foreach ($periods as $label => $code): 
+                                $sel = ($code == $selected_period) ? 'selected' : '';
                             ?>
-                            <option value="<?= htmlspecialchars($p) ?>" <?= $sel ?>><?= htmlspecialchars($p) ?></option>
+                            <option value="<?= htmlspecialchars($code) ?>" <?= $sel ?>><?= htmlspecialchars($label) ?></option>
                             <?php endforeach; ?>
                             <?php if (empty($periods)): ?>
                             <option value="">No periods available</option>
