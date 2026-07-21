@@ -54,23 +54,24 @@ class IPCRGenerator {
         $stmt = $this->db->prepare("
             SELECT 
                 r.task_id,
-                r.efficiency,
-                r.timeliness,
-                r.quality,
+                SUM(r.efficiency) as efficiency,
+                SUM(r.timeliness) as timeliness,
+                SUM(r.quality) as quality,
                 t.category,
                 t.sub_category,
                 t.success_indicators,
                 t.targets_measures,
                 t.deadline,
-                tp.date_submitted,
-                tp.date_verified,
-                tp.file_path
+                MAX(tp.date_submitted) as date_submitted,
+                MAX(tp.date_verified) as date_verified,
+                MAX(tp.file_path) as file_path
             FROM ratings r
             INNER JOIN task_list t ON r.task_id = t.id
             LEFT JOIN task_progress tp ON tp.task_id = t.id AND tp.faculty_id = r.employee_id AND tp.rating_period = r.rating_period
             WHERE r.employee_id = ? 
               AND r.rating_period = ?
-              AND r.efficiency > 0 AND r.timeliness > 0 AND r.quality > 0
+              AND (r.efficiency > 0 OR r.timeliness > 0 OR r.quality > 0)
+            GROUP BY r.task_id, t.category, t.sub_category, t.success_indicators, t.targets_measures, t.deadline
             ORDER BY FIELD(t.category, 'strategic', 'core', 'support'), t.sub_category, t.id
         ");
         $stmt->bind_param('is', $faculty_id, $rating_period_code);

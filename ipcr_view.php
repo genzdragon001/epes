@@ -53,12 +53,26 @@ $periods = [];
 $rp_qry = $conn->query("
     SELECT DISTINCT rating_period 
     FROM ratings 
-    WHERE efficiency > 0 AND timeliness > 0 AND quality > 0
+    WHERE rating_period != '' 
+      AND rating_period IS NOT NULL
+      AND (efficiency > 0 OR timeliness > 0 OR quality > 0)
     ORDER BY rating_period DESC
 ");
 while ($row = $rp_qry->fetch_assoc()) {
     $periods[] = $row['rating_period'];
 }
+
+// Deduplicate: prefer canonical format (1stSemester-YYYY-YYYY) over legacy formats
+$seen = [];
+$deduped = [];
+foreach ($periods as $p) {
+    $key = preg_replace('/[^a-zA-Z0-9]/', '', strtolower($p));
+    if (!isset($seen[$key])) {
+        $seen[$key] = true;
+        $deduped[] = $p;
+    }
+}
+$periods = $deduped;
 
 // Default to most recent period
 $selected_period = $_GET['period'] ?? ($periods[0] ?? '');

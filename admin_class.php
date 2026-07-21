@@ -2770,7 +2770,7 @@ function submit_file() {
 		
 		if(count($ipcr_periods) >= 3){
 			// Get all faculty with ratings
-			$fac_qry = $this->db->query("SELECT DISTINCT employee_id FROM ratings WHERE efficiency > 0 AND timeliness > 0 AND quality > 0");
+			$fac_qry = $this->db->query("SELECT DISTINCT employee_id FROM ratings WHERE efficiency > 0 OR timeliness > 0 OR quality > 0");
 			while($fac = $fac_qry->fetch_assoc()){
 				$eid = $fac['employee_id'];
 				$ratings_history = [];
@@ -2780,11 +2780,11 @@ function submit_file() {
 					$pc = $ipcr_periods[$i]['period_code'];
 					$avg_r = $this->db->query("
 						SELECT AVG((efficiency + timeliness + quality) / 3) as overall,
-							   COUNT(*) as rated_count
+						       COUNT(*) as rated_count
 						FROM ratings 
 						WHERE employee_id = $eid 
 						AND rating_period = '$pc'
-						AND efficiency > 0 AND timeliness > 0 AND quality > 0
+						AND (efficiency > 0 OR timeliness > 0 OR quality > 0)
 					")->fetch_assoc();
 					
 					if($avg_r['rated_count'] > 0){
