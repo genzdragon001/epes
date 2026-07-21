@@ -1,5 +1,6 @@
 <?php 
 include 'db_connect.php'; 
+include 'includes/period_builder.php';
 
 // Get faculty details
 $faculty_id = $_SESSION['login_id'] ?? 0;
@@ -18,6 +19,16 @@ $faculty = $conn->query("SELECT e.position_id, e.designation_id, e.department_id
 $position_id = $faculty['position_id'] ?? 0;
 $designation_id = $faculty['designation_id'] ?? 0;
 $is_cos = ($position_id == 19);
+
+// Build MOV-specific period filter (uses m. alias for mov_uploads table)
+if (!empty($period_codes)) {
+    $in = implode("','", array_map([$conn, 'real_escape_string'], $period_codes));
+    $mov_period_filter = " AND m.rating_period IN ('$in')";
+} else {
+    $mov_period_filter = " AND 0";
+}
+
+$period_label = $selected_period ? ($selected_period['semester'] . ' ' . $selected_period['year']) : 'No period set';
 
 // Get percentage allocations
 $allocations = [];
@@ -73,7 +84,7 @@ $target_query = "SELECT DISTINCT t.id,
     t.quality, 
     t.timeliness, 
     t.efficiency,
-    (SELECT COUNT(*) FROM mov_uploads m WHERE m.target_id = t.id AND m.faculty_id = $faculty_id) as mov_count
+    (SELECT COUNT(*) FROM mov_uploads m WHERE m.target_id = t.id AND m.faculty_id = $faculty_id $mov_period_filter) as mov_count
     FROM task_list t
     LEFT JOIN target_exemptions te ON t.id = te.task_id AND te.position_id = $position_id
     WHERE t.is_active = 1
@@ -90,30 +101,25 @@ $targets = $conn->query($target_query);
     <div class="card card-outline card-primary">
         <div class="card-header">
             <h5 class="card-title"><i class="fa fa-folder-open"></i> MOV Management by Target</h5>
-            
+            <?php if(!empty($real_periods)): ?>
+            <div class="card-tools">
+                <select id="filter_period" class="form-control form-control-sm"
+                        onchange="window.location.href='index.php?page=mov_management&period='+encodeURIComponent(this.value)"
+                        style="width:auto; font-size:0.85rem; padding:6px 28px 6px 12px; max-width:260px;">
+                    <?php foreach($real_periods as $rp):
+                        $key = epes_period_key($rp['semester'], $rp['year']);
+                        $sel_key = $selected_period ? epes_period_key($selected_period['semester'], $selected_period['year']) : '';
+                        $opt_label = $rp['semester'] . ' ' . $rp['year'] . ($rp['is_active'] ? ' (current)' : '');
+                    ?>
+                    <option value="<?= htmlspecialchars($key) ?>" <?= $key === $sel_key ? 'selected' : '' ?>><?= htmlspecialchars($opt_label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <?php endif; ?>
         </div>
         <div class="card-body">
             <!-- Faculty Info Badge -->
             
-            
-            <div class="row mb-3">
-                <div class="col-md-4">
-                    <label for="filter_period">Filter by Rating Period</label>
-                    <select class="form-control" id="filter_period" onchange="loadTargetMOVs()">
-                        <?php
-                        $periods = $conn->query("SELECT id, semester, year FROM rating_period ORDER BY id DESC");
-                        $first = true;
-                        while ($p = $periods->fetch_assoc()) {
-                            $period_value = $p['semester'] . ' ' . $p['year'];
-                            $selected = $first ? 'selected' : '';
-                            echo "<option value='{$period_value}' {$selected}>{$period_value}</option>";
-                            $first = false;
-                        }
-                        ?>
-                    </select>
-                </div>
-                
-            </div>
             
             <div class="table-responsive">
                 <table class="table table-hover table-striped table-bordered" id="target_mov_list">
@@ -247,14 +253,7 @@ $(document).ready(function(){
 });
 
 function loadTargetMOVs() {
-    var period = $('#filter_period').val();
-    var category = $('#filter_category').val();
-    
-    // Reload page with filters
-    var url = 'index.php?page=mov_management';
-    if (period) url += '&period=' + period;
-    if (category) url += '&category=' + category;
-    window.location.href = url;
+    // Period change is handled by the onchange on the select itself
 }
 
 function uploadMOVForTarget(target_id, type = '') {

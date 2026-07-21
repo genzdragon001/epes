@@ -4,16 +4,10 @@ if (!function_exists('csrf_field')) { require_once __DIR__ . '/csrf_helper.php';
 $login_type = $_SESSION['login_type'];
 $faculty_id = $_SESSION['login_id'] ?? 0;
 
-// Get current rating period
-$rating_period = '';
-$col_check = $conn->query("SHOW COLUMNS FROM rating_period LIKE 'is_active'");
-$has_is_active = $col_check->num_rows > 0;
-$rp_query = "SELECT code FROM rating_period" . ($has_is_active ? " WHERE is_active = 1" : "") . " LIMIT 1";
-$rp_qry = $conn->query($rp_query);
-if ($rp_qry && $rp_qry->num_rows > 0) {
-    $rp_row = $rp_qry->fetch_assoc();
-    $rating_period = $rp_row['code'];
-}
+include 'includes/period_builder.php';
+
+// Current rating period code (for new submissions — uses the active period)
+$rating_period = $active_period_code;
 
 $emp_qry = $conn->query("SELECT e.*, p.position as position_name, d.designation as designation_name 
     FROM employee_list e 
@@ -48,8 +42,20 @@ while ($row = $alloc_qry->fetch_assoc()) {
     <div class="card card-outline card-info">
         <div class="card-header">
             <h5 class="card-title"><i class="fa fa-bullseye"></i> Target Management Module</h5>
-            <?php if($login_type == 2): ?>
-            <div class="card-tools">
+            <?php if(!empty($real_periods)): ?>
+            <div class="card-tools d-flex align-items-center" style="gap:8px;">
+                <select id="period_selector" class="form-control form-control-sm"
+                        onchange="window.location.href='index.php?page=target_list&period='+encodeURIComponent(this.value)"
+                        style="width:auto; font-size:0.85rem; padding:6px 28px 6px 12px; max-width:260px;">
+                    <?php foreach($real_periods as $rp):
+                        $key = epes_period_key($rp['semester'], $rp['year']);
+                        $sel_key = $selected_period ? epes_period_key($selected_period['semester'], $selected_period['year']) : '';
+                        $opt_label = $rp['semester'] . ' ' . $rp['year'] . ($rp['is_active'] ? ' (current)' : '');
+                    ?>
+                    <option value="<?= htmlspecialchars($key) ?>" <?= $key === $sel_key ? 'selected' : '' ?>><?= htmlspecialchars($opt_label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <?php if($login_type == 2): ?>
                 <a href="download_target_template.php" class="btn btn-sm btn-default btn-flat border-secondary">
                     <i class="fa fa-download"></i> CSV Template
                 </a>
@@ -59,6 +65,7 @@ while ($row = $alloc_qry->fetch_assoc()) {
                 <button class="btn btn-sm btn-default btn-flat border-primary" id="new_task">
                     <i class="fa fa-plus"></i> Add New Target
                 </button>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
         </div>
@@ -178,7 +185,7 @@ while ($row = $alloc_qry->fetch_assoc()) {
                     if ($is_exempted) continue;
 
                     $progress_qry = $conn->query("SELECT * FROM task_progress
-                        WHERE faculty_id = $faculty_id AND task_id = {$row['id']}
+                        WHERE faculty_id = $faculty_id AND task_id = {$row['id']} $period_filter
                         ORDER BY unix_timestamp(date_created) DESC LIMIT 1");
                     $hasSubmission = $progress_qry->num_rows > 0;
                     $isVerified = false; $isNA = false; $filePath = ''; $fileType = '';

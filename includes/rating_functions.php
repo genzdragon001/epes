@@ -38,7 +38,7 @@ function getAllocation($conn, $position_id, $designation_id, $category, $sub_cat
 }
 
 if (!function_exists('computeWeightedRating')) {
-function computeWeightedRating($conn, $faculty_id, $position_id, $designation_id, $period_code) {
+function computeWeightedRating($conn, $faculty_id, $position_id, $designation_id, $period_code, $period_filter = '') {
     // ====================================================================
     // This function MUST mirror the over-all rating computation in
     // rating.php exactly. Any divergence will cause the faculty list
@@ -130,11 +130,20 @@ function computeWeightedRating($conn, $faculty_id, $position_id, $designation_id
     }
     $where .= " AND (" . implode(" OR ", $cat_filters) . ")";
 
+    // Period filtering applies only to the task_progress (submission) JOIN,
+    // exactly like rating.php and the dashboard stats. The ratings JOIN is left
+    // unfiltered — rating rows are matched to tasks by task_id+employee_id, so a
+    // rating only contributes when its task was submitted in the selected period.
+    $tp_on = "tp.task_id = t.id AND tp.faculty_id = $faculty_id";
+    if ($period_filter !== '') {
+        $tp_on .= " " . $period_filter;
+    }
+
     $qry = $conn->query("
         SELECT t.id, t.category, t.sub_category, t.quality as tq, t.timeliness as tt, t.efficiency as te,
                tp.progress, r.efficiency as re, r.timeliness as rt, r.quality as rq
         FROM task_list t
-        LEFT JOIN task_progress tp ON tp.task_id = t.id AND tp.faculty_id = $faculty_id
+        LEFT JOIN task_progress tp ON $tp_on
         LEFT JOIN ratings r ON r.task_id = t.id AND r.employee_id = $faculty_id
         WHERE $where ORDER BY t.category, t.sub_category, t.id
     ");

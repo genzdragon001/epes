@@ -1,11 +1,11 @@
 <?php include 'db_connect.php' ?>
+<?php include 'includes/period_builder.php'; ?>
 <?php
 $id = intval($_SESSION['login_id']);
-$rating_period = isset($_SESSION['rating_period']) ? $_SESSION['rating_period'] : '';
 
-$total_logs = $conn->query("SELECT COUNT(*) FROM task_progress WHERE faculty_id = $id")->fetch_row()[0];
-$verified_count = $conn->query("SELECT COUNT(*) FROM task_progress WHERE faculty_id = $id AND progress = 'Verified'")->fetch_row()[0];
-$for_verification = $conn->query("SELECT COUNT(*) FROM task_progress WHERE faculty_id = $id AND progress = 'For Verification'")->fetch_row()[0];
+$total_logs = $conn->query("SELECT COUNT(*) FROM task_progress WHERE faculty_id = $id $period_filter")->fetch_row()[0];
+$verified_count = $conn->query("SELECT COUNT(*) FROM task_progress WHERE faculty_id = $id AND progress = 'Verified' $period_filter")->fetch_row()[0];
+$for_verification = $conn->query("SELECT COUNT(*) FROM task_progress WHERE faculty_id = $id AND progress = 'For Verification' $period_filter")->fetch_row()[0];
 $pending_count = $total_logs - $verified_count - $for_verification;
 
 $qry = $conn->query("
@@ -13,7 +13,7 @@ $qry = $conn->query("
     FROM task_progress tp
     INNER JOIN task_list t ON tp.task_id = t.id
     LEFT JOIN ratings r ON r.task_id = tp.task_id AND r.employee_id = tp.faculty_id
-    WHERE tp.faculty_id = $id
+    WHERE tp.faculty_id = $id $period_filter
     ORDER BY tp.date_created DESC
 ");
 ?>
@@ -62,6 +62,21 @@ $qry = $conn->query("
         <div class="card card-outline card-success">
             <div class="card-header">
                 <h5 class="card-title"><i class="fa fa-list-alt"></i> Submission Logs</h5>
+                <?php if(!empty($real_periods)): ?>
+                <div class="card-tools">
+                    <select id="period_selector" class="form-control form-control-sm"
+                            onchange="window.location.href='index.php?page=status&period='+encodeURIComponent(this.value)"
+                            style="width:auto; font-size:0.85rem; padding:6px 28px 6px 12px; max-width:260px;">
+                        <?php foreach($real_periods as $rp):
+                            $key = epes_period_key($rp['semester'], $rp['year']);
+                            $sel_key = $selected_period ? epes_period_key($selected_period['semester'], $selected_period['year']) : '';
+                            $opt_label = $rp['semester'] . ' ' . $rp['year'] . ($rp['is_active'] ? ' (current)' : '');
+                        ?>
+                        <option value="<?= htmlspecialchars($key) ?>" <?= $key === $sel_key ? 'selected' : '' ?>><?= htmlspecialchars($opt_label) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <?php endif; ?>
             </div>
             <div class="card-body">
                 <?php if($qry->num_rows > 0): ?>

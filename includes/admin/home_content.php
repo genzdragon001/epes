@@ -1,10 +1,11 @@
 <?php
 // === ADMIN DASHBOARD ===
+// All task_progress / ratings queries are scoped to the selected period via $period_filter.
 $total_employees   = $conn->query("SELECT COUNT(*) FROM employee_list")->fetch_row()[0];
-$verified_tasks    = $conn->query("SELECT COUNT(*) FROM task_progress WHERE progress='Verified'")->fetch_row()[0];
-$for_verification  = $conn->query("SELECT COUNT(*) FROM task_progress WHERE progress='For Verification'")->fetch_row()[0];
-$total_submissions = $conn->query("SELECT COUNT(*) FROM task_progress")->fetch_row()[0];
-$avg_rating        = $conn->query("SELECT AVG((efficiency+timeliness+quality)/3) as a FROM ratings WHERE efficiency>0")->fetch_assoc()['a'] ?? 0;
+$verified_tasks    = $conn->query("SELECT COUNT(*) FROM task_progress WHERE progress='Verified' $period_filter")->fetch_row()[0];
+$for_verification  = $conn->query("SELECT COUNT(*) FROM task_progress WHERE progress='For Verification' $period_filter")->fetch_row()[0];
+$total_submissions = $conn->query("SELECT COUNT(*) FROM task_progress WHERE 1=1 $period_filter")->fetch_row()[0];
+$avg_rating        = $conn->query("SELECT AVG((efficiency+timeliness+quality)/3) as a FROM ratings WHERE efficiency>0 $period_filter")->fetch_assoc()['a'] ?? 0;
 $intervention_count = $conn->query("SELECT COUNT(*) FROM intervention_flags WHERE acknowledged=0")->fetch_row()[0];
 
 // Department data for bar chart
@@ -17,7 +18,7 @@ $dq = $conn->query("
            SUM(CASE WHEN tp.progress='Verified' THEN 1 ELSE 0 END) as verified
     FROM department_list d
     LEFT JOIN employee_list e ON e.department_id = d.id
-    LEFT JOIN task_progress tp ON tp.faculty_id = e.id
+    LEFT JOIN task_progress tp ON tp.faculty_id = e.id $period_filter
     GROUP BY d.id, d.department
     ORDER BY d.department
 ");
@@ -30,19 +31,18 @@ while($d = $dq->fetch_assoc()) {
 // Submission status for donut
 $other_submissions = $total_submissions - $verified_tasks - $for_verification;
 
-// Cascading DP data for horizontal bar
-$active_rp = $conn->query("SELECT id FROM rating_period WHERE is_active = 1 LIMIT 1")->fetch_assoc();
-$active_rp_id = $active_rp ? $active_rp['id'] : 0;
+// Cascading DP data for horizontal bar — use selected period IDs (not just active)
+$selected_rp_ids = !empty($selected_period_ids) ? implode(',', $selected_period_ids) : '0';
 $cascade_labels = [];
 $cascade_scores = [];
-$cq = $conn->query("SELECT cr.department_id, d.department, cr.overall_rating FROM cascading_ratings cr LEFT JOIN department_list d ON cr.department_id=d.id WHERE cr.level='DP' AND cr.target_period_id=$active_rp_id ORDER BY cr.overall_rating DESC");
+$cq = $conn->query("SELECT cr.department_id, d.department, cr.overall_rating FROM cascading_ratings cr LEFT JOIN department_list d ON cr.department_id=d.id WHERE cr.level='DP' AND cr.target_period_id IN ($selected_rp_ids) ORDER BY cr.overall_rating DESC");
 while($c = $cq->fetch_assoc()) {
     $cascade_labels[] = $c['department'] ?? 'Dept #'.$c['department_id'];
     $cascade_scores[] = round((float)$c['overall_rating'], 2);
 }
 
 // OPCR
-$opcr = $conn->query("SELECT overall_rating FROM cascading_ratings WHERE level='OPCR' AND target_period_id=$active_rp_id ORDER BY computed_at DESC LIMIT 1")->fetch_assoc();
+$opcr = $conn->query("SELECT overall_rating FROM cascading_ratings WHERE level='OPCR' AND target_period_id IN ($selected_rp_ids) ORDER BY computed_at DESC LIMIT 1")->fetch_assoc();
 
 $completion_pct = $total_submissions > 0 ? round(($verified_tasks/$total_submissions)*100) : 0;
 $adj_label = $avg_rating >= 4.75 ? 'Outstanding' : ($avg_rating >= 3.61 ? 'Very Satisfactory' : ($avg_rating >= 2.61 ? 'Satisfactory' : ($avg_rating >= 1.61 ? 'Unsatisfactory' : 'Poor')));

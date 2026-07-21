@@ -470,6 +470,59 @@ Class Action {
 	/**
 	 * Helper function to insert into login_audit_trail
 	 */
+	/**
+	 * Build an array of rating_period codes that match a period label
+	 * (e.g. "1st Semester 2025-2026" or "1stSemester-2025-2026" or "1-2526").
+	 * Returns all code variants for the same semester+year so IN() queries
+	 * catch every storage format.
+	 */
+	private function buildPeriodCodes($period_label) {
+		// Try to parse "Semester Year" format (e.g. "1st Semester 2025-2026")
+		$semester = null;
+		$year = null;
+		if (preg_match('/^(1st Semester|2nd Semester|Summer)\s+(20\d{2}-20\d{2})$/i', $period_label, $m)) {
+			$semester = $m[1];
+			$year = $m[2];
+		} elseif (preg_match('/^(1st|2nd|S)-(20\d{2})(20\d{2})$/i', $period_label, $m)) {
+			// Short code format: 1-2526
+			$year = $m[2] . '-' . $m[3];
+			$semester = ($m[1] === '1st') ? '1st Semester' : (($m[1] === '2nd') ? '2nd Semester' : 'Summer');
+		} else {
+			// Try to look up in rating_period table by code
+			$esc = $this->db->real_escape_string($period_label);
+			$r = $this->db->query("SELECT semester, year FROM rating_period WHERE code = '$esc' LIMIT 1");
+			if ($r && $r->num_rows > 0) {
+				$row = $r->fetch_assoc();
+				$semester = $row['semester'];
+				$year = $row['year'];
+			}
+		}
+		if (!$semester || !$year) return [];
+
+		$codes = [];
+		// All stored codes for this semester+year
+		$esc_sem = $this->db->real_escape_string($semester);
+		$esc_yr  = $this->db->real_escape_string($year);
+		$rq = $this->db->query("SELECT code FROM rating_period WHERE semester = '$esc_sem' AND year = '$esc_yr'");
+		while ($rq && $r = $rq->fetch_assoc()) $codes[] = $r['code'];
+
+		// Short code (e.g. 1-2526)
+		$short = null;
+		$yr_parts = explode('-', $year);
+		if (count($yr_parts) === 2) {
+			$short_suffix = substr($yr_parts[0], -2) . substr($yr_parts[1], -2);
+			if ($semester === '1st Semester') $short = '1-' . $short_suffix;
+			elseif ($semester === '2nd Semester') $short = '2-' . $short_suffix;
+			elseif ($semester === 'Summer') $short = 'S-' . $short_suffix;
+		}
+		if ($short) $codes[] = $short;
+
+		// "Semester Year" format (used by mov_uploads)
+		$codes[] = $semester . ' ' . $year;
+
+		return array_values(array_unique(array_filter($codes)));
+	}
+
 	private function logAudit($user_id, $username, $ip, $agent, $status, $reason = NULL) {
 		$uid = $user_id ? (int)$user_id : null;
 		$ip = $ip ?: '127.0.0.1';
@@ -2339,7 +2392,14 @@ function submit_file() {
 		
 		$where = "WHERE m.faculty_id = $faculty_id";
 		if (!empty($rating_period)) {
-			$where .= " AND m.rating_period = '$rating_period'";
+			// Build period_codes matching (same logic as home.php)
+			$period_codes = $this->buildPeriodCodes($rating_period);
+			if (!empty($period_codes)) {
+				$in = implode("','", array_map([$this->db, 'real_escape_string'], $period_codes));
+				$where .= " AND m.rating_period IN ('$in')";
+			} else {
+				$where .= " AND m.rating_period = '$rating_period'";
+			}
 		}
 		if (!empty($status)) {
 			$where .= " AND m.status = '$status'";
@@ -2511,7 +2571,14 @@ function submit_file() {
 			// Count MOVs for this target
 			$mov_where = "WHERE m.faculty_id = $faculty_id AND m.target_id = $target_id";
 			if (!empty($rating_period)) {
-				$mov_where .= " AND m.rating_period = '$rating_period'";
+				// Build period_codes matching (same logic as home.php)
+				$period_codes = $this->buildPeriodCodes($rating_period);
+				if (!empty($period_codes)) {
+					$in = implode("','", array_map([$this->db, 'real_escape_string'], $period_codes));
+					$mov_where .= " AND m.rating_period IN ('$in')";
+				} else {
+					$mov_where .= " AND m.rating_period = '$rating_period'";
+				}
 			}
 			
 			$mov_count = $this->db->query("SELECT COUNT(*) as c FROM mov_uploads m $mov_where")->fetch_assoc()['c'];
@@ -2731,6 +2798,77 @@ function submit_file() {
 			'intervention_count' => $intervention_count,
 			'period' => $period
 		]);
+	}
+
+	/**
+	 * Create or update a rating_period row.
+	 * Returns "1" on success, "0" on failure.
+	 */
+	function update_period(){
+		extract($_POST);
+		$period_id = intval($period_id ?? 0);
+		$semester  = $this->db->real_escape_string($semester ?? '');
+		$year      = $this->db->real_escape_string($year ?? '');
+		$code      = $this->db->real_escape_string($code ?? '');
+		$start_date = $this->db->real_escape_string($start_date ?? '');
+		$end_date   = $this->db->real_escape_string($end_date ?? '');
+		$non_desig_start_date = $this->db->real_escape_string($non_desig_start_date ?? '');
+		$non_desig_end_date   = $this->db->real_escape_string($non_desig_end_date ?? '');
+		$auto_cascade = intval($auto_cascade ?? 0);
+
+		if (empty($semester) || empty($year)) return 0;
+
+		// Auto-build code if not supplied
+		if (empty($code)) {
+			$code = str_replace(' ', '', $semester) . '-' . $year;
+		}
+
+		if ($period_id > 0) {
+			// UPDATE existing
+			$sql = "UPDATE rating_period SET
+						semester = '$semester',
+						year = '$year',
+						code = '$code',
+						start_date = " . ($start_date ? "'$start_date'" : "NULL") . ",
+						end_date = " . ($end_date ? "'$end_date'" : "NULL") . ",
+						non_desig_start_date = " . ($non_desig_start_date ? "'$non_desig_start_date'" : "NULL") . ",
+						non_desig_end_date = " . ($non_desig_end_date ? "'$non_desig_end_date'" : "NULL") . ",
+						auto_cascade = $auto_cascade
+					WHERE id = $period_id";
+		} else {
+			// INSERT new — default active = 1 (initializes the period system).
+			// If another active period exists, deactivate it so only one is active.
+			$active_check = $this->db->query("SELECT COUNT(*) as c FROM rating_period WHERE is_active = 1");
+			$has_active = $active_check ? intval($active_check->fetch_assoc()['c']) : 0;
+			$set_active = $has_active > 0 ? 0 : 1;
+			$sql = "INSERT INTO rating_period
+						(semester, year, code, start_date, end_date, non_desig_start_date, non_desig_end_date, auto_cascade, period_type, is_active)
+					VALUES
+						('$semester', '$year', '$code',
+						 " . ($start_date ? "'$start_date'" : "NULL") . ",
+						 " . ($end_date ? "'$end_date'" : "NULL") . ",
+						 " . ($non_desig_start_date ? "'$non_desig_start_date'" : "NULL") . ",
+						 " . ($non_desig_end_date ? "'$non_desig_end_date'" : "NULL") . ",
+						 $auto_cascade, 'IPCR', $set_active)";
+		}
+
+		$qry = $this->db->query($sql);
+		if ($qry) {
+			return 1;
+		}
+		return 0;
+	}
+
+	/**
+	 * Activate a rating_period: set is_active=1 for it and is_active=0 for all others.
+	 * Returns "1" on success, "0" on failure.
+	 */
+	function set_active_period(){
+		$period_id = intval($_POST['period_id'] ?? 0);
+		if ($period_id <= 0) return 0;
+		$this->db->query("UPDATE rating_period SET is_active = 0");
+		$qry = $this->db->query("UPDATE rating_period SET is_active = 1 WHERE id = $period_id");
+		return $qry ? 1 : 0;
 	}
 
 }

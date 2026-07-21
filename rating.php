@@ -1,5 +1,6 @@
 <?php 
 include 'db_connect.php';
+include 'includes/period_builder.php';
 
 function getAdjectivalRating($score) {
     if (!is_numeric($score) || $score <= 0) return "NO RATING";
@@ -177,7 +178,7 @@ $qry = $conn->query("
         ev.firstname as evaluator_firstname,
         ev.lastname as evaluator_lastname
     FROM task_list t
-    LEFT JOIN task_progress tp ON tp.task_id = t.id AND tp.faculty_id = $faculty_id
+    LEFT JOIN task_progress tp ON tp.task_id = t.id AND tp.faculty_id = $faculty_id $period_filter
     LEFT JOIN ratings r ON r.task_id = t.id AND r.employee_id = $faculty_id
     LEFT JOIN evaluator_list ev ON r.evaluator_id = ev.id
     WHERE $where
@@ -291,6 +292,7 @@ function calcAverage($tasks) {
 }
 
 function calcInstructionRating($tasks, $conn, $position_id, $designation_id, $faculty_id = 0) {
+    global $period_filter;
     $ter_sum = 0;
     $ter_count = 0;
     $instruction_sum = 0;
@@ -321,7 +323,7 @@ function calcInstructionRating($tasks, $conn, $position_id, $designation_id, $fa
         AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id)
         AND t.id NOT IN (
             SELECT tp.task_id FROM task_progress tp 
-            WHERE tp.faculty_id = " . intval($faculty_id) . " AND tp.progress = 'N/A'
+            WHERE tp.faculty_id = " . intval($faculty_id) . " AND tp.progress = 'N/A' $period_filter
         )
     "); 
     $total_instr_count = $instr_task_qry && $instr_task_qry->num_rows > 0 ? (int)$instr_task_qry->fetch_assoc()['task_count'] : 0;
@@ -389,6 +391,7 @@ $res_ave = calcAverage($tasks_by_section['core_research']);
 $ext_ave = calcAverage($tasks_by_section['core_extension']);
 
 function calcResearchAverage($tasks, $conn, $position_id, $designation_id, $faculty_id = 0) {
+    global $period_filter;
     $sum = 0;
     $count = 0;
     foreach ($tasks as $task) {
@@ -409,7 +412,7 @@ function calcResearchAverage($tasks, $conn, $position_id, $designation_id, $facu
         AND " . task_designation_match($designation_id) . "
         AND t.id NOT IN (
             SELECT tp.task_id FROM task_progress tp 
-            WHERE tp.faculty_id = " . intval($faculty_id) . " AND tp.progress = 'N/A'
+            WHERE tp.faculty_id = " . intval($faculty_id) . " AND tp.progress = 'N/A' $period_filter
         )
     ");
     $expected_research_count = $research_task_qry && $research_task_qry->num_rows > 0 ? (int)$research_task_qry->fetch_assoc()['task_count'] : 0;
@@ -427,6 +430,7 @@ function calcResearchAverage($tasks, $conn, $position_id, $designation_id, $facu
 }
 
 function calcExtensionAverage($tasks, $conn, $position_id, $designation_id, $faculty_id = 0) {
+    global $period_filter;
     $sum = 0;
     $count = 0;
     foreach ($tasks as $task) {
@@ -447,7 +451,7 @@ function calcExtensionAverage($tasks, $conn, $position_id, $designation_id, $fac
         AND " . task_designation_match($designation_id) . "
         AND t.id NOT IN (
             SELECT tp.task_id FROM task_progress tp 
-            WHERE tp.faculty_id = " . intval($faculty_id) . " AND tp.progress = 'N/A'
+            WHERE tp.faculty_id = " . intval($faculty_id) . " AND tp.progress = 'N/A' $period_filter
         )
     ");
     $expected_extension_count = $extension_task_qry && $extension_task_qry->num_rows > 0 ? (int)$extension_task_qry->fetch_assoc()['task_count'] : 0;
@@ -501,7 +505,21 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
     <div style="font-size: 0.8rem; color: #555;">DEBESMSCAT, Cabitan, Mandaon, Masbate</div>
     <div style="font-size: 0.7rem; color: #777; margin-top: 2px;">Office of the Vice President for Academic Affairs</div>
     <h3 style="font-size: 1.15rem; font-weight: bold; margin: 8px 0 2px 0; color: #1a1a2e;">INDIVIDUAL PERFORMANCE COMMITMENT AND REVIEW (IPCR)</h3>
-    <div style="font-size: 0.8rem; color: #555;">SPMS Form &middot; Rating Period: <?php echo htmlspecialchars($_SESSION['rating_period'] ?? 'N/A'); ?></div>
+    <div style="font-size: 0.8rem; color: #555;">SPMS Form &middot; Rating Period: <?php echo htmlspecialchars($period_label); ?>
+    <?php if(!empty($real_periods)): ?>
+    <select class="form-control form-control-sm d-inline-block ml-2"
+            onchange="window.location.href='index.php?page=rating&period='+encodeURIComponent(this.value)"
+            style="width:auto; font-size:0.78rem; padding:3px 24px 3px 8px; max-width:220px; vertical-align:middle;">
+        <?php foreach($real_periods as $rp):
+            $key = epes_period_key($rp['semester'], $rp['year']);
+            $sel_key = $selected_period ? epes_period_key($selected_period['semester'], $selected_period['year']) : '';
+            $opt_label = $rp['semester'] . ' ' . $rp['year'] . ($rp['is_active'] ? ' (current)' : '');
+        ?>
+        <option value="<?= htmlspecialchars($key) ?>" <?= $key === $sel_key ? 'selected' : '' ?>><?= htmlspecialchars($opt_label) ?></option>
+        <?php endforeach; ?>
+    </select>
+    <?php endif; ?>
+    </div>
 </div>
 
 <!-- IPCR INFO TABLE -->

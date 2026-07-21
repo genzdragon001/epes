@@ -4,118 +4,10 @@ $twhere ="";
 if(($_SESSION['login_type'] ?? -1) != 1)
   $twhere = "  ";
 
-// ── Period helpers ──
-if (!function_exists('epes_short_code')) {
-    function epes_short_code($semester, $year) {
-        list($start, $end) = explode("-", $year);
-        $short = substr($start, -2) . substr($end, -2);
-        switch ($semester) {
-            case '1st Semester': return "1-" . $short;
-            case '2nd Semester': return "2-" . $short;
-            case 'Summer':       return "S-" . $short;
-            default:             return "1-" . $short;
-        }
-    }
-}
-if (!function_exists('epes_period_key')) {
-    function epes_period_key($semester, $year) { return $semester . '|' . $year; }
-}
-
-// Build a de-duplicated list of real periods (semester + year).
-// The rating_period table holds type-prefixed rows (IPCR/DP/OPCR) that all
-// describe the same period, so we collapse them by semester + year.
-$raw_periods = [];
-$rp_qry = $conn->query("SELECT * FROM rating_period ORDER BY year DESC, semester DESC");
-while ($rp_qry && $r = $rp_qry->fetch_assoc()) $raw_periods[] = $r;
-
-$real_periods = [];   // key => ['semester'=>, 'year'=>, 'is_active'=>]
-foreach ($raw_periods as $p) {
-    $k = epes_period_key($p['semester'], $p['year']);
-    if (!isset($real_periods[$k])) {
-        $real_periods[$k] = [
-            'semester'  => $p['semester'],
-            'year'      => $p['year'],
-            'is_active' => ($p['is_active'] == 1),
-        ];
-    } else {
-        $real_periods[$k]['is_active'] = $real_periods[$k]['is_active'] || ($p['is_active'] == 1);
-    }
-}
-$real_periods = array_values($real_periods);
-
-$active_period = null;
-foreach ($real_periods as $rp) { if ($rp['is_active']) { $active_period = $rp; break; } }
+include 'includes/period_builder.php';
 
 $emp_id   = intval($_SESSION['login_id'] ?? 0);
 $emp_type = $_SESSION['login_type'] ?? -1;
-
-// Determine which period the dashboard shows
-if ($emp_type == 2) {
-    // Admin: always the active/current period (only admin sets it)
-    $selected_period = $active_period ?: (count($real_periods) ? $real_periods[0] : null);
-} else {
-    // Faculty / Evaluator: honour ?period= or session choice, default to active
-    $req_key = $_GET['period'] ?? ($_SESSION['view_period'] ?? null);
-    $selected_period = null;
-    if ($req_key) {
-        foreach ($real_periods as $rp) {
-            if (epes_period_key($rp['semester'], $rp['year']) === $req_key) { $selected_period = $rp; break; }
-        }
-    }
-    if (!$selected_period) $selected_period = $active_period ?: (count($real_periods) ? $real_periods[0] : null);
-    if ($selected_period) $_SESSION['view_period'] = epes_period_key($selected_period['semester'], $selected_period['year']);
-}
-
-// Candidate rating_period codes that belong to the selected period.
-// Matches the short code (e.g. 1-2526), every stored code for the period
-// (IPCR-/DP-/OPCR-1stSemester-2025-2026), and any value already tagged in the
-// transaction tables for that semester/year.
-$period_codes = [];
-if ($selected_period) {
-    $sel_sem = $conn->real_escape_string($selected_period['semester']);
-    $sel_yr  = $conn->real_escape_string($selected_period['year']);
-    $sel_key = epes_period_key($sel_sem, $sel_yr);
-
-    // stored codes for this period
-    foreach ($raw_periods as $p) {
-        if (epes_period_key($p['semester'], $p['year']) === $sel_key) $period_codes[] = $p['code'];
-    }
-    // short code
-    $period_codes[] = epes_short_code($sel_sem, $sel_yr);
-    // data-driven: any tagged code in transaction tables for this semester/year
-    $like = $conn->real_escape_string($sel_yr);
-    $short = epes_short_code($sel_sem, $sel_yr);
-    $dq = $conn->query("SELECT DISTINCT rating_period FROM task_progress WHERE rating_period <> '' AND (rating_period LIKE '%$like%' OR rating_period LIKE '%$short%')");
-    while ($dq && $r = $dq->fetch_assoc()) $period_codes[] = $r['rating_period'];
-    $rq = $conn->query("SELECT DISTINCT rating_period FROM ratings WHERE rating_period <> '' AND (rating_period LIKE '%$like%' OR rating_period LIKE '%$short%')");
-    while ($rq && $r = $rq->fetch_assoc()) $period_codes[] = $r['rating_period'];
-
-    $period_codes = array_values(array_unique(array_filter($period_codes)));
-}
-
-// SQL fragment used by dashboard queries to scope data to the chosen period.
-// Legacy rows with an empty rating_period are treated as belonging to the
-// ACTIVE/current period only (they predate period tagging), so the current
-// dashboard keeps showing all-time data. Previous periods filter strictly on
-// their tagged codes so they don't pull in unrelated current-period rows.
-if (!empty($period_codes)) {
-    $in = implode("','", array_map([$conn, 'real_escape_string'], $period_codes));
-    if ($selected_period && $active_period
-        && epes_period_key($selected_period['semester'], $selected_period['year'])
-            === epes_period_key($active_period['semester'], $active_period['year'])) {
-        // Current/active period: also include legacy untagged rows
-        $period_filter = " AND (rating_period IN ('$in') OR rating_period = '' OR rating_period IS NULL)";
-    } else {
-        // Previous period: strict match only
-        $period_filter = " AND rating_period IN ('$in')";
-    }
-    $view_period_code = $period_codes[0];   // representative code (for any single-value needs)
-} else {
-    $period_filter = "";
-    $view_period_code = "";
-}
-
-$period_label = $selected_period ? ($selected_period['semester'] . ' ' . $selected_period['year']) : 'No period set';
 
 // Keep global session rating_period in sync with the active period (used for data entry elsewhere)
 if ($active_period) {
@@ -138,10 +30,10 @@ if ($active_period) {
                 echo ucfirst($role) . ' & Faculty';
             } else echo 'Faculty';
             ?>
-            <?php if($emp_type != 2 && $period_label !== 'No period set'): ?>&middot; <?= htmlspecialchars($period_label) ?><?php endif; ?>
+            <?php if($period_label !== 'No period set'): ?>&middot; <?= htmlspecialchars($period_label) ?><?php endif; ?>
         </span>
     </div>
-    <?php if($emp_type != 2 && !empty($real_periods)): ?>
+    <?php if(!empty($real_periods)): ?>
     <select id="period_selector" class="form-control form-control-sm"
             onchange="window.location.href='index.php?page=home&period='+encodeURIComponent(this.value)"
             style="width:auto; font-size:0.85rem; padding:6px 28px 6px 12px; max-width:260px;">

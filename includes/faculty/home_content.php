@@ -23,7 +23,7 @@ $not_submitted   = max(0, $total_targets - $submitted);
 // IPCR rating — use the same weighted computation as rating.php
 require_once 'includes/rating_functions.php';
 $ipcr_period_code = $selected_period['code'] ?? '';
-$ipcr_score = computeWeightedRating($conn, $emp_id, $emp_position_id, $emp_designation_id, $ipcr_period_code);
+$ipcr_score = computeWeightedRating($conn, $emp_id, $emp_position_id, $emp_designation_id, $ipcr_period_code, $period_filter);
 $ipcr_adj = $ipcr_score !== null ? getAdjectivalRating($ipcr_score) : 'Not Rated';
 
 $submission_pct = $total_targets > 0 ? round(($submitted/$total_targets)*100) : 0;

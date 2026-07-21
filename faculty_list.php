@@ -89,14 +89,10 @@ if ($selected_period) {
 
     if (!empty($period_codes)) {
         $in = implode("','", array_map([$conn, 'real_escape_string'], $period_codes));
-        // Active period: also include legacy untagged rows (empty/NULL rating_period)
-        // Previous periods: strict match only (don't include untagged legacy rows)
-        $is_active_period = $active_period && ($selected_period['semester'] === $active_period['semester'] && $selected_period['year'] === $active_period['year']);
-        if ($is_active_period) {
-            $period_filter_sql = " AND (rating_period IN ('$in') OR rating_period = '' OR rating_period IS NULL)";
-        } else {
-            $period_filter_sql = " AND rating_period IN ('$in')";
-        }
+        // STRICT for all periods: only rows tagged with this period's codes are
+        // counted. Blank/untagged rows belong to no period (matches dashboard
+        // behavior in home.php) and only appear after they are backfilled.
+        $period_filter_sql = " AND rating_period IN ('$in')";
     }
 }
 
@@ -187,7 +183,7 @@ if ($result && $result->num_rows > 0) {
         if (!empty($active_period_code)) {
             $pos_id = $row['position_id'] ?? 0;
             $desig_id = $row['designation_id'] ?? 0;
-            $row['avg_rating'] = computeWeightedRating($conn, $emp_id, $pos_id, $desig_id, $active_period_code);
+            $row['avg_rating'] = computeWeightedRating($conn, $emp_id, $pos_id, $desig_id, $active_period_code, $period_filter_sql);
             if ($row['avg_rating'] !== null) $total_rated++;
         } else {
             $row['avg_rating'] = null;

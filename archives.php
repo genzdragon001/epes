@@ -1,5 +1,6 @@
 <?php 
 include 'db_connect.php';
+include 'includes/period_builder.php';
 
 function getAdjectivalRating($score) {
     if (!is_numeric($score) || $score <= 0) return "NO RATING";
@@ -93,17 +94,11 @@ if ($is_dept_head_or_director && !$show_strategic) {
         $show_strategic = true;
     }
 }
-$rating_periods = [];
-$rp_qry = $conn->query("SELECT * FROM rating_period ORDER BY year DESC, semester DESC");
-while ($row = $rp_qry->fetch_assoc()) {
-    $rating_periods[] = $row;
-}
-
-$selected_period = $_GET['period'] ?? '';
+// Use $period_filter from period_builder.php for all queries
 $where_clause = "WHERE r.employee_id = $faculty_id";
-if (!empty($selected_period)) {
-    $selected_period = $conn->real_escape_string($selected_period);
-    $where_clause .= " AND r.rating_period = '$selected_period'";
+if (!empty($period_codes)) {
+    $in = implode("','", array_map([$conn, 'real_escape_string'], $period_codes));
+    $where_clause .= " AND r.rating_period IN ('$in')";
 }
 
 $ratings_qry = $conn->query("
@@ -125,8 +120,7 @@ $movs_qry = $conn->query("
     FROM task_progress tp
     LEFT JOIN task_list t ON tp.task_id = t.id
     LEFT JOIN rating_period rp ON tp.rating_period = rp.code
-    WHERE tp.faculty_id = $faculty_id
-    " . (!empty($selected_period) ? " AND tp.rating_period = '$selected_period'" : "") . "
+    WHERE tp.faculty_id = $faculty_id $period_filter
     ORDER BY tp.date_created DESC, tp.rating_period DESC
 ");
 ?>
@@ -204,25 +198,23 @@ $movs_qry = $conn->query("
             <div class="card card-outline card-primary">
                 <div class="card-header">
                     <h4 class="card-title"><b>Archives - My Performance History</b></h4>
+                    <?php if(!empty($real_periods)): ?>
+                    <div class="card-tools">
+                        <select id="period" class="form-control form-control-sm"
+                                onchange="window.location.href='index.php?page=archives&period='+encodeURIComponent(this.value)"
+                                style="width:auto; font-size:0.85rem; padding:6px 28px 6px 12px; max-width:260px;">
+                            <?php foreach($real_periods as $rp):
+                                $key = epes_period_key($rp['semester'], $rp['year']);
+                                $sel_key = $selected_period ? epes_period_key($selected_period['semester'], $selected_period['year']) : '';
+                                $opt_label = $rp['semester'] . ' ' . $rp['year'] . ($rp['is_active'] ? ' (current)' : '');
+                            ?>
+                            <option value="<?= htmlspecialchars($key) ?>" <?= $key === $sel_key ? 'selected' : '' ?>><?= htmlspecialchars($opt_label) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 <div class="card-body">
-                    <div class="period-filter">
-                        <form method="GET" class="form-inline">
-                            <input type="hidden" name="page" value="archives">
-                            <label for="period" class="mr-2">Filter by Rating Period:</label>
-                            <select name="period" id="period" class="form-control mr-2" onchange="this.form.submit()">
-                                <option value="">All Periods</option>
-                                <?php foreach($rating_periods as $rp): ?>
-                                <option value="<?php echo $rp['code'] ?>" <?php echo $selected_period === $rp['code'] ? 'selected' : '' ?>>
-                                    <?php echo $rp['semester'] . ' ' . $rp['year'] ?>
-                                </option>
-                                <?php endforeach; ?>
-                            </select>
-                            <?php if(!empty($selected_period)): ?>
-                            <a href="?page=archives" class="btn btn-secondary btn-sm">Clear Filter</a>
-                            <?php endif; ?>
-                        </form>
-                    </div>
 
                     <?php
                     $total_ratings = $ratings_qry->num_rows;

@@ -54,6 +54,11 @@ while ($row = $hist_qry->fetch_assoc()) {
                             <h6 class="card-title"><i class="fa fa-cog"></i> <span id="formTitle">Set Rating Period</span></h6>
                         </div>
                         <div class="card-body">
+                            <?php if ($period): ?>
+                            <div class="alert alert-info py-2 px-3 mb-3" style="font-size:0.85rem;">
+                                <i class="fa fa-info-circle"></i> A period is already active. To change its dates or settings, use <strong>Edit</strong> in the history table below — or create a new one here (the new period starts inactive; activate it from the table if needed).
+                            </div>
+                            <?php endif; ?>
                             <form onsubmit="event.preventDefault(); save_period();">
                                 <input type="hidden" name="period_id" id="period_id" value="0">
                                 <div class="form-group">
@@ -255,9 +260,16 @@ while ($row = $hist_qry->fetch_assoc()) {
                                 <td><?= $h['auto_cascade'] ? '<span class="badge badge-success">Yes</span>' : '<span class="badge badge-secondary">No</span>' ?></td>
                                 <td><?= $is_active ? '<span class="badge badge-success">Active</span>' : '<span class="badge badge-secondary">—</span>' ?></td>
                                 <td>
-                                    <button class="btn btn-xs btn-info" onclick="editPeriod(<?= $h['id'] ?>)">
-                                        <i class="fa fa-edit"></i> Edit
-                                    </button>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-info" onclick="openEditModal(<?= $h['id'] ?>)">
+                                            <i class="fa fa-edit"></i> Edit
+                                        </button>
+                                        <?php if (!$is_active): ?>
+                                        <button class="btn btn-success" onclick="activatePeriod(<?= $h['id'] ?>)">
+                                            <i class="fa fa-check"></i> Activate
+                                        </button>
+                                        <?php endif; ?>
+                                    </div>
                                 </td>
                             </tr>
                             <?php 
@@ -303,27 +315,6 @@ function autoFillDates() {
     }
 }
 
-function editPeriod(id) {
-    var p = allPeriods.find(function(item) { return item.id == id; });
-    if (!p) return;
-    
-    $('#period_id').val(p.id);
-    $('#period_semester').val(p.semester);
-    $('#period_year').val(p.year);
-    $('#period_start').val(p.start_date || '');
-    $('#period_end').val(p.end_date || '');
-    $('#non_desig_start').val(p.non_desig_start_date || '');
-    $('#non_desig_end').val(p.non_desig_end_date || '');
-    $('#period_auto_cascade').prop('checked', p.auto_cascade == 1);
-    
-    $('#formTitle').text('Edit Rating Period');
-    $('#saveBtnLabel').text('Update Period');
-    $('#clearBtn').show();
-    
-    // Scroll to form
-    $('html, body').animate({ scrollTop: 0 }, 300);
-}
-
 function clearForm() {
     $('#period_id').val(0);
     $('#period_semester').val('');
@@ -337,6 +328,86 @@ function clearForm() {
     $('#formTitle').text('Set Rating Period');
     $('#saveBtnLabel').text('Save Period');
     $('#clearBtn').hide();
+}
+
+// ===== EDIT MODAL =====
+function openEditModal(id) {
+    var p = allPeriods.find(function(item) { return item.id == id; });
+    if (!p) return;
+    
+    $('#edit_period_id').val(p.id);
+    $('#edit_period_semester').val(p.semester);
+    $('#edit_period_year').val(p.year);
+    $('#edit_period_start').val(p.start_date || '');
+    $('#edit_period_end').val(p.end_date || '');
+    $('#edit_non_desig_start').val(p.non_desig_start_date || '');
+    $('#edit_non_desig_end').val(p.non_desig_end_date || '');
+    $('#edit_period_auto_cascade').prop('checked', p.auto_cascade == 1);
+    
+    $('#editPeriodModal').modal('show');
+}
+
+function submitEditPeriod() {
+    var semester = $('#edit_period_semester').val();
+    var year = $('#edit_period_year').val();
+    if (!semester || !year) {
+        alert_toast("Please fill out semester and year", "danger");
+        return;
+    }
+    
+    start_load();
+    $.ajax({
+        url: "ajax.php?action=update_period",
+        method: "POST",
+        data: {
+            period_id: $('#edit_period_id').val(),
+            semester: semester,
+            year: year,
+            code: semester.replace(/ /g, '') + '-' + year,
+            start_date: $('#edit_period_start').val(),
+            end_date: $('#edit_period_end').val(),
+            non_desig_start_date: $('#edit_non_desig_start').val(),
+            non_desig_end_date: $('#edit_non_desig_end').val(),
+            auto_cascade: $('#edit_period_auto_cascade').is(':checked') ? 1 : 0
+        },
+        success: function(resp) {
+            end_load();
+            if (resp == 1) {
+                alert_toast("Period updated successfully", "success");
+                $('#editPeriodModal').modal('hide');
+                setTimeout(function() { location.reload(); }, 800);
+            } else {
+                alert_toast("Error updating period", "danger");
+            }
+        },
+        error: function() {
+            end_load();
+            alert_toast("AJAX error occurred", "danger");
+        }
+    });
+}
+
+function activatePeriod(id) {
+    if (!confirm('Set this period as the active rating period? The current active period will be deactivated.')) return;
+    start_load();
+    $.ajax({
+        url: "ajax.php?action=set_active_period",
+        method: "POST",
+        data: { period_id: id },
+        success: function(resp) {
+            end_load();
+            if (resp == 1) {
+                alert_toast("Period activated", "success");
+                setTimeout(function() { location.reload(); }, 800);
+            } else {
+                alert_toast("Error activating period", "danger");
+            }
+        },
+        error: function() {
+            end_load();
+            alert_toast("AJAX error occurred", "danger");
+        }
+    });
 }
 
 function save_period() {
@@ -417,6 +488,74 @@ function trigger_cascade() {
     });
 }
 </script>
+
+<!-- ===== EDIT PERIOD MODAL ===== -->
+<div class="modal fade" id="editPeriodModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-md" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title"><i class="fa fa-edit"></i> Edit Rating Period</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit_period_id" value="0">
+                <div class="form-group">
+                    <label>Semester</label>
+                    <select id="edit_period_semester" class="form-control" required>
+                        <option value="1st Semester">1st Semester</option>
+                        <option value="2nd Semester">2nd Semester</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Academic Year</label>
+                    <input type="text" id="edit_period_year" class="form-control" placeholder="e.g. 2025-2026" required>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Designated Start</label>
+                            <input type="date" id="edit_period_start" class="form-control">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Designated End</label>
+                            <input type="date" id="edit_period_end" class="form-control">
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Non-Designated Start</label>
+                            <input type="date" id="edit_non_desig_start" class="form-control">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Non-Designated End</label>
+                            <input type="date" id="edit_non_desig_end" class="form-control">
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="form-check">
+                        <input type="checkbox" id="edit_period_auto_cascade" class="form-check-input" value="1">
+                        <label class="form-check-label">Auto-cascade: Compute DP + OPCR from IPCR</label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitEditPeriod()">
+                    <i class="fa fa-save"></i> Update Period
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <style>
 </style>

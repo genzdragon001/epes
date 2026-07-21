@@ -361,6 +361,10 @@ if($action == 'update_period'){
 	$update = $crud->update_period();
 	if($update) echo $update;
 }
+if($action == 'set_active_period'){
+	$res = $crud->set_active_period();
+	if($res) echo $res;
+}
 if($action == 'cascade_compute'){
 	echo $crud->cascade_compute();
 }
