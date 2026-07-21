@@ -95,16 +95,16 @@ if ($faculty_id > 0 && !empty($selected_period)) {
             <!-- Controls -->
             <div class="row mb-3 no-print">
                 <div class="col-md-4">
-                    <?php if ($login_type != 0): ?>
+                    <?php if ($login_type != 0 || $is_evaluator_flag): ?>
                     <div class="form-group">
                         <label>Faculty Member</label>
                         <select id="faculty_select" class="form-control" onchange="updateView()">
                             <option value="">— Select Faculty —</option>
                             <?php
-                            // Restrict Program Head/Dept Head to faculty in their department
+                            // Dean sees all departments, Dept Head sees only their department, Faculty sees none
                             $faculty_where = '';
                             $dept_param = null;
-                            if ($login_type == 1 || ($login_type == 0 && !empty($_SESSION['is_evaluator']))) {
+                            if ($login_type == 0 && $is_evaluator_flag) {
                                 require_once 'auth_helper.php';
                                 if (!is_dean($conn)) {
                                     $stmt = $conn->prepare("SELECT department_id FROM employee_list WHERE id = ? LIMIT 1");
@@ -115,6 +115,15 @@ if ($faculty_id > 0 && !empty($selected_period)) {
                                     $dept_param = intval($eval_dept['department_id'] ?? 0);
                                     $faculty_where = " WHERE department_id = ?";
                                 }
+                            } elseif (($login_type == 1 && !is_dean($conn)) || ($login_type == 0 && $is_evaluator_flag && !is_dean($conn))) {
+                                // Legacy evaluator dept_head restriction
+                                $stmt = $conn->prepare("SELECT department_id FROM employee_list WHERE id = ? LIMIT 1");
+                                $stmt->bind_param('i', $login_id);
+                                $stmt->execute();
+                                $eval_dept = $stmt->get_result()->fetch_assoc();
+                                $stmt->close();
+                                $dept_param = intval($eval_dept['department_id'] ?? 0);
+                                $faculty_where = " WHERE department_id = ?";
                             }
 
                             $fac_sql = "SELECT id, CONCAT(lastname, ', ', firstname, ' ', middlename) as name FROM employee_list {$faculty_where} ORDER BY lastname, firstname";
