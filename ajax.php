@@ -41,7 +41,8 @@ $csrf_protected_actions = [
 	'save_percentage_allocation', 'delete_percentage_allocation',
 	'save_percentage_allocation_quick',
 	'delete_mov',
-	'update_period', 'cascade_compute'
+	'update_period', 'cascade_compute',
+	'delete_period'
 ];
 
 if (in_array($action, $csrf_protected_actions)) {
@@ -364,6 +365,9 @@ if($action == 'update_period'){
 if($action == 'set_active_period'){
 	$res = $crud->set_active_period();
 	if($res) echo $res;
+}
+if($action == 'delete_period'){
+	echo $crud->delete_period();
 }
 if($action == 'cascade_compute'){
 	echo $crud->cascade_compute();

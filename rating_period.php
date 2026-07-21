@@ -268,6 +268,9 @@ while ($row = $hist_qry->fetch_assoc()) {
                                         <button class="btn btn-success" onclick="activatePeriod(<?= $h['id'] ?>)">
                                             <i class="fa fa-check"></i> Activate
                                         </button>
+                                        <button class="btn btn-danger" onclick="deletePeriod(<?= $h['id'] ?>, '<?= htmlspecialchars($h['semester'] . ' ' . $h['year']) ?>')">
+                                            <i class="fa fa-trash"></i> Delete
+                                        </button>
                                         <?php endif; ?>
                                     </div>
                                 </td>
@@ -351,7 +354,7 @@ function submitEditPeriod() {
     var semester = $('#edit_period_semester').val();
     var year = $('#edit_period_year').val();
     if (!semester || !year) {
-        alert_toast("Please fill out semester and year", "danger");
+        alert_toast("Please fill out semester and year", "error");
         return;
     }
     
@@ -377,12 +380,12 @@ function submitEditPeriod() {
                 $('#editPeriodModal').modal('hide');
                 setTimeout(function() { location.reload(); }, 800);
             } else {
-                alert_toast("Error updating period", "danger");
+                alert_toast("Error updating period", "error");
             }
         },
         error: function() {
             end_load();
-            alert_toast("AJAX error occurred", "danger");
+            alert_toast("AJAX error occurred", "error");
         }
     });
 }
@@ -400,12 +403,45 @@ function activatePeriod(id) {
                 alert_toast("Period activated", "success");
                 setTimeout(function() { location.reload(); }, 800);
             } else {
-                alert_toast("Error activating period", "danger");
+                alert_toast("Error activating period", "error");
             }
         },
         error: function() {
             end_load();
-            alert_toast("AJAX error occurred", "danger");
+            alert_toast("AJAX error occurred", "error");
+        }
+    });
+}
+
+function deletePeriod(id, label) {
+    if (!confirm('Delete rating period "' + label + '"?\n\nThis will also delete all submissions, ratings, and MOVs tagged to this period. This cannot be undone.')) return;
+    start_load();
+    $.ajax({
+        url: "ajax.php?action=delete_period",
+        method: "POST",
+        data: { period_id: id },
+        success: function(resp) {
+            end_load();
+            try {
+                var r = typeof resp === 'string' ? JSON.parse(resp) : resp;
+                if (r.status === 'success') {
+                    alert_toast(r.message || "Period deleted", "success");
+                    setTimeout(function() { location.reload(); }, 1000);
+                } else {
+                    alert_toast(r.message || "Error deleting period", "error");
+                }
+            } catch(e) {
+                if (resp == 1) {
+                    alert_toast("Period deleted", "success");
+                    setTimeout(function() { location.reload(); }, 1000);
+                } else {
+                    alert_toast("Error deleting period", "error");
+                }
+            }
+        },
+        error: function() {
+            end_load();
+            alert_toast("AJAX error occurred", "error");
         }
     });
 }
@@ -422,7 +458,7 @@ function save_period() {
     var code = semester.replace(/ /g, '') + '-' + year;
 
     if (!semester || !year) {
-        alert_toast("Please fill out semester and year", "danger");
+        alert_toast("Please fill out semester and year", "error");
         return;
     }
 
@@ -446,12 +482,12 @@ function save_period() {
                 alert_toast("Period saved successfully", "success");
                 setTimeout(function() { location.reload(); }, 1000);
             } else {
-                alert_toast("Error saving period", "danger");
+                alert_toast("Error saving period", "error");
                 end_load();
             }
         },
         error: function() {
-            alert_toast("AJAX error occurred", "danger");
+            alert_toast("AJAX error occurred", "error");
             end_load();
         }
     });

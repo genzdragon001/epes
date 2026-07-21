@@ -2871,4 +2871,61 @@ function submit_file() {
 		return $qry ? 1 : 0;
 	}
 
+	/**
+	 * Delete a rating period and all data tagged to it.
+	 * Prevents deletion of the active period.
+	 * Returns JSON: {status: success/error, message: ...}
+	 */
+	function delete_period(){
+		header('Content-Type: application/json');
+		$period_id = intval($_POST['period_id'] ?? 0);
+		if ($period_id <= 0) {
+			return json_encode(['status' => 'error', 'message' => 'Invalid period ID']);
+		}
+
+		// Prevent deleting the active period
+		$check = $this->db->query("SELECT is_active, semester, year, code FROM rating_period WHERE id = $period_id LIMIT 1");
+		if (!$check || $check->num_rows == 0) {
+			return json_encode(['status' => 'error', 'message' => 'Period not found']);
+		}
+		$period = $check->fetch_assoc();
+		if ($period['is_active'] == 1) {
+			return json_encode(['status' => 'error', 'message' => 'Cannot delete the active period. Deactivate or switch to another period first.']);
+		}
+
+		// Build all period codes for this semester+year (same logic as period_builder.php)
+		$semester = $this->db->real_escape_string($period['semester']);
+		$year = $this->db->real_escape_string($period['year']);
+		$code = $this->db->real_escape_string($period['code']);
+
+		// Collect all codes for this period (IPCR/DP/OPCR variants + short code)
+		$period_codes = [];
+		$code_qry = $this->db->query("SELECT code FROM rating_period WHERE semester = '$semester' AND year = '$year'");
+		while ($code_qry && $r = $code_qry->fetch_assoc()) $period_codes[] = $r['code'];
+
+		// Short code (e.g. 1-2526)
+		$yr_parts = explode('-', $period['year']);
+		if (count($yr_parts) === 2) {
+			$short_suffix = substr($yr_parts[0], -2) . substr($yr_parts[1], -2);
+			$sem_short = ($period['semester'] === '1st Semester') ? '1' : (($period['semester'] === '2nd Semester') ? '2' : 'S');
+			$period_codes[] = $sem_short . '-' . $short_suffix;
+		}
+		// "Semester Year" format (used by mov_uploads)
+		$period_codes[] = $period['semester'] . ' ' . $period['year'];
+
+		$period_codes = array_values(array_unique(array_filter($period_codes)));
+		$in = implode("','", array_map([$this->db, 'real_escape_string'], $period_codes));
+
+		// Delete related data
+		$this->db->query("DELETE FROM task_progress WHERE rating_period IN ('$in')");
+		$this->db->query("DELETE FROM ratings WHERE rating_period IN ('$in')");
+		$this->db->query("DELETE FROM mov_uploads WHERE rating_period IN ('$in')");
+		$this->db->query("DELETE FROM cascading_ratings WHERE target_period_id = $period_id");
+
+		// Delete the rating_period rows themselves
+		$this->db->query("DELETE FROM rating_period WHERE semester = '$semester' AND year = '$year'");
+
+		return json_encode(['status' => 'success', 'message' => 'Period "' . $period['semester'] . ' ' . $period['year'] . '" and all related data deleted']);
+	}
+
 }
