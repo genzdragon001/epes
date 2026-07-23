@@ -1,32 +1,52 @@
 <?php
 /**
- * IPCR Form Generator - Excel-aligned version
- * Generates PDF and print-ready IPCR forms for faculty performance evaluation
+ * IPCR Form Generator
+ * Uses computeRatingBreakdown() from rating_functions.php — the SAME computation
+ * as rating.php — so the IPCR preview always matches the Rating page.
  */
 require_once 'config.php';
 require_once 'db_connect.php';
+require_once 'includes/rating_functions.php';
 
 class IPCRGenerator {
     private $db;
-    
+
     public function __construct() {
         $this->db = getDB();
     }
-    
+
     /**
      * Generate IPCR form HTML for a faculty member
+     * @param int $faculty_id
+     * @param string $rating_period_code  Primary code (from rating_period.code)
+     * @param array $period_codes         All code variants for this semester+year
      */
-    public function generateIPCR($faculty_id, $rating_period_code) {
+    public function generateIPCR($faculty_id, $rating_period_code, $period_codes = null) {
         $faculty = $this->getFacultyData($faculty_id);
         if (!$faculty) return '<div class="alert alert-danger">Faculty not found.</div>';
-        
-        $ratings = $this->getFacultyRatings($faculty_id, $rating_period_code);
-        $tasks   = $this->getFacultyTasks($faculty_id, $rating_period_code);
-        $allocations = $this->getAllocations($faculty['position_id'], $faculty['designation_id']);
-        
-        return $this->buildIPCRHTML($faculty, $ratings, $tasks, $allocations, $rating_period_code);
+
+        // Build all code variants if not provided
+        if ($period_codes === null) {
+            $period_codes = $this->getAllPeriodCodes($rating_period_code);
+        }
+
+        // Build period_filter SQL (same as period_builder.php)
+        $period_filter = $this->buildPeriodFilter($period_codes);
+
+        $position_id = intval($faculty['position_id'] ?? 0);
+        $designation_id = intval($faculty['designation_id'] ?? 0);
+
+        // Use the shared computation function — same as rating.php
+        $breakdown = computeRatingBreakdown($this->db, $faculty_id, $position_id, $designation_id, $rating_period_code, $period_filter);
+
+        if ($breakdown === null) {
+            // No active sections — return empty so ipcr_view shows "no ratings"
+            return '<div class="alert alert-warning">No verified ratings found for this period.</div>';
+        }
+
+        return $this->buildIPCRHTML($faculty, $breakdown, $rating_period_code, $period_codes);
     }
-    
+
     /**
      * Get faculty member data
      */
@@ -46,390 +66,327 @@ class IPCRGenerator {
         $stmt->close();
         return $faculty;
     }
-    
+
     /**
-     * Get faculty ratings for the period
+     * Get all rating_period code variants for a given canonical code.
      */
-    private function getFacultyRatings($faculty_id, $rating_period_code) {
-        $stmt = $this->db->prepare("
-            SELECT 
-                r.task_id,
-                SUM(r.efficiency) as efficiency,
-                SUM(r.timeliness) as timeliness,
-                SUM(r.quality) as quality,
-                t.category,
-                t.sub_category,
-                t.success_indicators,
-                t.targets_measures,
-                t.deadline,
-                MAX(tp.date_submitted) as date_submitted,
-                MAX(tp.date_verified) as date_verified,
-                MAX(tp.file_path) as file_path
-            FROM ratings r
-            INNER JOIN task_list t ON r.task_id = t.id
-            LEFT JOIN task_progress tp ON tp.task_id = t.id AND tp.faculty_id = r.employee_id AND tp.rating_period = r.rating_period
-            WHERE r.employee_id = ? 
-              AND r.rating_period = ?
-              AND (r.efficiency > 0 OR r.timeliness > 0 OR r.quality > 0)
-            GROUP BY r.task_id, t.category, t.sub_category, t.success_indicators, t.targets_measures, t.deadline
-            ORDER BY FIELD(t.category, 'strategic', 'core', 'support'), t.sub_category, t.id
-        ");
-        $stmt->bind_param('is', $faculty_id, $rating_period_code);
+    private function getAllPeriodCodes($primary_code) {
+        $codes = [$primary_code];
+
+        $stmt = $this->db->prepare("SELECT semester, year FROM rating_period WHERE code = ? LIMIT 1");
+        $stmt->bind_param('s', $primary_code);
         $stmt->execute();
-        $result = $stmt->get_result();
-        $ratings = [];
-        while ($row = $result->fetch_assoc()) {
-            $ratings[] = $row;
-        }
+        $rp = $stmt->get_result()->fetch_assoc();
         $stmt->close();
-        return $ratings;
+
+        if ($rp) {
+            $semester = $rp['semester'];
+            $year = $rp['year'];
+
+            // All codes from rating_period with same semester+year
+            $stmt2 = $this->db->prepare("SELECT code FROM rating_period WHERE semester = ? AND year = ?");
+            $stmt2->bind_param('ss', $semester, $year);
+            $stmt2->execute();
+            $r2 = $stmt2->get_result();
+            while ($row = $r2->fetch_assoc()) {
+                if (!empty($row['code'])) $codes[] = $row['code'];
+            }
+            $stmt2->close();
+
+            // Short code (e.g. 1-2526)
+            $short_code = '';
+            $sem_num = '1';
+            if (strpos($year, '-') !== false) {
+                $parts = explode('-', $year);
+                $short = substr($parts[0], -2) . substr($parts[1], -2);
+                if (strpos($semester, '2nd') !== false) $sem_num = '2';
+                elseif (stripos($semester, 'Summer') !== false) $sem_num = 'S';
+                $short_code = $sem_num . '-' . $short;
+                $codes[] = $short_code;
+            }
+
+            // "Semester Year" format
+            $codes[] = $semester . ' ' . $year;
+
+            // Data-driven: gather distinct codes from task_progress and ratings
+            $sem_compact = str_replace(' ', '', $semester);
+            $like1 = '%' . $sem_compact . '-' . $year . '%';
+            $like2 = '%' . $short_code . '%';
+
+            $stmt3 = $this->db->prepare("SELECT DISTINCT rating_period FROM task_progress WHERE rating_period <> '' AND (rating_period LIKE ? OR rating_period LIKE ?)");
+            $stmt3->bind_param('ss', $like1, $like2);
+            $stmt3->execute();
+            $r3 = $stmt3->get_result();
+            while ($row = $r3->fetch_assoc()) {
+                if (!empty($row['rating_period'])) $codes[] = $row['rating_period'];
+            }
+            $stmt3->close();
+
+            $stmt4 = $this->db->prepare("SELECT DISTINCT rating_period FROM ratings WHERE rating_period <> '' AND (rating_period LIKE ? OR rating_period LIKE ?)");
+            $stmt4->bind_param('ss', $like1, $like2);
+            $stmt4->execute();
+            $r4 = $stmt4->get_result();
+            while ($row = $r4->fetch_assoc()) {
+                if (!empty($row['rating_period'])) $codes[] = $row['rating_period'];
+            }
+            $stmt4->close();
+        }
+
+        return array_values(array_unique(array_filter($codes)));
     }
-    
+
     /**
-     * Get faculty task progress for the period
+     * Build SQL period filter fragment
      */
-    private function getFacultyTasks($faculty_id, $rating_period_code) {
-        $stmt = $this->db->prepare("
-            SELECT t.*, tp.progress, tp.date_created, tp.date_verified, tp.date_submitted,
-                   tp.file_path, tp.file_type
-            FROM task_list t
-            LEFT JOIN task_progress tp ON t.id = tp.task_id AND tp.faculty_id = ? AND tp.rating_period = ?
-            WHERE t.is_active = 1
-            ORDER BY FIELD(t.category, 'strategic', 'core', 'support'), t.sub_category, t.id
-        ");
-        $stmt->bind_param('is', $faculty_id, $rating_period_code);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        $tasks = [];
-        while ($row = $result->fetch_assoc()) {
-            $tasks[] = $row;
-        }
-        $stmt->close();
-        return $tasks;
+    private function buildPeriodFilter($period_codes) {
+        if (empty($period_codes)) return " AND 0";
+        $escaped = array_map(function($c) {
+            return "'" . $this->db->real_escape_string($c) . "'";
+        }, $period_codes);
+        return " AND rating_period IN (" . implode(',', $escaped) . ")";
     }
-    
+
     /**
-     * Get percentage allocations for this faculty's position/designation
+     * Build the full IPCR HTML document using the rating breakdown
      */
-    private function getAllocations($position_id, $designation_id) {
-        $allocations = [];
-        
-        $desig_cond = ($designation_id && $designation_id > 0) 
-            ? "designation_id = " . intval($designation_id)
-            : "(designation_id IS NULL OR designation_id = 0)";
-        
-        $qry = $this->db->query("
-            SELECT category, sub_category, percentage 
-            FROM percentage_allocation 
-            WHERE position_id = " . intval($position_id) . "
-            AND $desig_cond
-            AND is_active = 1
-        ");
-        
-        while ($row = $qry->fetch_assoc()) {
-            // Skip legacy 'core/instructions' rows that are now computed from TER + Instruction
-            if (strtolower($row['category']) === 'core' && strtolower($row['sub_category']) === 'instructions') {
-                continue;
-            }
-            $key = $row['category'];
-            if ($row['sub_category']) $key .= '_' . $row['sub_category'];
-            $allocations[$key] = floatval($row['percentage']);
-        }
-        // Normalize: map core_instruction -> core_instructions (plural) for consistency
-        if (isset($allocations['core_instruction']) && !isset($allocations['core_instructions'])) {
-            $allocations['core_instructions'] = $allocations['core_instruction'];
-        }
-        return $allocations;
-    }
-    
-    /**
-     * Build allocation map from flat allocations array
-     * Returns: [category => ['total_pct' => X, 'subcategories' => [sub => pct]]]
-     */
-    private function buildAllocationMap($allocations) {
-        $map = [];
-        foreach ($allocations as $key => $pct) {
-            if (strpos($key, '_') !== false) {
-                list($cat, $sub) = explode('_', $key, 2);
-            } else {
-                $cat = $key;
-                $sub = 'General';
-            }
-            $cat = strtolower($cat);
-            $sub = strtolower($sub);
-            
-            if (!isset($map[$cat])) {
-                $map[$cat] = ['total_pct' => 0, 'subcategories' => []];
-            }
-            
-            // 'core/total' defines the Core function weight in PART I
-            if ($cat === 'core' && $sub === 'total') {
-                $map[$cat]['total_pct'] = $pct;
-                continue;
-            }
-            
-            // Merge TER + Instruction into single "instructions" subcategory
-            if ($cat === 'core' && in_array($sub, ['ter', 'instruction'])) {
-                $sub = 'instructions';
-            }
-            
-            $map[$cat]['subcategories'][$sub] = ($map[$cat]['subcategories'][$sub] ?? 0) + $pct;
-        }
-        
-        // If no explicit total was set, derive category total from subcategories
-        foreach ($map as &$cat_data) {
-            if ($cat_data['total_pct'] == 0) {
-                $cat_data['total_pct'] = array_sum($cat_data['subcategories']);
-            }
-            uksort($cat_data['subcategories'], function($a, $b) {
-                $order = ['instructions' => 1, 'research' => 2, 'extension' => 3];
-                $oa = $order[$a] ?? 99;
-                $ob = $order[$b] ?? 99;
-                return $oa <=> $ob;
-            });
-        }
-        return $map;
-    }
-    
-    /**
-     * Build the full IPCR HTML document
-     */
-    private function buildIPCRHTML($faculty, $ratings, $tasks, $allocations, $rating_period_code) {
-        // Group ratings by category and sub-category
-        $by_category = [];
-        $by_subcategory = [];
-        foreach ($ratings as $r) {
-            $cat = $r['category'];
-            $sub = $r['sub_category'] ?: 'General';
-            if (!isset($by_category[$cat])) $by_category[$cat] = [];
-            if (!isset($by_subcategory[$cat])) $by_subcategory[$cat] = [];
-            if (!isset($by_subcategory[$cat][$sub])) $by_subcategory[$cat][$sub] = [];
-            $by_category[$cat][] = $r;
-            $by_subcategory[$cat][$sub][] = $r;
-        }
-        
-        // Category display names and order
-        $cat_order = ['strategic' => 'Strategic Function', 'core' => 'Core Function', 'support' => 'Support Function'];
+    private function buildIPCRHTML($faculty, $b, $rating_period_code, $period_codes) {
+        $cat_order = [
+            'strategic' => 'Strategic Function',
+            'core' => 'Core Function',
+            'support' => 'Support Function'
+        ];
         $subcat_names = [
             'instructions' => 'Instruction / Teaching Effectiveness',
             'research' => 'Research',
             'extension' => 'Extension',
             'General' => 'General'
         ];
-        
-        // Build allocation structure from this faculty's position/designation
-        $allocation_map = $this->buildAllocationMap($allocations);
-        
-        // Weight table computation - driven by allocation_map
+
+        // ---- PART I: Weight Table ----
         $weight_table = '';
         $total_weight = 0;
-        foreach (['strategic', 'core', 'support'] as $cat) {
-            if (!isset($allocation_map[$cat])) continue;
-            $cat_data = $allocation_map[$cat];
-            $pct = $cat_data['total_pct'];
-            $total_weight += $pct;
-            $label = $cat_order[$cat] ?? ucfirst($cat);
-            $weight_table .= "
-                <tr>
-                    <td style='padding:6px 10px;'>{$label}</td>
-                    <td style='padding:6px 10px; text-align:center; width:25%;'><strong>{$pct}%</strong></td>
-                </tr>";
+        if ($b['show_strategic_pct']) {
+            $total_weight += $b['str_pct'];
+            $weight_table .= "<tr><td style='padding:6px 10px;'>Strategic Function</td><td style='padding:6px 10px; text-align:center; width:25%;'><strong>{$b['str_pct']}%</strong></td></tr>";
         }
-        if (empty($weight_table)) {
-            // Fallback if no allocation data
-            foreach (['strategic', 'core', 'support'] as $cat) {
-                $pct = 0;
-                if ($cat === 'strategic') $pct = $allocations['strategic'] ?? 0;
-                elseif ($cat === 'core') {
-                    $pct = ($allocations['core_instructions'] ?? 0)
-                         + ($allocations['core_research'] ?? 0)
-                         + ($allocations['core_extension'] ?? 0);
-                    if ($pct == 0) $pct = $allocations['core'] ?? 0;
-                } elseif ($cat === 'support') $pct = $allocations['support'] ?? 0;
-                $total_weight += $pct;
-                $label = $cat_order[$cat] ?? ucfirst($cat);
-                $weight_table .= "
-                <tr>
-                    <td style='padding:6px 10px;'>{$label}</td>
-                    <td style='padding:6px 10px; text-align:center; width:25%;'><strong>{$pct}%</strong></td>
-                </tr>";
-            }
+        if ($b['show_instructions_pct'] || $b['show_research_pct'] || $b['show_extension_pct']) {
+            $total_weight += $b['core_effective_pct'];
+            $weight_table .= "<tr><td style='padding:6px 10px;'>Core Function</td><td style='padding:6px 10px; text-align:center; width:25%;'><strong>{$b['core_effective_pct']}%</strong></td></tr>";
         }
-        $weight_table .= "
-                <tr style='background:#e8e8e8; font-weight:bold;'>
-                    <td style='padding:6px 10px;'>TOTAL</td>
-                    <td style='padding:6px 10px; text-align:center;'>{$total_weight}%</td>
-                </tr>";
-        
-        // Compute category averages
-        $cat_avgs = [];
-        foreach ($by_category as $cat => $items) {
-            $sum_e = $sum_t = $sum_q = 0;
-            $cnt = count($items);
-            foreach ($items as $r) {
-                $sum_e += $r['efficiency'];
-                $sum_t += $r['timeliness'];
-                $sum_q += $r['quality'];
-            }
-            $cat_avgs[$cat] = [
-                'count' => $cnt,
-                'efficiency' => $cnt > 0 ? round($sum_e / $cnt, 2) : 0,
-                'timeliness' => $cnt > 0 ? round($sum_t / $cnt, 2) : 0,
-                'quality'    => $cnt > 0 ? round($sum_q / $cnt, 2) : 0,
-                'average'    => $cnt > 0 ? round(($sum_e + $sum_t + $sum_q) / (3 * $cnt), 2) : 0,
-            ];
+        if ($b['show_support_pct'] && $b['supp_pct'] > 0) {
+            $total_weight += $b['supp_pct'];
+            $weight_table .= "<tr><td style='padding:6px 10px;'>Support Function</td><td style='padding:6px 10px; text-align:center; width:25%;'><strong>{$b['supp_pct']}%</strong></td></tr>";
         }
-        
-        // Overall average across all ratings
-        $total_cnt = count($ratings);
-        $sum_all_e = $sum_all_t = $sum_all_q = 0;
-        foreach ($ratings as $r) {
-            $sum_all_e += $r['efficiency'];
-            $sum_all_t += $r['timeliness'];
-            $sum_all_q += $r['quality'];
-        }
-        $overall_e = $total_cnt > 0 ? round($sum_all_e / $total_cnt, 2) : 0;
-        $overall_t = $total_cnt > 0 ? round($sum_all_t / $total_cnt, 2) : 0;
-        $overall_q = $total_cnt > 0 ? round($sum_all_q / $total_cnt, 2) : 0;
-        $overall_score = $total_cnt > 0 ? round(($sum_all_e + $sum_all_t + $sum_all_q) / (3 * $total_cnt), 2) : 0;
-        $adjectival = $this->getAdjectivalRating($overall_score);
-        
-        // Category rows for main rating table
+        $weight_table .= "<tr style='background:#e8e8e8; font-weight:bold;'><td style='padding:6px 10px;'>TOTAL</td><td style='padding:6px 10px; text-align:center;'>{$total_weight}%</td></tr>";
+
+        // ---- PART II: Performance Ratings (detail rows) ----
         $cat_rows = '';
-        foreach (['strategic', 'core', 'support'] as $cat) {
-            if (!isset($allocation_map[$cat])) continue;
-            $cat_data = $allocation_map[$cat];
-            $pct = $cat_data['total_pct'];
-            $cat_label = $cat_order[$cat] ?? ucfirst($cat);
-            $cat_rows .= "
-                <tr style='background:#f5f5f5; font-weight:bold;'>
-                    <td colspan='7' style='padding:6px 8px;'>{$cat_label} (Weight: {$pct}%)</td>
-                </tr>";
-            
-            // Sub-category rows from allocation_map
-            if (!empty($cat_data['subcategories'])) {
-                foreach ($cat_data['subcategories'] as $sub => $sub_pct) {
-                    $sub_items = $by_subcategory[$cat][$sub] ?? [];
-                    $sub_cnt = count($sub_items);
-                    $sub_e = $sub_t = $sub_q = 0;
-                    foreach ($sub_items as $r) {
-                        $sub_e += $r['efficiency'];
-                        $sub_t += $r['timeliness'];
-                        $sub_q += $r['quality'];
-                    }
-                    $sub_eff = $sub_cnt > 0 ? round($sub_e / $sub_cnt, 2) : 0;
-                    $sub_time = $sub_cnt > 0 ? round($sub_t / $sub_cnt, 2) : 0;
-                    $sub_qual = $sub_cnt > 0 ? round($sub_q / $sub_cnt, 2) : 0;
-                    $sub_avg = $sub_cnt > 0 ? round(($sub_e + $sub_t + $sub_q) / (3 * $sub_cnt), 2) : 0;
-                    $sub_name = $subcat_names[$sub] ?? ucfirst($sub);
-                    
-                    $cat_rows .= "
-                <tr style='background:#fafafa;'>
-                    <td style='padding:5px 8px 5px 25px;'><em>{$sub_name}</em> <small>({$sub_pct}%)</small></td>
-                    <td class='text-center'>{$sub_cnt}</td>
-                    <td class='text-center'>" . number_format($sub_eff, 2) . "</td>
-                    <td class='text-center'>" . number_format($sub_time, 2) . "</td>
-                    <td class='text-center'>" . number_format($sub_qual, 2) . "</td>
-                    <td class='text-center'><strong>" . number_format($sub_avg, 2) . "</strong></td>
-                    <td class='text-center'>" . $this->getAdjectivalRating($sub_avg) . "</td>
-                </tr>";
-                }
-            } elseif (isset($cat_avgs[$cat])) {
-                // No subcategories: show category-level row
-                $a = $cat_avgs[$cat];
-                $cat_rows .= "
-                <tr style='background:#fafafa;'>
-                    <td style='padding:5px 8px 5px 25px;'><em>General</em></td>
-                    <td class='text-center'>{$a['count']}</td>
-                    <td class='text-center'>" . number_format($a['efficiency'], 2) . "</td>
-                    <td class='text-center'>" . number_format($a['timeliness'], 2) . "</td>
-                    <td class='text-center'>" . number_format($a['quality'], 2) . "</td>
-                    <td class='text-center'><strong>" . number_format($a['average'], 2) . "</strong></td>
-                    <td class='text-center'>" . $this->getAdjectivalRating($a['average']) . "</td>
+
+        // Strategic
+        if ($b['show_strategic'] && !empty($b['tasks_by_section']['strategic'])) {
+            $cat_rows .= "<tr style='background:#f5f5f5; font-weight:bold;'><td colspan='6' style='padding:6px 8px;'>Strategic Function (Weight: {$b['str_pct']}%)</td></tr>";
+            foreach ($b['tasks_by_section']['strategic'] as $task) {
+                $ave_display = $task['has_submission'] ? $task['average'] : ($task['is_na'] ? 'N/A' : '-');
+                $cat_rows .= "<tr style='background:#fafafa;'>
+                    <td style='padding:5px 8px 5px 25px;'>" . htmlspecialchars($task['success_indicators']) . "</td>
+                    <td class='text-center'>" . $task['efficiency'] . "</td>
+                    <td class='text-center'>" . $task['timeliness'] . "</td>
+                    <td class='text-center'>" . $task['quality'] . "</td>
+                    <td class='text-center'><strong>" . $ave_display . "</strong></td>
                 </tr>";
             }
+            $cat_rows .= "<tr class='table-info'><td colspan='4' style='text-align:right;'><b>Strategic Function Average</b></td><td class='text-center'><b>{$b['str_ave']['ave']}</b></td></tr>";
         }
-        
-        // Fallback: if no allocation_map, use old category grouping
-        if (empty($cat_rows)) {
-            foreach (['strategic', 'core', 'support'] as $cat) {
-                if (!isset($cat_avgs[$cat])) continue;
-                $a = $cat_avgs[$cat];
-                $pct = 0;
-                if ($cat === 'strategic') $pct = $allocations['strategic'] ?? 0;
-                elseif ($cat === 'core') {
-                    $pct = ($allocations['core_instructions'] ?? 0)
-                         + ($allocations['core_research'] ?? 0)
-                         + ($allocations['core_extension'] ?? 0);
-                    if ($pct == 0) $pct = $allocations['core'] ?? 0;
-                } elseif ($cat === 'support') $pct = $allocations['support'] ?? 0;
-                
-                $cat_label = $cat_order[$cat] ?? ucfirst($cat);
-                $cat_rows .= "
-                <tr style='background:#f5f5f5; font-weight:bold;'>
-                    <td colspan='7' style='padding:6px 8px;'>{$cat_label} (Weight: {$pct}%)</td>
-                </tr>";
-                
-                if (isset($by_subcategory[$cat]) && !empty($by_subcategory[$cat])) {
-                    foreach ($by_subcategory[$cat] as $sub => $sub_items) {
-                        $sub_cnt = count($sub_items);
-                        $sub_e = $sub_t = $sub_q = 0;
-                        foreach ($sub_items as $r) {
-                            $sub_e += $r['efficiency'];
-                            $sub_t += $r['timeliness'];
-                            $sub_q += $r['quality'];
-                        }
-                        $sub_eff = $sub_cnt > 0 ? round($sub_e / $sub_cnt, 2) : 0;
-                        $sub_time = $sub_cnt > 0 ? round($sub_t / $sub_cnt, 2) : 0;
-                        $sub_qual = $sub_cnt > 0 ? round($sub_q / $sub_cnt, 2) : 0;
-                        $sub_avg = $sub_cnt > 0 ? round(($sub_e + $sub_t + $sub_q) / (3 * $sub_cnt), 2) : 0;
-                        $sub_pct = $allocations[$cat . '_' . $sub] ?? 0;
-                        $sub_name = $subcat_names[$sub] ?? ucfirst($sub);
-                        
-                        $cat_rows .= "
-                <tr style='background:#fafafa;'>
-                    <td style='padding:5px 8px 5px 25px;'><em>{$sub_name}</em> <small>({$sub_pct}%)</small></td>
-                    <td class='text-center'>{$sub_cnt}</td>
-                    <td class='text-center'>" . number_format($sub_eff, 2) . "</td>
-                    <td class='text-center'>" . number_format($sub_time, 2) . "</td>
-                    <td class='text-center'>" . number_format($sub_qual, 2) . "</td>
-                    <td class='text-center'><strong>" . number_format($sub_avg, 2) . "</strong></td>
-                    <td class='text-center'>" . $this->getAdjectivalRating($sub_avg) . "</td>
-                </tr>";
+
+        // Core
+        if ($b['show_instructions'] || $b['show_research'] || $b['show_extension']) {
+            $cat_rows .= "<tr style='background:#f5f5f5; font-weight:bold;'><td colspan='6' style='padding:6px 8px;'>Core Function (Weight: {$b['core_effective_pct']}%)</td></tr>";
+
+            // Instruction (TER + Instruction split)
+            if ($b['show_instructions']) {
+                $cat_rows .= "<tr style='background:#fafafa;'><td colspan='6' style='padding:5px 8px 5px 25px;'><b>A. INSTRUCTION ({$b['inst_pct']}%)</b></td></tr>";
+
+                // TER sub-section
+                $cat_rows .= "<tr style='background:#f8f8f8;'><td colspan='6' style='padding:4px 8px 4px 40px;'><b>A.1 Teaching Effectiveness ({$b['ter_split']}%) - TER</b></td></tr>";
+                if (!empty($b['ter_tasks'])) {
+                    foreach ($b['ter_tasks'] as $task) {
+                        $ave_display = $task['has_submission'] ? $task['average'] : ($task['is_na'] ? 'N/A' : '-');
+                        $cat_rows .= "<tr><td style='padding:4px 8px 4px 55px;'>" . htmlspecialchars($task['success_indicators']) . "</td>
+                            <td class='text-center'>" . $task['efficiency'] . "</td>
+                            <td class='text-center'>" . $task['timeliness'] . "</td>
+                            <td class='text-center'>" . $task['quality'] . "</td>
+                            <td class='text-center'><strong>" . $ave_display . "</strong></td></tr>";
                     }
+                } else {
+                    $cat_rows .= "<tr><td colspan='6' style='padding:4px 8px 4px 55px;' class='text-muted'><em>(No verified submissions)</em></td></tr>";
+                }
+                $cat_rows .= "<tr class='table-info'><td colspan='4' style='text-align:right;'><b>TER</b></td><td class='text-center'><b>{$b['ter_ave']}</b></td></tr>";
+
+                // Instruction sub-section
+                $cat_rows .= "<tr style='background:#f8f8f8;'><td colspan='6' style='padding:4px 8px 4px 40px;'><b>A.2 Instructions ({$b['instr_split']}%)</b></td></tr>";
+                if (!empty($b['instr_tasks'])) {
+                    foreach ($b['instr_tasks'] as $task) {
+                        $ave_display = $task['has_submission'] ? $task['average'] : ($task['is_na'] ? 'N/A' : '-');
+                        $cat_rows .= "<tr><td style='padding:4px 8px 4px 55px;'>" . htmlspecialchars($task['success_indicators']) . "</td>
+                            <td class='text-center'>" . $task['efficiency'] . "</td>
+                            <td class='text-center'>" . $task['timeliness'] . "</td>
+                            <td class='text-center'>" . $task['quality'] . "</td>
+                            <td class='text-center'><strong>" . $ave_display . "</strong></td></tr>";
+                    }
+                } else {
+                    $cat_rows .= "<tr><td colspan='6' style='padding:4px 8px 4px 55px;' class='text-muted'><em>(No verified submissions)</em></td></tr>";
+                }
+                $cat_rows .= "<tr class='table-info'><td colspan='4' style='text-align:right;'><b>Instructions (Sum ÷ {$b['inst_divisor']})</b></td><td class='text-center'><b>{$b['instruction_div']}</b></td></tr>";
+                if ($b['inst_active']) {
+                    $cat_rows .= "<tr class='table-info'><td colspan='4' style='text-align:right;'><b>Instruction (Average)</b></td><td class='text-center'><b>{$b['instruction_rating']}</b></td></tr>";
                 }
             }
+
+            // Research
+            if ($b['show_research']) {
+                $cat_rows .= "<tr style='background:#fafafa;'><td colspan='6' style='padding:5px 8px 5px 25px;'><b>B. RESEARCH ({$b['res_pct']}%)</b></td></tr>";
+                if (!empty($b['tasks_by_section']['core_research'])) {
+                    foreach ($b['tasks_by_section']['core_research'] as $task) {
+                        $ave_display = $task['has_submission'] ? $task['average'] : ($task['is_na'] ? 'N/A' : '-');
+                        $cat_rows .= "<tr><td style='padding:4px 8px 4px 40px;'>" . htmlspecialchars($task['success_indicators']) . "</td>
+                            <td class='text-center'>" . $task['efficiency'] . "</td>
+                            <td class='text-center'>" . $task['timeliness'] . "</td>
+                            <td class='text-center'>" . $task['quality'] . "</td>
+                            <td class='text-center'><strong>" . $ave_display . "</strong></td></tr>";
+                    }
+                } else {
+                    $cat_rows .= "<tr><td colspan='6' style='padding:4px 8px 4px 40px;' class='text-muted'><em>(No verified submissions)</em></td></tr>";
+                }
+                $cat_rows .= "<tr class='table-info'><td colspan='4' style='text-align:right;'><b>Research (Average)</b></td><td class='text-center'><b>" . number_format($b['res_val'], 2) . "</b></td></tr>";
+            }
+
+            // Extension
+            if ($b['show_extension']) {
+                $cat_rows .= "<tr style='background:#fafafa;'><td colspan='6' style='padding:5px 8px 5px 25px;'><b>C. EXTENSION ({$b['ext_pct']}%)</b></td></tr>";
+                if (!empty($b['tasks_by_section']['core_extension'])) {
+                    foreach ($b['tasks_by_section']['core_extension'] as $task) {
+                        $ave_display = $task['has_submission'] ? $task['average'] : ($task['is_na'] ? 'N/A' : '-');
+                        $cat_rows .= "<tr><td style='padding:4px 8px 4px 40px;'>" . htmlspecialchars($task['success_indicators']) . "</td>
+                            <td class='text-center'>" . $task['efficiency'] . "</td>
+                            <td class='text-center'>" . $task['timeliness'] . "</td>
+                            <td class='text-center'>" . $task['quality'] . "</td>
+                            <td class='text-center'><strong>" . $ave_display . "</strong></td></tr>";
+                    }
+                } else {
+                    $cat_rows .= "<tr><td colspan='6' style='padding:4px 8px 4px 40px;' class='text-muted'><em>(No verified submissions)</em></td></tr>";
+                }
+                $cat_rows .= "<tr class='table-info'><td colspan='4' style='text-align:right;'><b>Extension (Average)</b></td><td class='text-center'><b>" . number_format($b['ext_val'], 2) . "</b></td></tr>";
+            }
+
+            // Core function average
+            $cat_rows .= "<tr class='table-info'><td colspan='4' style='text-align:right;'><b>Core Function Average</b></td><td class='text-center'><b>" . number_format(min(5.00, $b['core_function']), 2) . "</b></td></tr>";
         }
-        
-        // Indicator accomplishment rows (matches Excel summary sheets)
+
+        // Support
+        if ($b['show_support']) {
+            $cat_rows .= "<tr style='background:#f5f5f5; font-weight:bold;'><td colspan='6' style='padding:6px 8px;'>Support Function (Weight: {$b['supp_pct']}%)</td></tr>";
+            if (!empty($b['tasks_by_section']['support'])) {
+                foreach ($b['tasks_by_section']['support'] as $task) {
+                    $ave_display = $task['has_submission'] ? $task['average'] : ($task['is_na'] ? 'N/A' : '-');
+                    $cat_rows .= "<tr><td style='padding:5px 8px 5px 25px;'>" . htmlspecialchars($task['success_indicators']) . "</td>
+                        <td class='text-center'>" . $task['efficiency'] . "</td>
+                        <td class='text-center'>" . $task['timeliness'] . "</td>
+                        <td class='text-center'>" . $task['quality'] . "</td>
+                        <td class='text-center'><strong>" . $ave_display . "</strong></td></tr>";
+                }
+            } else {
+                $cat_rows .= "<tr><td colspan='6' class='text-muted text-center' style='padding:8px;'>(No verified submissions)</td></tr>";
+            }
+            if ($b['supp_active']) {
+                $cat_rows .= "<tr class='table-info'><td colspan='4' style='text-align:right;'><b>Support Function Average</b></td><td class='text-center'><b>{$b['supp_ave']['ave']}</b></td></tr>";
+            }
+        }
+
+        // ---- Overall Rating Table ----
+        $overall_rows = '';
+        $display_total_pct = 0;
+
+        if ($b['show_strategic_pct']) {
+            $display_total_pct += $b['str_pct'];
+            $overall_rows .= "<tr><td style='text-align:left;'><b>Strategic Functions</b></td>
+                <td class='text-center'>{$b['str_pct']}%</td>
+                <td class='text-center'>" . ($b['str_active'] ? $b['str_ave']['ave'] : 'N/A') . "</td>
+                <td class='text-center'>" . ($b['str_active'] ? number_format($b['str_portion'], 2) : '0.00') . "</td>
+                <td class='text-center'>" . ($b['str_active'] ? getAdjectivalRating($b['str_val']) : 'NO RATING') . "</td></tr>";
+        }
+
+        if ($b['show_instructions_pct'] || $b['show_research_pct'] || $b['show_extension_pct']) {
+            $display_total_pct += $b['core_effective_pct'];
+            $core_avg_display = min(5.00, $b['core_function']);
+            $overall_rows .= "<tr><td style='text-align:left;'><b>Core Functions</b></td>
+                <td class='text-center'>{$b['core_effective_pct']}%</td>
+                <td class='text-center'>" . ($b['core_weighted_pct'] > 0 ? number_format($core_avg_display, 2) : 'N/A') . "</td>
+                <td class='text-center'>" . ($b['core_weighted_pct'] > 0 ? number_format($b['core_weighted'], 2) : '0.00') . "</td>
+                <td class='text-center'>" . ($b['core_weighted_pct'] > 0 ? getAdjectivalRating($core_avg_display) : 'NO RATING') . "</td></tr>";
+
+            if ($b['show_instructions_pct']) {
+                $inst_display = $b['inst_active'] ? $b['instruction_rating'] : 'N/A';
+                $overall_rows .= "<tr style='font-size:0.85rem; background-color:#f8f8f8;'><td style='text-align:left;'>&nbsp;&nbsp;&nbsp;&nbsp;Instruction</td>
+                    <td class='text-center'>{$b['inst_pct']}%</td>
+                    <td class='text-center'>{$inst_display}</td><td></td>
+                    <td class='text-center'>" . ($b['inst_active'] ? getAdjectivalRating(floatval($b['instruction_rating'])) : 'NO RATING') . "</td></tr>";
+            }
+            if ($b['show_research_pct']) {
+                $overall_rows .= "<tr style='font-size:0.85rem; background-color:#f8f8f8;'><td style='text-align:left;'>&nbsp;&nbsp;&nbsp;&nbsp;Research</td>
+                    <td class='text-center'>{$b['res_pct']}%</td>
+                    <td class='text-center'>" . ($b['res_active'] ? number_format($b['res_val'], 2) : 'N/A') . "</td><td></td>
+                    <td class='text-center'>" . ($b['res_active'] ? getAdjectivalRating($b['res_val']) : 'NO RATING') . "</td></tr>";
+            }
+            if ($b['show_extension_pct']) {
+                $overall_rows .= "<tr style='font-size:0.85rem; background-color:#f8f8f8;'><td style='text-align:left;'>&nbsp;&nbsp;&nbsp;&nbsp;Extension</td>
+                    <td class='text-center'>{$b['ext_pct']}%</td>
+                    <td class='text-center'>" . ($b['ext_active'] ? number_format($b['ext_val'], 2) : 'N/A') . "</td><td></td>
+                    <td class='text-center'>" . ($b['ext_active'] ? getAdjectivalRating($b['ext_val']) : 'NO RATING') . "</td></tr>";
+            }
+        }
+
+        if ($b['show_support_pct'] && $b['supp_pct'] > 0) {
+            $display_total_pct += $b['supp_pct'];
+            $overall_rows .= "<tr><td style='text-align:left;'><b>Support Functions</b></td>
+                <td class='text-center'>{$b['supp_pct']}%</td>
+                <td class='text-center'>" . ($b['supp_active'] ? $b['supp_ave']['ave'] : 'N/A') . "</td>
+                <td class='text-center'>" . ($b['supp_active'] ? number_format($b['supp_portion'], 2) : '0.00') . "</td>
+                <td class='text-center'>" . ($b['supp_active'] ? getAdjectivalRating($b['supp_val']) : 'NO RATING') . "</td></tr>";
+        }
+
+        $overall_rows .= "<tr style='font-weight:bold;'><td style='text-align:right;'>TOTAL</td>
+            <td class='text-center'>" . number_format($display_total_pct, 0) . "%</td><td></td>
+            <td class='text-center'>" . number_format($b['total_portion'], 2) . "</td>
+            <td class='text-center'>" . getAdjectivalRating($b['total_portion']) . "</td></tr>";
+
+        // ---- Part III: Summary of Accomplishments / MOV ----
         $indicator_rows = '';
         $num = 1;
-        foreach ($tasks as $task) {
-            $status = !empty($task['date_submitted']) ? 'Submitted' : 'Not Submitted';
+        foreach ($b['all_tasks'] as $task) {
+            $status = 'Not Submitted';
             if (!empty($task['date_verified'])) $status = 'Verified';
             elseif (!empty($task['progress'])) $status = $task['progress'];
-            
+            elseif (!empty($task['date_submitted'])) $status = 'Submitted';
+
             $sub_date = !empty($task['date_submitted']) ? date('M d, Y', strtotime($task['date_submitted'])) : '—';
-            $deadline = !empty($task['deadline']) ? date('M d, Y', strtotime($task['deadline'])) : '—';
             $mov = !empty($task['file_path']) ? 'Attached' : 'None';
-            
+
             $cat_label = $cat_order[$task['category']] ?? ucfirst($task['category'] ?? '—');
             $sub_name = $subcat_names[$task['sub_category']] ?? ucfirst($task['sub_category'] ?? '—');
-            
-            $indicator_rows .= "
-                <tr>
-                    <td class='text-center'>{$num}</td>
-                    <td>" . htmlspecialchars(strip_tags($task['success_indicators'])) . "</td>
-                    <td>{$cat_label}</td>
-                    <td>{$sub_name}</td>
-                    <td class='text-center'>{$sub_date}</td>
-                    <td class='text-center'>{$deadline}</td>
-                    <td class='text-center'>{$status}</td>
-                    <td class='text-center'>{$mov}</td>
-                </tr>";
+
+            $indicator_rows .= "<tr>
+                <td class='text-center'>{$num}</td>
+                <td>" . htmlspecialchars(strip_tags($task['success_indicators'])) . "</td>
+                <td>{$cat_label}</td>
+                <td>{$sub_name}</td>
+                <td class='text-center'>{$sub_date}</td>
+                <td class='text-center'>{$status}</td>
+                <td class='text-center'>{$mov}</td>
+            </tr>";
             $num++;
         }
-        
+
+        $period_label = $rating_period_code;
         $html = "<!DOCTYPE html>
 <html>
 <head>
@@ -458,10 +415,8 @@ class IPCRGenerator {
         .rating-scale { font-size: 8px; margin-top: 8px; }
         .rating-scale td { border: 1px solid #000; padding: 2px 4px; }
         .declaration { margin: 10px 0; padding: 6px; border: 1px solid #000; font-size: 9px; }
-        @media print {
-            .no-print { display: none !important; }
-            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        }
+        .table-info { background-color: #d1ecf1; }
+        @media print { .no-print { display: none !important; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
     </style>
 </head>
 <body>
@@ -471,7 +426,7 @@ class IPCRGenerator {
     <div class='institution'>DR. EMILIO B. ESPINOSA SR. MEMORIAL STATE COLLEGE OF AGRICULTURE AND TECHNOLOGY</div>
     <div style='font-size:10px;'>DEBESMSCAT, Cabitan, Mandaon, Masbate</div>
     <h2>INDIVIDUAL PERFORMANCE COMMITMENT AND REVIEW (IPCR)</h2>
-    <h3>SPMS Form — Rating Period: {$rating_period_code}</h3>
+    <h3>SPMS Form — Rating Period: {$period_label}</h3>
 </div>
 
 <table class='info-table'>
@@ -491,44 +446,37 @@ class IPCRGenerator {
 
 <p class='section-title'>PART I: EQUIVALENT WEIGHT OF FUNCTIONS</p>
 <table class='weight-table'>
-    <thead>
-        <tr><th>Function / Category</th><th width='30%'>Weight (%)</th></tr>
-    </thead>
-    <tbody>
-        {$weight_table}
-    </tbody>
+    <thead><tr><th>Function / Category</th><th width='30%'>Weight (%)</th></tr></thead>
+    <tbody>{$weight_table}</tbody>
 </table>
 
 <div class='declaration'>
-    I, <strong>{$faculty['firstname']} {$faculty['middlename']} {$faculty['lastname']}</strong>, 
-    designated as <strong>{$faculty['position_name']}</strong>, 
-    commit to deliver and agree to be rated on the attainment of the above targets in accordance with the indicated measures 
-    for the period <strong>{$rating_period_code}</strong>.
+    I, <strong>{$faculty['firstname']} {$faculty['middlename']} {$faculty['lastname']}</strong>,
+    designated as <strong>{$faculty['position_name']}</strong>,
+    commit to deliver and agree to be rated on the attainment of the above targets in accordance with the indicated measures
+    for the period <strong>{$period_label}</strong>.
 </div>
 
 <p class='section-title'>PART II: PERFORMANCE RATINGS BY FUNCTION</p>
 <table>
     <thead>
         <tr>
-            <th width='28%'>Function / Indicator</th>
-            <th width='8%'># of Items</th>
-            <th width='10%'>Efficiency</th>
-            <th width='10%'>Timeliness</th>
-            <th width='10%'>Quality</th>
-            <th width='10%'>Average</th>
-            <th width='14%'>Adjectival Rating</th>
+            <th width='34%'>Function / Indicator</th>
+            <th width='11%'>E</th>
+            <th width='11%'>T</th>
+            <th width='11%'>Q</th>
+            <th width='11%'>AVE</th>
         </tr>
     </thead>
     <tbody>
         {$cat_rows}
         <tr style='font-weight:bold; background:#e0e0e0;'>
-            <td class='text-right'>OVERALL RATING</td>
-            <td class='text-center'>{$total_cnt}</td>
-            <td class='text-center'>" . number_format($overall_e, 2) . "</td>
-            <td class='text-center'>" . number_format($overall_t, 2) . "</td>
-            <td class='text-center'>" . number_format($overall_q, 2) . "</td>
-            <td class='text-center'><strong>" . number_format($overall_score, 2) . "</strong></td>
-            <td class='text-center'><strong>{$adjectival}</strong></td>
+            <td colspan='4' class='text-right'>OVERALL RATING</td>
+            <td class='text-center'><strong>" . number_format($b['total_portion'], 2) . "</strong></td>
+        </tr>
+        <tr style='font-weight:bold; background:#e8e8e8;'>
+            <td colspan='4' class='text-right'>Adjectival Rating</td>
+            <td class='text-center'><strong>" . getAdjectivalRating($b['total_portion']) . "</strong></td>
         </tr>
     </tbody>
 </table>
@@ -538,25 +486,20 @@ class IPCRGenerator {
     <thead>
         <tr>
             <th width='4%'>#</th>
-            <th width='28%'>Success Indicators / Tasks</th>
+            <th width='30%'>Success Indicators / Tasks</th>
             <th width='14%'>Category</th>
             <th width='16%'>Sub-Category</th>
-            <th width='12%'>Date Submitted</th>
-            <th width='12%'>Deadline</th>
-            <th width='8%'>Status</th>
+            <th width='14%'>Date Submitted</th>
+            <th width='10%'>Status</th>
             <th width='8%'>MOV</th>
         </tr>
     </thead>
-    <tbody>
-        {$indicator_rows}
-    </tbody>
+    <tbody>{$indicator_rows}</tbody>
 </table>
 
 <p class='section-title'>PART IV: ADJECTIVAL RATING SCALE</p>
 <table class='rating-scale'>
-    <thead>
-        <tr><th width='25%'>Range</th><th>Adjectival Rating</th><th width='50%'>Description</th></tr>
-    </thead>
+    <thead><tr><th width='25%'>Range</th><th>Adjectival Rating</th><th width='50%'>Description</th></tr></thead>
     <tbody>
         <tr><td class='text-center'>4.75 – 5.00</td><td class='text-center'><strong>OUTSTANDING</strong></td><td>Performance represents extraordinary achievement</td></tr>
         <tr><td class='text-center'>3.61 – 4.74</td><td class='text-center'><strong>VERY SATISFACTORY</strong></td><td>Performance exceeds expected results</td></tr>
@@ -597,61 +540,48 @@ class IPCRGenerator {
 
         return $html;
     }
-    
+
     /**
-     * Get adjectival rating
-     */
-    private function getAdjectivalRating($score) {
-        if (!is_numeric($score) || $score <= 0) return 'NO RATING';
-        $score = round($score, 2);
-        if ($score >= 4.75) return 'OUTSTANDING';
-        if ($score >= 3.61) return 'VERY SATISFACTORY';
-        if ($score >= 2.61) return 'SATISFACTORY';
-        if ($score >= 1.61) return 'UNSATISFACTORY';
-        return 'POOR';
-    }
-    
-    /**
-     * Export to Excel (HTML table format readable by Excel/LibreOffice)
+     * Export to Excel
      */
     public function exportToExcel($faculty_id, $rating_period_code) {
         $html = $this->generateIPCR($faculty_id, $rating_period_code);
         if (empty($html)) return false;
-        
+
         $faculty = $this->getFacultyData($faculty_id);
         $name = $faculty ? ($faculty['lastname'] . '_' . $faculty['firstname']) : 'faculty';
-        $filename = 'IPCR_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $name) . '_' . 
+        $filename = 'IPCR_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $name) . '_' .
                     preg_replace('/[^a-zA-Z0-9_-]/', '_', $rating_period_code) . '.xls';
-        
+
         header('Content-Type: application/vnd.ms-excel');
         header('Content-Disposition: attachment; filename="' . $filename . '"');
         header('Pragma: no-cache');
         header('Expires: 0');
-        
+
         echo "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:x='urn:schemas-microsoft-com:office:excel' xmlns='http://www.w3.org/TR/REC-html40'>";
         echo "<head><meta charset='UTF-8'></head><body>";
         echo $html;
         echo "</body></html>";
         return true;
     }
-    
+
     /**
      * Export to PDF using TCPDF
      */
     public function exportToPDF($faculty_id, $rating_period_code, $output_mode = 'D', $period_id = null) {
         $html = $this->generateIPCR($faculty_id, $rating_period_code);
-        
+
         if (!file_exists(__DIR__ . '/vendor/tecnickcom/tcpdf/tcpdf.php')) {
             return false;
         }
-        
+
         require_once __DIR__ . '/vendor/tecnickcom/tcpdf/tcpdf.php';
-        
+
         $faculty = $this->getFacultyData($faculty_id);
         $name = $faculty ? ($faculty['lastname'] . '_' . $faculty['firstname']) : 'faculty';
-        $filename = 'IPCR_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $name) . '_' . 
+        $filename = 'IPCR_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $name) . '_' .
                     preg_replace('/[^a-zA-Z0-9_-]/', '_', $rating_period_code) . '.pdf';
-        
+
         $pdf = new TCPDF('L', 'mm', 'A4', true, 'UTF-8');
         $pdf->SetCreator('EPES System');
         $pdf->SetAuthor('DEBESMSCAT');
@@ -660,7 +590,7 @@ class IPCRGenerator {
         $pdf->SetAutoPageBreak(true, 10);
         $pdf->AddPage();
         $pdf->writeHTML($html, true, false, true, false, '');
-        
+
         if ($output_mode === 'D') {
             $pdf->Output($filename, 'D');
         } elseif ($output_mode === 'F') {
@@ -668,10 +598,9 @@ class IPCRGenerator {
             if (!is_dir($dir)) mkdir($dir, 0777, true);
             $full_path = $dir . $filename;
             $pdf->Output($full_path, 'F');
-            
-            // Auto-archive to performance_documents table
+
+            // Auto-archive
             if ($period_id === null) {
-                // Look up period_id from code
                 $stmt = $this->db->prepare("SELECT id FROM rating_period WHERE CONCAT(semester, '-', year) = ? LIMIT 1");
                 $stmt->bind_param('s', $rating_period_code);
                 $stmt->execute();
@@ -685,12 +614,12 @@ class IPCRGenerator {
                 $generated_by = $_SESSION['login_id'] ?? null;
                 archive_document($this->db, 'IPCR', $faculty_id, null, $period_id, $rating_period_code, $full_path, $file_size, $generated_by);
             }
-            
+
             return $full_path;
         } elseif ($output_mode === 'I') {
             $pdf->Output($filename, 'I');
         }
-        
+
         return true;
     }
 }

@@ -1,14 +1,24 @@
 <?php 
 include 'db_connect.php'; 
-session_start();
 
+// Session is already started by db_connect.php — do NOT call session_start() again.
+// Accept an optional faculty_id (from evaluator drill-down); default to the viewer.
 $target_id = intval($_GET['target_id']);
-$faculty_id = $_SESSION['login_id'];
+$faculty_id = isset($_GET['faculty_id']) ? intval($_GET['faculty_id']) : intval($_SESSION['login_id'] ?? 0);
 
 // Get target info
 $target = $conn->query("SELECT COALESCE(major_output, success_indicators) as name, 
     category, mfo, success_indicators 
     FROM task_list WHERE id = $target_id")->fetch_assoc();
+
+// Access: use shared helper — covers login_type 1 (legacy evaluator)
+// and login_type 0 with is_evaluator flag (Dean/Dept Head/VP/Director).
+require_once __DIR__ . '/auth_helper.php';
+$can_verify = is_evaluator();
+// Delete is a faculty-only (owner) action. Owner = the viewer is the faculty
+// whose MOVs are shown AND they are not acting as an evaluator.
+$viewer_id = intval($_SESSION['login_id'] ?? 0);
+$is_owner = ($viewer_id === $faculty_id) && !$can_verify;
 
 // Get MOVs for this target from mov_uploads
 $movs = $conn->query("SELECT m.*, 
@@ -72,10 +82,26 @@ $movs = $conn->query("SELECT m.*,
                             onclick="viewMOV(<?php echo $mov['id']; ?>)" title="View">
                             <i class="fa fa-eye text-info"></i>
                         </button>
+                        <?php if ($can_verify): ?>
+                        <?php if ($status != 'Verified'): ?>
+                        <button type="button" class="btn btn-sm btn-default btn-flat border-success" 
+                            onclick="verifyMOV(<?php echo $mov['id']; ?>, 'Verified')" title="Approve">
+                            <i class="fa fa-check text-success"></i>
+                        </button>
+                        <?php endif; ?>
+                        <?php if ($status != 'Rejected'): ?>
+                        <button type="button" class="btn btn-sm btn-default btn-flat border-danger" 
+                            onclick="verifyMOV(<?php echo $mov['id']; ?>, 'Rejected')" title="Reject">
+                            <i class="fa fa-times text-danger"></i>
+                        </button>
+                        <?php endif; ?>
+                        <?php endif; ?>
+                        <?php if ($is_owner): ?>
                         <button type="button" class="btn btn-sm btn-default btn-flat border-danger" 
                             onclick="deleteMOV(<?php echo $mov['id']; ?>)" title="Delete">
                             <i class="fa fa-trash text-danger"></i>
                         </button>
+                        <?php endif; ?>
                     </td>
                 </tr>
                 <?php endwhile; ?>
@@ -104,6 +130,41 @@ $movs = $conn->query("SELECT m.*,
 <script>
 function viewMOV(id) {
     uni_modal('<i class="fa fa-eye"></i> MOV Details', 'view_mov.php?id=' + id, 'mid-large');
+}
+
+function verifyMOV(id, newStatus) {
+    var remarks = '';
+    if (newStatus === 'Rejected') {
+        remarks = prompt('Reason for rejection (required):');
+        if (remarks === null) return; // cancelled
+        if (remarks.trim() === '') {
+            alert_toast('Please enter a rejection reason.', 'warning');
+            return;
+        }
+    }
+    var confMsg = newStatus === 'Verified'
+        ? 'Approve (verify) this MOV?'
+        : 'Reject this MOV?';
+    if (!confirm(confMsg)) return;
+    start_load();
+    $.ajax({
+        url: 'ajax.php?action=verify_mov',
+        method: 'POST',
+        data: { id: id, status: newStatus, remarks: remarks },
+        success: function(resp) {
+            if (resp == 1) {
+                alert_toast(newStatus === 'Verified' ? 'MOV approved.' : 'MOV rejected.', 'success');
+                setTimeout(function(){ location.reload(); }, 800);
+            } else {
+                end_load();
+                alert_toast('Failed to update MOV.', 'danger');
+            }
+        },
+        error: function() {
+            end_load();
+            alert_toast('Error occurred.', 'danger');
+        }
+    });
 }
 
 function deleteMOV(id) {

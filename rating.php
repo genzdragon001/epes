@@ -83,6 +83,10 @@ if ($desig_id > 0) {
     if ($has_own_alloc == 0 && !$is_cos) {
         $alloc_desig_id = $FACULTY_DESIG_ID;
     }
+} elseif ($is_cos) {
+    // COS with designation_id=0: fall back to Faculty designation (3) so they
+    // still get the default COS allocation set.
+    $alloc_desig_id = $FACULTY_DESIG_ID;
 }
 
 if ($alloc_desig_id > 0) {

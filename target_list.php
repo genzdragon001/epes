@@ -37,11 +37,21 @@ while ($row = $alloc_qry->fetch_assoc()) {
     }
     $allocations[$key] = floatval($row['percentage']);
 }
+
+// Build allocation label string for info strip
+$alloc_labels = [];
+if (isset($allocations['strategic'])) $alloc_labels[] = 'Strategic ' . $allocations['strategic'] . '%';
+if (isset($allocations['core_total'])) $alloc_labels[] = 'Core ' . $allocations['core_total'] . '%';
+if (isset($allocations['core_research'])) $alloc_labels[] = 'Research ' . $allocations['core_research'] . '%';
+if (isset($allocations['core_extension'])) $alloc_labels[] = 'Extension ' . $allocations['core_extension'] . '%';
+if (isset($allocations['support'])) $alloc_labels[] = 'Support ' . $allocations['support'] . '%';
+if (empty($alloc_labels) && isset($allocations['core_instructions'])) $alloc_labels[] = 'Core ' . ($allocations['core_total'] ?? 90) . '%';
+$alloc_text = implode(' · ', $alloc_labels);
 ?>
 <div class="col-lg-12">
     <div class="card card-outline card-info">
         <div class="card-header">
-            <h5 class="card-title"><i class="fa fa-bullseye"></i> Target Management Module</h5>
+            <h5 class="card-title"><i class="fa fa-bullseye"></i> Target Management</h5>
             <?php if(!empty($real_periods)): ?>
             <div class="card-tools d-flex align-items-center" style="gap:8px;">
                 <select id="period_selector" class="form-control form-control-sm"
@@ -70,94 +80,69 @@ while ($row = $alloc_qry->fetch_assoc()) {
             <?php endif; ?>
         </div>
         <div class="card-body">
-            <?php if($login_type == 2): ?>
-            <div class="row mb-2">
-                <div class="col-md-8">
-                    <div class="input-group input-group-sm">
-                        <div class="input-group-prepend">
-                            <span class="input-group-text"><i class="fa fa-search"></i></span>
-                        </div>
-                        <input type="text" class="form-control" id="card_search" placeholder="Search targets (success indicators, measures, category...)">
-                    </div>
-                </div>
-                <div class="col-md-4 d-flex align-items-center justify-content-end">
-                    <span class="text-muted small"><span id="card_count">0</span> of <span id="card_total">0</span> targets</span>
-                </div>
-            </div>
-            <div class="row mb-3">
-                <div class="col-md-3">
-                    <label><small><b>Filter by Designation:</b></small></label>
-                    <select class="form-control form-control-sm filter-select" id="filter_designation">
-                        <option value="">All Designations</option>
-                        <option value="0">Faculty</option>
-                        <?php
-                        $designations2 = $conn->query("SELECT * FROM designation_list WHERE id > 0 ORDER BY designation ASC");
-                        while($d = $designations2->fetch_assoc()):
-                        ?>
-                        <option value="<?php echo $d['id'] ?>"><?php echo htmlspecialchars($d['designation']) ?></option>
-                        <?php endwhile; ?>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label><small><b>Filter by Academic Rank:</b></small></label>
-                    <select class="form-control form-control-sm filter-select" id="filter_rank">
-                        <option value="">All Academic Ranks</option>
-                        <?php
-                        $academic_ranks2 = $conn->query("SELECT * FROM position_list ORDER BY position ASC");
-                        while($r = $academic_ranks2->fetch_assoc()):
-                        ?>
-                        <option value="<?php echo $r['id'] ?>"><?php echo $r['position'] ?></option>
-                        <?php endwhile; ?>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label><small><b>Filter by Category:</b></small></label>
-                    <select class="form-control form-control-sm filter-select" id="filter_category">
-                        <option value="">All Categories</option>
-                        <option value="strategic">Strategic</option>
-                        <option value="core">Core</option>
-                        <option value="support">Support</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label><small><b>Filter by Status:</b></small></label>
-                    <select class="form-control form-control-sm filter-select" id="filter_status">
-                        <option value="">All Status</option>
-                        <option value="1" selected>Active</option>
-                        <option value="0">Inactive</option>
-                    </select>
-                </div>
+
+            <?php if($login_type == 0): ?>
+            <!-- Faculty info strip -->
+            <div class="info-strip mb-3">
+                <div class="info-item"><i class="fa fa-user-graduate text-info"></i> <b><?= htmlspecialchars($position_name) ?></b> (<?= $is_cos ? 'COS' : 'Permanent' ?>)</div>
+                <?php if(!empty($alloc_text)): ?>
+                <div class="info-item"><i class="fa fa-percentage text-info"></i> <?= htmlspecialchars($alloc_text) ?></div>
+                <?php else: ?>
+                <div class="info-item"><span class="badge badge-danger">No allocations set</span></div>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
 
-            <?php if($login_type == 0): ?>
-            <div class="alert alert-secondary mb-3">
-                <strong>Academic Rank:</strong> <?php echo htmlspecialchars($position_name); ?> (ID: <?php echo $emp_position_id; ?>) |
-                <?php if($is_cos): ?>
-                    <span class="badge badge-warning">COS Faculty</span>
-                <?php else: ?>
-                    <span class="badge badge-secondary">Permanent Faculty</span>
-                <?php endif; ?>
-                <?php if(!empty($allocations)): ?>
-                    | <small>Allocations: <?php 
-                        $alloc_labels = [];
-                        if (isset($allocations['strategic'])) $alloc_labels[] = 'Strategic: ' . $allocations['strategic'] . '%';
-                        if (isset($allocations['core_instructions'])) $alloc_labels[] = 'Instruction: ' . $allocations['core_instructions'] . '%';
-                        if (isset($allocations['core_research'])) $alloc_labels[] = 'Research: ' . $allocations['core_research'] . '%';
-                        if (isset($allocations['core_extension'])) $alloc_labels[] = 'Extension: ' . $allocations['core_extension'] . '%';
-                        if (isset($allocations['support'])) $alloc_labels[] = 'Support: ' . $allocations['support'] . '%';
-                        echo implode(' | ', $alloc_labels);
-                    ?></small>
-                <?php else: ?>
-                    | <span class="badge badge-danger">No allocations set</span>
-                <?php endif; ?>
+            <?php if($login_type == 2): ?>
+            <!-- Admin info strip -->
+            <div class="info-strip mb-3">
+                <div class="info-item"><i class="fa fa-bullseye text-info"></i> <b><?= $total_targets ?></b> total targets</div>
             </div>
+            <?php endif; ?>
+
+            <?php if($login_type == 2): ?>
+            <!-- Admin filter bar -->
+            <div class="filter-bar mb-3">
+                <div class="search-box">
+                    <i class="fa fa-search"></i>
+                    <input type="text" class="form-control" id="card_search" placeholder="Search targets (success indicators, measures, category...)">
+                </div>
+                <select class="form-control form-control-sm filter-select" id="filter_designation">
+                    <option value="">All Designations</option>
+                    <option value="0">Faculty</option>
+                    <?php
+                    $designations2 = $conn->query("SELECT * FROM designation_list WHERE id > 0 ORDER BY designation ASC");
+                    while($d = $designations2->fetch_assoc()):
+                    ?>
+                    <option value="<?php echo $d['id'] ?>"><?php echo htmlspecialchars($d['designation']) ?></option>
+                    <?php endwhile; ?>
+                </select>
+                <select class="form-control form-control-sm filter-select" id="filter_rank">
+                    <option value="">All Ranks</option>
+                    <?php
+                    $academic_ranks2 = $conn->query("SELECT * FROM position_list ORDER BY position ASC");
+                    while($r = $academic_ranks2->fetch_assoc()):
+                    ?>
+                    <option value="<?php echo $r['id'] ?>"><?php echo $r['position'] ?></option>
+                    <?php endwhile; ?>
+                </select>
+                <select class="form-control form-control-sm filter-select" id="filter_category">
+                    <option value="">All Categories</option>
+                    <option value="strategic">Strategic</option>
+                    <option value="core">Core</option>
+                    <option value="support">Support</option>
+                </select>
+                <select class="form-control form-control-sm filter-select" id="filter_status">
+                    <option value="">All Status</option>
+                    <option value="1" selected>Active</option>
+                    <option value="0">Inactive</option>
+                </select>
+                <span class="text-muted small" style="white-space:nowrap;"><span id="card_count">0</span> of <span id="card_total">0</span> targets</span>
             </div>
             <?php endif; ?>
 
             <?php
-            // Shared data fetch for both faculty (table) and admin (cards)
-            $i = 1;
+            // Shared data fetch
             $where = "t.is_active = 1";
             if ($login_type == 0) {
                 $where .= " AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $emp_position_id)";
@@ -177,185 +162,207 @@ while ($row = $alloc_qry->fetch_assoc()) {
             $matched_count = count($tasks);
             ?>
 
-            <?php if($login_type == 0): ?>
-            <div class="row" id="list">
-                <?php foreach($tasks as $row):
-                    $exempt_qry = $conn->query("SELECT COUNT(*) as cnt FROM target_exemptions WHERE task_id = {$row['id']} AND position_id = $emp_position_id");
-                    $is_exempted = $exempt_qry->fetch_assoc()['cnt'] > 0;
-                    if ($is_exempted) continue;
+            <!-- Compact data table -->
+            <div class="table-card">
+                <div style="overflow-x:auto;">
+                <table class="table" id="list">
+                    <thead>
+                        <tr>
+                            <th style="width:30px;">#</th>
+                            <th>Success Indicators / Target</th>
+                            <th style="width:25%;">Actual Accomplishment</th>
+                            <th style="width:70px;">Rating</th>
+                            <?php if($login_type == 0): ?>
+                            <th style="width:110px;">Status</th>
+                            <?php endif; ?>
+                            <?php if($login_type == 2): ?>
+                            <th style="width:90px;">Designation</th>
+                            <th style="width:90px;">Rank</th>
+                            <th style="width:70px;">Exempt</th>
+                            <?php endif; ?>
+                            <th style="width:140px;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php
+                    $i = 1;
+                    $current_cat = '';
+                    $cat_labels = ['strategic' => 'Strategic Function', 'core' => 'Core Function', 'support' => 'Support Function'];
+                    $cat_pct_map = [
+                        'strategic' => ($allocations['strategic'] ?? 0),
+                        'core' => ($allocations['core_total'] ?? 0),
+                        'support' => ($allocations['support'] ?? 0),
+                    ];
 
-                    $progress_qry = $conn->query("SELECT * FROM task_progress
-                        WHERE faculty_id = $faculty_id AND task_id = {$row['id']} $period_filter
-                        ORDER BY unix_timestamp(date_created) DESC LIMIT 1");
-                    $hasSubmission = $progress_qry->num_rows > 0;
-                    $isVerified = false; $isNA = false; $filePath = ''; $fileType = '';
-                    if ($hasSubmission) {
-                    $progress_row = $progress_qry->fetch_assoc();
-                    $isVerified = (isset($progress_row['progress']) && $progress_row['progress'] === 'Verified');
-                    $isNA = (isset($progress_row['progress']) && $progress_row['progress'] === 'N/A');
-                    $filePath = epes_real_file_path($progress_row['file_path'], $progress_row['file_type']) ?: '';
-                    $fileType = $progress_row['file_type'];
-                    }
-                    $cat = $row['category'];
-                    $cat_class = $cat == 'strategic' ? 'badge-primary' : ($cat == 'core' ? 'badge-success' : 'badge-warning');
-                    $sub_cat = $row['sub_category'] ?? '';
-                    $rating = [];
-                    if ($row['quality'] == 'Applicable') $rating[] = 'Q';
-                    if ($row['timeliness'] == 'Applicable') $rating[] = 'T';
-                    if ($row['efficiency'] == 'Applicable') $rating[] = 'E';
-                ?>
-                <div class="col-12 mb-3 fc-card-wrap">
-                    <div class="card h-100 shadow-sm">
-                        <div class="card-body fc-body">
-                            <div class="fc-main">
-                                <div class="d-flex justify-content-between align-items-start mb-1">
-                                    <h6 class="font-weight-bold mb-0 fc-title">
-                                        <i class="fa fa-bullseye text-info mr-1"></i>
-                                        <?php echo nl2br(htmlspecialchars($row['success_indicators'])) ?>
-                                    </h6>
-                                    <span class="badge badge-pill <?php echo $row['is_active'] == 1 ? 'badge-success' : 'badge-danger' ?> ml-2 flex-shrink-0"><?php echo $row['is_active'] == 1 ? 'Active' : 'Inactive' ?></span>
+                    foreach($tasks as $row):
+                        if ($login_type == 0) {
+                            $exempt_qry = $conn->query("SELECT COUNT(*) as cnt FROM target_exemptions WHERE task_id = {$row['id']} AND position_id = $emp_position_id");
+                            $is_exempted = $exempt_qry->fetch_assoc()['cnt'] > 0;
+                            if ($is_exempted) continue;
+                        }
+
+                        $cat = $row['category'];
+                        $sub_cat = $row['sub_category'] ?? '';
+
+                        // Insert group separator when category changes
+                        if ($cat !== $current_cat) {
+                            $current_cat = $cat;
+                            $pct_label = $cat_pct_map[$cat] > 0 ? " ({$cat_pct_map[$cat]}%)" : '';
+                            $colspan = $login_type == 0 ? 6 : 8;
+                    ?>
+                    <tr class="row-group" data-cat="<?= $cat ?>">
+                        <td colspan="<?= $colspan ?>"><span class="cat-dot <?= $cat ?>"></span> <?= $cat_labels[$cat] ?? ucfirst($cat) ?><?= $pct_label ?></td>
+                    </tr>
+                    <?php
+                        }
+
+                        $rating_dims = '';
+                        $rating_dims .= '<span class="' . ($row['quality'] == 'Applicable' ? 'active' : '') . '">Q</span> · ';
+                        $rating_dims .= '<span class="' . ($row['timeliness'] == 'Applicable' ? 'active' : '') . '">T</span> · ';
+                        $rating_dims .= '<span class="' . ($row['efficiency'] == 'Applicable' ? 'active' : '') . '">E</span>';
+
+                        if ($login_type == 0) {
+                            // Faculty: check submission status
+                            $progress_qry = $conn->query("SELECT * FROM task_progress
+                                WHERE faculty_id = $faculty_id AND task_id = {$row['id']} $period_filter
+                                ORDER BY unix_timestamp(date_created) DESC LIMIT 1");
+                            $hasSubmission = $progress_qry->num_rows > 0;
+                            $isVerified = false; $isNA = false; $filePath = ''; $fileType = ''; $accomplishment = '';
+                            if ($hasSubmission) {
+                                $progress_row = $progress_qry->fetch_assoc();
+                                $isVerified = (isset($progress_row['progress']) && $progress_row['progress'] === 'Verified');
+                                $isNA = (isset($progress_row['progress']) && $progress_row['progress'] === 'N/A');
+                                $filePath = epes_real_file_path($progress_row['file_path'], $progress_row['file_type']) ?: '';
+                                $fileType = $progress_row['file_type'];
+                                $accomplishment = $progress_row['actual_accomplishment'] ?? '';
+                            }
+                        }
+
+                        // Build admin metadata
+                        if ($login_type == 2) {
+                            $desig_labels = [];
+                            $jn_q = $conn->query("SELECT DISTINCT d.designation FROM task_designations td JOIN designation_list d ON d.id = td.designation_id WHERE td.task_id = " . intval($row['id']));
+                            if ($jn_q) {
+                                while ($jn = $jn_q->fetch_assoc()) $desig_labels[trim($jn['designation'])] = true;
+                            }
+                            if (empty($desig_labels) && !empty($row['designation_id'])) {
+                                $ld = $conn->query("SELECT designation FROM designation_list WHERE id = " . intval($row['designation_id']));
+                                if ($ld && $lr = $ld->fetch_assoc()) $desig_labels[trim($lr['designation'])] = true;
+                            }
+                            $desig_text = !empty($desig_labels) ? htmlspecialchars(implode(', ', array_keys($desig_labels))) : '<span class="text-muted">All</span>';
+                            $rank_text = htmlspecialchars($row['rank_name']) ?: '<span class="text-muted">All</span>';
+                            $ex_q = $conn->query("SELECT COUNT(*) as cnt FROM target_exemptions WHERE task_id = {$row['id']}");
+                            $ex_n = $ex_q ? $ex_q->fetch_assoc()['cnt'] : 0;
+                        }
+                    ?>
+                    <tr class="target-row"
+                        data-designation="<?php echo $row['designation_id'] ?>"
+                        data-rank="<?php echo $row['academic_rank_id'] ?>"
+                        data-category="<?php echo $row['category'] ?>"
+                        data-subcategory="<?php echo $row['sub_category'] ?? '' ?>"
+                        data-status="<?php echo $row['is_active'] ?>"
+                        data-search="<?php echo htmlspecialchars(strtolower(($row['success_indicators'] ?? '') . ' ' . ($row['targets_measures'] ?? '') . ' ' . ($row['category'] ?? '') . ' ' . ($row['sub_category'] ?? '') . ' ' . ($row['junction_designations'] ?? '') . ' ' . ($row['rank_name'] ?? ''))) ?>">
+                        <td class="text-center font-weight-bold"><?= $i++ ?></td>
+                        <td>
+                            <b><?= htmlspecialchars($row['success_indicators']) ?></b>
+                            <br><small class="text-muted"><?= htmlspecialchars($row['targets_measures']) ?></small>
+                        </td>
+                        <?php if($login_type == 0): ?>
+                        <td>
+                            <?php if($isVerified): ?>
+                                <div style="font-size:0.8rem; color:#555;"><?= !empty($accomplishment) ? nl2br(htmlspecialchars($accomplishment)) : '<span class="text-muted">—</span>' ?></div>
+                            <?php elseif($hasSubmission && !$isNA): ?>
+                                <textarea class="form-control form-control-sm accomplishment-edit" rows="3" data-task-id="<?= $row['id'] ?>" placeholder="Describe accomplishment..."><?= htmlspecialchars($accomplishment) ?></textarea>
+                                <button class="btn btn-sm btn-outline-success btn-block mt-1 save-accomplishment" data-task-id="<?= $row['id'] ?>"><i class="fa fa-save mr-1"></i> Save</button>
+                            <?php else: ?>
+                                <span class="text-muted" style="font-size:0.8rem;">—</span>
+                            <?php endif; ?>
+                        </td>
+                        <?php endif; ?>
+                        <?php if($login_type == 2): ?>
+                        <td>
+                            <?php
+                            $admin_prog = $conn->query("SELECT actual_accomplishment, progress FROM task_progress WHERE task_id = {$row['id']} $period_filter ORDER BY unix_timestamp(date_created) DESC LIMIT 1");
+                            $admin_acc = '';
+                            if ($admin_prog && $admin_prog->num_rows > 0) {
+                                $ap = $admin_prog->fetch_assoc();
+                                $admin_acc = $ap['actual_accomplishment'] ?? '';
+                            }
+                            ?>
+                            <?= !empty($admin_acc) ? '<div style="font-size:0.8rem;color:#555;">' . nl2br(htmlspecialchars($admin_acc)) . '</div>' : '<span class="text-muted" style="font-size:0.8rem;">—</span>' ?>
+                        </td>
+                        <?php endif; ?>
+                        <td><span class="rating-dims"><?= $rating_dims ?></span></td>
+                        <?php if($login_type == 0): ?>
+                        <td>
+                            <?php if($isNA): ?>
+                            <span class="st-pill st-na"><i class="fa fa-minus-circle"></i> N/A</span>
+                            <?php elseif($isVerified): ?>
+                            <span class="st-pill st-verified"><i class="fa fa-check-double"></i> Verified</span>
+                            <?php elseif($hasSubmission): ?>
+                            <span class="st-pill st-submitted"><i class="fa fa-check"></i> Submitted</span>
+                            <?php else: ?>
+                            <span class="st-pill st-pending"><i class="fa fa-clock"></i> Pending</span>
+                            <?php endif; ?>
+                        </td>
+                        <?php endif; ?>
+                        <?php if($login_type == 2): ?>
+                        <td><?= $desig_text ?></td>
+                        <td><?= $rank_text ?></td>
+                        <td><?= $ex_n > 0 ? '<span class="badge badge-warning">' . $ex_n . '</span>' : '<span class="badge badge-secondary">—</span>' ?></td>
+                        <?php endif; ?>
+                        <td>
+                            <div class="action-btns">
+                            <?php if($login_type == 0): ?>
+                                <?php if($isNA): ?>
+                                <button class="btn btn-sm btn-outline-danger" onclick="delete_file(<?= $row['id'] ?>, <?= $faculty_id ?>)" title="Remove N/A"><i class="fa fa-trash"></i></button>
+                                <?php elseif($hasSubmission && !$isVerified): ?>
+                                <button type="button" class="btn btn-sm btn-outline-primary view-submit-file" data-file="<?= htmlspecialchars($filePath) ?>" data-filetype="<?= htmlspecialchars($fileType) ?>" title="View"><i class="fa fa-eye"></i></button>
+                                <div class="dropdown d-inline-block">
+                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="fcAction<?php echo $row['id']; ?>" data-toggle="dropdown" title="Options"><i class="fa fa-cog"></i></button>
+                                    <div class="dropdown-menu dropdown-menu-right" aria-labelledby="fcAction<?php echo $row['id']; ?>">
+                                        <form action="reupload_file.php" method="POST" enctype="multipart/form-data" class="px-3 py-2">
+                                            <label class="small text-muted">Re-upload:</label>
+                                            <input type="hidden" name="task_id" value="<?php echo $row['id']; ?>">
+                                            <input type="file" name="document" class="form-control form-control-sm mb-2" required>
+                                            <button type="submit" class="btn btn-sm btn-primary btn-block">Update</button>
+                                        </form>
+                                        <button class="dropdown-item text-danger" onclick="delete_file(<?= $row['id'] ?>, <?= $faculty_id ?>)"><i class="fa fa-trash mr-2"></i>Delete File</button>
+                                    </div>
                                 </div>
-                                <div class="text-muted mb-2 fc-measures" style="font-size:.85rem;">
-                                    <?php echo htmlspecialchars($row['targets_measures']) ?>
-                                </div>
-                                <div class="fc-badges">
-                                    <span class="badge <?php echo $cat_class ?>"><?php echo ucfirst($cat) ?></span>
-                                    <?php if(!empty($sub_cat)): ?><span class="badge badge-info"><?php echo ucfirst($sub_cat) ?></span><?php else: ?><span class="badge badge-secondary">Main</span><?php endif; ?>
-                                    <?php if(!empty($rating)): ?><span class="badge badge-light border" title="Applicable rating dimensions"><i class="fa fa-star text-warning mr-1"></i><?php echo implode(' &middot; ', $rating) ?></span><?php else: ?><span class="badge badge-secondary">No Rating</span><?php endif; ?>
-                                </div>
-                            </div>
-                            <div class="fc-submit">
-                                <?php if($hasSubmission): ?>
-                                    <?php if($isNA): ?>
-                                        <span class="badge badge-secondary mb-1 d-block"><i class="fa fa-minus-circle mr-1"></i> N/A</span>
-                                        <button class="btn btn-outline-danger btn-sm" onclick="delete_file(<?= $row['id'] ?>, <?= $faculty_id ?>)"><i class="fa fa-trash mr-1"></i> Remove N/A</button>
-                                    <?php else: ?>
-                                        <span class="badge badge-<?= $isVerified ? 'info' : 'success' ?> mb-1 d-block"><i class="fa fa-<?= $isVerified ? 'check-double' : 'check' ?> mr-1"></i><?= $isVerified ? 'Verified' : 'Submitted' ?></span>
-                                        <button type="button" class="btn btn-outline-primary btn-sm view-submit-file" data-file="<?= htmlspecialchars($filePath) ?>" data-filetype="<?= htmlspecialchars($fileType) ?>"><i class="fa fa-eye mr-1"></i> View</button>
-                                        <?php if(!$isVerified): ?>
-                                        <div class="dropdown d-inline-block mt-1">
-                                            <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" id="fcAction<?php echo $row['id']; ?>" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><i class="fa fa-cog"></i></button>
-                                            <div class="dropdown-menu dropdown-menu-right" aria-labelledby="fcAction<?php echo $row['id']; ?>">
-                                                <form action="reupload_file.php" method="POST" enctype="multipart/form-data" class="px-3 py-2">
-                                                    <label class="small text-muted">Re-upload:</label>
-                                                    <input type="hidden" name="task_id" value="<?php echo $row['id']; ?>">
-                                                    <input type="file" name="document" class="form-control form-control-sm mb-2" required>
-                                                    <button type="submit" class="btn btn-sm btn-primary btn-block">Update</button>
-                                                </form>
-                                                <button class="dropdown-item text-danger" onclick="delete_file(<?= $row['id'] ?>, <?= $faculty_id ?>)"><i class="fa fa-trash mr-2"></i>Delete File</button>
-                                            </div>
-                                        </div>
-                                        <?php endif; ?>
-                                    <?php endif; ?>
+                                <?php elseif($hasSubmission && $isVerified): ?>
+                                <button type="button" class="btn btn-sm btn-outline-primary view-submit-file" data-file="<?= htmlspecialchars($filePath) ?>" data-filetype="<?= htmlspecialchars($fileType) ?>" title="View"><i class="fa fa-eye"></i></button>
                                 <?php else: ?>
-                                    <span class="badge badge-secondary mb-1 d-block"><i class="fa fa-clock mr-1"></i> Not Submitted</span>
-                                    <button class="btn btn-primary btn-sm submit-btn mb-1" data-task-id="<?php echo $row['id']; ?>"><i class="fa fa-upload mr-1"></i> Submit</button>
-                                    <button class="btn btn-outline-secondary btn-sm na-btn" data-task-id="<?php echo $row['id']; ?>">N/A</button>
+                                <button class="btn btn-sm btn-primary submit-btn" data-task-id="<?php echo $row['id']; ?>" title="Submit"><i class="fa fa-upload"></i></button>
+                                <button class="btn btn-sm btn-outline-secondary na-btn" data-task-id="<?php echo $row['id']; ?>" title="N/A">N/A</button>
                                 <?php endif; ?>
+                            <?php endif; ?>
+                            <?php if($login_type == 2): ?>
+                            <button type="button" class="btn btn-sm btn-info view_task" data-id="<?php echo $row['id'] ?>" title="View"><i class="fa fa-eye"></i></button>
+                            <button type="button" class="btn btn-sm btn-warning manage_exemption" data-id="<?php echo $row['id'] ?>" title="Exemptions"><i class="fa fa-ban"></i></button>
+                            <button type="button" class="btn btn-sm btn-primary manage_task" data-id="<?php echo $row['id'] ?>" title="Edit"><i class="fa fa-edit"></i></button>
+                            <button type="button" class="btn btn-sm btn-danger delete_task" data-id="<?php echo $row['id'] ?>" title="Delete"><i class="fa fa-trash"></i></button>
+                            <?php endif; ?>
                             </div>
-                        </div>
-                    </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
                 </div>
-                <?php endforeach; ?>
             </div>
-            <?php endif; // faculty card layout (login_type == 0) ?>
 
-            <?php if($login_type == 2): // admin card layout (Option A+B) ?>
-            <div class="row" id="list">
-                <?php foreach($tasks as $row): ?>
-                <div class="col-12 mb-3 target-card-wrap"
-                     data-designation="<?php echo $row['designation_id'] ?>"
-                     data-rank="<?php echo $row['academic_rank_id'] ?>"
-                     data-category="<?php echo $row['category'] ?>"
-                     data-subcategory="<?php echo $row['sub_category'] ?? '' ?>"
-                     data-status="<?php echo $row['is_active'] ?>"
-                     data-search="<?php echo htmlspecialchars(strtolower(($row['success_indicators'] ?? '') . ' ' . ($row['targets_measures'] ?? '') . ' ' . ($row['category'] ?? '') . ' ' . ($row['sub_category'] ?? '') . ' ' . ($row['junction_designations'] ?? '') . ' ' . ($row['rank_name'] ?? ''))) ?>">
-                    <div class="card h-100 shadow-sm">
-                        <div class="card-body">
-                            <div class="tc-main">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <h6 class="font-weight-bold mb-0">
-                                        <i class="fa fa-bullseye text-info mr-1"></i>
-                                        <?php echo nl2br(htmlspecialchars($row['success_indicators'])) ?>
-                                    </h6>
-                                    <span class="badge badge-pill <?php echo $row['is_active'] == 1 ? 'badge-success' : 'badge-danger' ?> ml-2">
-                                        <?php echo $row['is_active'] == 1 ? 'Active' : 'Inactive' ?>
-                                    </span>
-                                </div>
-                                <div class="text-muted mb-2" style="font-size:.85rem">
-                                    <?php echo htmlspecialchars($row['targets_measures']) ?>
-                                </div>
-                                <div class="d-flex justify-content-start">
-                                    <button type="button" class="btn btn-sm btn-info view_task mr-1" data-id="<?php echo $row['id'] ?>"><i class="fa fa-eye"></i></button>
-                                    <button type="button" class="btn btn-sm btn-warning manage_exemption mr-1" data-id="<?php echo $row['id'] ?>" title="Manage Exemptions"><i class="fa fa-ban"></i></button>
-                                    <button type="button" class="btn btn-sm btn-primary manage_task mr-1" data-id="<?php echo $row['id'] ?>"><i class="fa fa-edit"></i></button>
-                                    <button type="button" class="btn btn-sm btn-danger delete_task" data-id="<?php echo $row['id'] ?>"><i class="fa fa-trash"></i></button>
-                                </div>
-                            </div>
-                            <div class="tc-meta">
-                                <div class="tc-grid">
-                                    <div><span class="k">Category</span>
-                                        <span class="badge <?php echo $row['category'] == 'strategic' ? 'badge-primary' : ($row['category'] == 'core' ? 'badge-success' : 'badge-warning') ?>">
-                                            <?php echo ucfirst($row['category']) ?>
-                                        </span>
-                                    </div>
-                                    <div><span class="k">Sub-Category</span>
-                                        <?php if(!empty($row['sub_category'])): ?>
-                                            <span class="badge badge-info"><?php echo ucfirst($row['sub_category']) ?></span>
-                                        <?php else: ?><span class="text-muted">Main</span><?php endif; ?>
-                                    </div>
-                                    <div><span class="k">Designation</span>
-                                        <?php
-                                        $desig_labels = [];
-                                        $jn_q = $conn->query("SELECT DISTINCT d.designation FROM task_designations td JOIN designation_list d ON d.id = td.designation_id WHERE td.task_id = " . intval($row['id']));
-                                        if ($jn_q) {
-                                            while ($jn = $jn_q->fetch_assoc()) $desig_labels[trim($jn['designation'])] = true;
-                                        }
-                                        if (empty($desig_labels) && !empty($row['designation_id'])) {
-                                            $ld = $conn->query("SELECT designation FROM designation_list WHERE id = " . intval($row['designation_id']));
-                                            if ($ld && $lr = $ld->fetch_assoc()) $desig_labels[trim($lr['designation'])] = true;
-                                        }
-                                        echo !empty($desig_labels) ? htmlspecialchars(implode(', ', array_keys($desig_labels))) : '<span class="text-muted">All</span>';
-                                        ?>
-                                    </div>
-                                    <div><span class="k">Academic Rank</span>
-                                        <?php echo htmlspecialchars($row['rank_name']) ?: '<span class="text-muted">All</span>' ?>
-                                    </div>
-                                    <div><span class="k">Exemption</span>
-                                        <?php
-                                        $ex_q = $conn->query("SELECT COUNT(*) as cnt FROM target_exemptions WHERE task_id = {$row['id']}");
-                                        $ex_n = $ex_q ? $ex_q->fetch_assoc()['cnt'] : 0;
-                                        echo $ex_n > 0 ? '<span class="badge badge-warning">' . $ex_n . ' Exempted</span>' : '<span class="badge badge-secondary">None</span>';
-                                        ?>
-                                    </div>
-                                    <div><span class="k">Rating</span>
-                                        <span class="d-inline-block mr-2"><i class="fa fa-check text-success"></i> Q</span>
-                                        <?php if($row['timeliness'] == 'Applicable'): ?><span class="d-inline-block mr-2"><i class="fa fa-check text-success"></i> T</span><?php endif; ?>
-                                        <?php if($row['efficiency'] == 'Applicable'): ?><span class="d-inline-block"><i class="fa fa-check text-success"></i> E</span><?php endif; ?>
-                                    </div>
-                                    <div><span class="k">Date Created</span>
-                                        <?php echo date("M d, Y", strtotime($row['date_created'])) ?>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <?php endforeach; ?>
-            </div>
-            <?php endif; // admin card layout ?>
         </div>
     </div>
 </div>
 
+<!-- View File Modal -->
 <div class="modal fade" id="submitFileModal" tabindex="-1" role="dialog">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
                 <h5 class="modal-title"><i class="fa fa-file mr-2"></i>View File</h5>
-                <button type="button" class="close text-white" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
             </div>
             <div class="modal-body text-center" id="submitFileContent"></div>
             <div class="modal-footer">
@@ -366,19 +373,22 @@ while ($row = $alloc_qry->fetch_assoc()) {
     </div>
 </div>
 
+<!-- Upload Submit Modal -->
 <div class="modal fade" id="uploadSubmitModal" tabindex="-1" role="dialog">
     <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title"><i class="fa fa-upload mr-2"></i>Submit File</h5>
-                <button type="button" class="close text-white" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
             </div>
             <form id="uploadSubmitForm" enctype="multipart/form-data">
                 <input type="hidden" name="task_id" id="submitTaskId">
                 <input type="hidden" name="rating_period" id="submitRatingPeriod" value="">
                 <div class="modal-body">
+                    <div class="form-group">
+                        <label for="submitAccomplishment"><b>Actual Accomplishment</b></label>
+                        <textarea name="actual_accomplishment" id="submitAccomplishment" class="form-control" rows="4" placeholder="Describe what was actually accomplished for this target..." required></textarea>
+                    </div>
                     <div class="form-group">
                         <label for="submitDocument">Select file to upload:</label>
                         <input type="file" name="document" id="submitDocument" class="form-control" required accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif,.xls,.xlsx,.ppt,.pptx">
@@ -399,6 +409,7 @@ while ($row = $alloc_qry->fetch_assoc()) {
 </div>
 
 <?php if($login_type == 2): ?>
+<!-- Bulk Upload Modal -->
 <div class="modal fade" id="bulkUploadModal" tabindex="-1" role="dialog">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
         <div class="modal-content">
@@ -429,52 +440,107 @@ while ($row = $alloc_qry->fetch_assoc()) {
         </div>
     </div>
 </div>
+
+<!-- Exemption Modal -->
+<div class="modal fade" id="exemptionModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-white">
+                <h5 class="modal-title"><i class="fa fa-ban mr-2"></i>Manage Exemptions</h5>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="exempt_task_id">
+                <p><b>Target:</b> <span id="exempt_task_name"></span></p>
+                <hr>
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="form-group">
+                            <label><b>Academic Rank to Exempt:</b></label>
+                            <select id="exempt_position" class="form-control">
+                                <option value="">-- Select Academic Rank --</option>
+                                <?php 
+                                $pos_qry = $conn->query("SELECT * FROM position_list ORDER BY id ASC");
+                                while($p = $pos_qry->fetch_assoc()): ?>
+                                <option value="<?php echo $p['id'] ?>"><?php echo htmlspecialchars($p['position']) ?></option>
+                                <?php endwhile; ?>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group">
+                            <label>&nbsp;</label>
+                            <button type="button" class="btn btn-primary btn-block" id="add_exemption"><i class="fa fa-plus"></i> Add</button>
+                        </div>
+                    </div>
+                </div>
+                <hr>
+                <h6>Current Exemptions:</h6>
+                <div id="exemption_list" class="mt-2"><p class="text-muted">Loading...</p></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 <?php endif; ?>
 
 <style>
 table p { margin: unset !important; }
-table td { vertical-align: middle !important; }
-.table-hover tbody tr:hover { background-color: rgba(0,123,255,.05); }
-.dropdown-item.text-danger:hover { background-color: #f8d7da; color: #721c24; }
-/* Admin card layout (Option A+B) — wide landscape / crosswise rectangles */
-.tc-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:.5rem .75rem; font-size:.82rem; }
-.tc-grid .k { color:#868e96; display:block; font-size:.72rem; text-transform:uppercase; letter-spacing:.03em; margin-bottom:.1rem; }
-.target-card-wrap { width:100% !important; max-width:100%; flex:0 0 100%; }
-.target-card-wrap .card { transition: box-shadow .15s; height:auto; border-radius:.5rem; }
-.target-card-wrap .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.12) !important; }
-/* crosswise: card body lays out horizontally (content left, actions right) */
-.target-card-wrap .card-body { display:flex; flex-wrap:wrap; align-items:flex-start; gap:1rem; }
-.target-card-wrap .tc-main { flex:1 1 320px; min-width:260px; }
-.target-card-wrap .tc-meta { flex:2 1 420px; min-width:260px; }
-.target-card-wrap .card-footer { border-top:0; padding-top:0; }
+.table td { vertical-align: middle !important; }
 
-/* Faculty card layout — crosswise rectangles, no horizontal scroll */
-.fc-card-wrap { width:100% !important; max-width:100%; flex:0 0 100%; }
-.fc-card-wrap .card { border-radius:.5rem; transition: box-shadow .15s; }
-.fc-card-wrap .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,.12) !important; }
-.fc-body { display:flex; flex-wrap:wrap; align-items:center; gap:.75rem 1rem; }
-.fc-main { flex:1 1 280px; min-width:0; }
-.fc-title { line-height:1.2; }
-.fc-measures { overflow-wrap:anywhere; word-break:break-word; }
-.fc-badges .badge { margin-right:.25rem; }
-.fc-submit { flex:0 0 auto; min-width:0; display:flex; flex-direction:column; align-items:center; }
+/* Info strip */
+.info-strip { display: flex; gap: 16px; padding: 10px 16px; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.05); font-size: 0.82rem; flex-wrap: wrap; }
+.info-strip .info-item { display: flex; align-items: center; gap: 6px; }
+
+/* Filter bar */
+.filter-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.filter-bar .search-box { flex: 1; min-width: 200px; position: relative; }
+.filter-bar .search-box input { padding-left: 34px; border-radius: 6px; border: 1px solid #ddd; height: 36px; }
+.filter-bar .search-box i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #aaa; }
+.filter-bar select { border-radius: 6px; height: 36px; font-size: 0.85rem; max-width: 160px; }
+
+/* Table card */
+.table-card { background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.06); overflow: hidden; }
+.table-card .table { margin: 0; }
+.table-card thead th { background: #f8f9fa; border-bottom: 2px solid #e9ecef; font-size: 0.75rem; text-transform: uppercase; letter-spacing: .03em; color: #6c757d; padding: 10px 12px; white-space: nowrap; }
+.table-card tbody td { padding: 10px 12px; border-top: 1px solid #f0f0f0; font-size: 0.85rem; vertical-align: middle; }
+.table-card tbody tr:hover { background: #f8f9fa; }
+
+/* Category color dot */
+.cat-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.cat-dot.strategic { background: #6f42c1; }
+.cat-dot.core { background: #28a745; }
+.cat-dot.support { background: #ffc107; }
+.cat-label { font-weight: 600; font-size: 0.8rem; }
+
+/* Status pills */
+.st-pill { font-size: 0.72rem; font-weight: 600; padding: 3px 8px; border-radius: 12px; white-space: nowrap; display: inline-block; }
+.st-verified { background: #d4edda; color: #155724; }
+.st-submitted { background: #cce5ff; color: #004085; }
+.st-na { background: #e2e3e5; color: #6c757d; }
+.st-pending { background: #fff3cd; color: #856404; }
+
+/* Rating dims */
+.rating-dims { font-size: 0.75rem; color: #ccc; white-space: nowrap; }
+.rating-dims .active { color: #28a745; font-weight: 600; }
+
+/* Action buttons */
+.action-btns { display: flex; gap: 4px; }
+.action-btns .btn { font-size: 0.75rem; padding: 4px 8px; line-height: 1.3; }
+
+/* Sub-category badge */
+.subcat-badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: #e8f4f8; color: #17a2b8; font-weight: 500; white-space: nowrap; }
+
+/* Row group separator */
+.row-group td { background: #f0f4f8 !important; font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: .03em; color: #495057; padding: 6px 12px; }
+.dropdown-item.text-danger:hover { background-color: #f8d7da; color: #721c24; }
 </style>
 
 <script>
 $(document).ready(function(){
     var isAdmin = <?php echo $login_type == 2 ? 'true' : 'false'; ?>;
-
-    // Faculty: keep DataTables. Admin: card layout, filter via show/hide.
-    var table = null;
-    if (!isAdmin && $('#list').is('table')) {
-        table = $('#list').DataTable({
-            "dom": 'Bfrtip',
-            "buttons": ['copy', 'csv', 'excel', 'pdf', 'print'],
-            "ordering": true,
-            "order": [[0, 'asc']],
-            "pageLength": 25
-        });
-    }
 
     // Admin: combined filter (dropdowns + text search)
     function applyAdminFilters(){
@@ -486,7 +552,7 @@ $(document).ready(function(){
         var visible = 0;
         var total = 0;
 
-        $('#list .target-card-wrap').each(function(){
+        $('#list .target-row').each(function(){
             total++;
             var $c = $(this);
             var rd = $c.data('designation');
@@ -509,58 +575,31 @@ $(document).ready(function(){
             if (show) visible++;
         });
 
+        // Show/hide group separators based on visible rows below them
+        $('#list .row-group').each(function(){
+            var $g = $(this);
+            $g.show();
+            var cat = $g.data('cat');
+            var hasVisible = false;
+            $g.nextAll('.target-row').each(function(){
+                if ($(this).data('category') !== cat) return false;
+                if ($(this).is(':visible')) { hasVisible = true; return false; }
+            });
+            if (!hasVisible) $g.hide();
+        });
+
         $('#card_count').text(visible);
         $('#card_total').text(total);
     }
 
-    $('.filter-select').change(function(){
-        if (!isAdmin && table) {
-            var designation = $('#filter_designation').val();
-            var rank = $('#filter_rank').val();
-            var category = $('#filter_category').val();
-            var status = $('#filter_status').val();
+    $('.filter-select').change(function(){ if (isAdmin) applyAdminFilters(); });
 
-            // Faculty table path (DataTables search plugin)
-            $.fn.dataTable.ext.search.pop();
-            $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-                var row = $('#list tbody tr:eq(' + dataIndex + ')');
-                var rowDesignation = row.data('designation');
-                var rowRank = row.data('rank');
-                var rowCategory = row.data('category');
-                var rowStatus = row.data('status');
-
-                if (designation !== '' && designation !== null) {
-                    if (designation === '0') {
-                        if (rowDesignation !== null && rowDesignation !== 0) return false;
-                    } else {
-                        if (rowDesignation != designation) return false;
-                    }
-                }
-                if (rank !== '' && rank !== null) {
-                    if (rowRank != rank) return false;
-                }
-                if (category !== '' && category !== null) {
-                    if (rowCategory !== category) return false;
-                }
-                if (status !== '' && status !== null) {
-                    if (rowStatus != status) return false;
-                }
-                return true;
-            });
-            table.draw();
-        } else {
-            applyAdminFilters();
-        }
-    });
-
-    // Admin: live text search (debounced)
     if (isAdmin) {
         var searchTimer = null;
         $('#card_search').on('input', function(){
             clearTimeout(searchTimer);
             searchTimer = setTimeout(applyAdminFilters, 200);
         });
-        // initial count
         applyAdminFilters();
     }
 
@@ -700,6 +739,7 @@ $(document).on('click', '.submit-btn', function(){
     $('#submitRatingPeriod').val('<?= $rating_period ?>');
     $('#displayRatingPeriod').text('<?= $rating_period ?>');
     $('#submitDocument').val('');
+    $('#submitAccomplishment').val('');
     $('#uploadSubmitModal').modal('show');
 });
 
@@ -710,10 +750,7 @@ $(document).on('click', '.na-btn', function(){
     $.ajax({
         url: 'ajax.php?action=submit_na',
         method: 'POST',
-        data: {
-            task_id: taskId,
-            rating_period: '<?= $rating_period ?>'
-        },
+        data: { task_id: taskId, rating_period: '<?= $rating_period ?>' },
         success: function(resp){
             try {
                 var result = typeof resp === 'string' ? JSON.parse(resp) : resp;
@@ -759,58 +796,39 @@ $('#uploadSubmitForm').submit(function(e){
         }
     });
 });
+
+// Save accomplishment (inline edit, only when not verified)
+$(document).on('click', '.save-accomplishment', function(){
+    var taskId = $(this).data('task-id');
+    var text = $('.accomplishment-edit[data-task-id="' + taskId + '"]').val();
+    var $btn = $(this);
+    $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin mr-1"></i> Saving...');
+    $.ajax({
+        url: 'ajax.php?action=update_accomplishment',
+        method: 'POST',
+        data: { task_id: taskId, actual_accomplishment: text },
+        success: function(resp) {
+            try {
+                var r = typeof resp === 'string' ? JSON.parse(resp) : resp;
+                if (r.status === 'success') {
+                    alert_toast(r.message, 'success');
+                } else {
+                    alert_toast(r.message || 'Failed to update.', 'danger');
+                }
+            } catch (e) {
+                alert_toast('Failed to update.', 'danger');
+            }
+            $btn.prop('disabled', false).html('<i class="fa fa-save mr-1"></i> Save');
+        },
+        error: function() {
+            alert_toast('Connection error.', 'danger');
+            $btn.prop('disabled', false).html('<i class="fa fa-save mr-1"></i> Save');
+        }
+    });
+});
 </script>
 
 <?php if($login_type == 2): ?>
-<div class="modal fade" id="exemptionModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-dialog-centered" role="document">
-        <div class="modal-content">
-            <div class="modal-header bg-warning text-white">
-                <h5 class="modal-title"><i class="fa fa-ban mr-2"></i>Manage Exemptions</h5>
-                <button type="button" class="close text-white" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
-            </div>
-            <div class="modal-body">
-                <input type="hidden" id="exempt_task_id">
-                <p><b>Target:</b> <span id="exempt_task_name"></span></p>
-                <hr>
-                <div class="row">
-                    <div class="col-md-8">
-                        <div class="form-group">
-                            <label><b>Academic Rank to Exempt:</b></label>
-                            <select id="exempt_position" class="form-control">
-                                <option value="">-- Select Academic Rank --</option>
-                                <?php 
-                                $pos_qry = $conn->query("SELECT * FROM position_list ORDER BY id ASC");
-                                while($p = $pos_qry->fetch_assoc()): ?>
-                                <option value="<?php echo $p['id'] ?>"><?php echo htmlspecialchars($p['position']) ?></option>
-                                <?php endwhile; ?>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="form-group">
-                            <label>&nbsp;</label>
-                            <button type="button" class="btn btn-primary btn-block" id="add_exemption">
-                                <i class="fa fa-plus"></i> Add
-                            </button>
-                        </div>
-                    </div>
-                </div>
-                <hr>
-                <h6>Current Exemptions:</h6>
-                <div id="exemption_list" class="mt-2">
-                    <p class="text-muted">Loading...</p>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
 <script>
 $(document).on('click', '.manage_exemption', function(){
     var task_id = $(this).data('id');

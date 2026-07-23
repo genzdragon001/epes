@@ -35,64 +35,19 @@ if (!$is_admin) {
     }
 }
 
-// Fetch all rating periods (for selector)
-$all_periods = [];
-$ap_qry = $conn->query("SELECT * FROM rating_period ORDER BY year DESC, id DESC");
-while ($ap_qry && $r = $ap_qry->fetch_assoc()) {
-    $key = $r['semester'] . '|' . $r['year'];
-    if (!isset($all_periods[$key])) $all_periods[$key] = $r;
-}
-$all_periods = array_values($all_periods);
+// Use shared period-building logic (same as home.php, target_list.php, etc.)
+// Provides: $real_periods, $selected_period, $period_codes, $period_filter,
+// $period_label, $active_period_code, $selected_period_ids
+require_once 'includes/period_builder.php';
 
-// Determine selected period (from query string, session, or default to active)
-$active_period = null;
-foreach ($all_periods as $p) {
-    if (!empty($p['is_active'])) { $active_period = $p; break; }
-}
-
-$req_key = $_GET['period'] ?? '';
-$selected_period = null;
-if ($req_key !== '') {
-    foreach ($all_periods as $p) {
-        if (($p['semester'] . '|' . $p['year']) === $req_key) { $selected_period = $p; break; }
-    }
-}
-if (!$selected_period) $selected_period = $active_period ?: (count($all_periods) ? $all_periods[0] : null);
-
-// Current period code for faculty rating lookup
-$active_period_code = '';
-$period_filter_sql = '';  // SQL fragment for task_progress filtering
+// Fetch full rating_period row for date display in the info box
+$period_dates = null;
 if ($selected_period) {
-    $active_period_code = $selected_period['code'] ?? ($selected_period['semester'] . '-' . $selected_period['year']);
-    // Build period filter matching all known rating_period formats in task_progress
-    $sel_sem = $selected_period['semester'];
-    $sel_yr  = $selected_period['year'];
-    $short = '';
-    if (strpos($sel_yr, '-') !== false) {
-        $parts = explode('-', $sel_yr);
-        $short = substr($parts[0], -2) . substr($parts[1], -2);
-    }
-    $sem_num = '1';
-    if (strpos($sel_sem, '2nd') !== false) $sem_num = '2';
-    elseif (stripos($sel_sem, 'Summer') !== false) $sem_num = 'S';
-    $short_code = $sem_num . '-' . $short;
-
-    // Gather all distinct rating_period values that match this semester/year
-    $like_yr  = $conn->real_escape_string($sel_yr);
-    $like_sht = $conn->real_escape_string($short_code);
-    $period_codes = [];
-    $dq = $conn->query("SELECT DISTINCT rating_period FROM task_progress WHERE rating_period <> '' AND (rating_period LIKE '%$like_yr%' OR rating_period LIKE '%$like_sht%')");
-    while ($dq && $r = $dq->fetch_assoc()) $period_codes[] = $r['rating_period'];
-    $rq = $conn->query("SELECT DISTINCT rating_period FROM ratings WHERE rating_period <> '' AND (rating_period LIKE '%$like_yr%' OR rating_period LIKE '%$like_sht%')");
-    while ($rq && $r = $rq->fetch_assoc()) $period_codes[] = $r['rating_period'];
-    $period_codes = array_values(array_unique(array_filter($period_codes)));
-
-    if (!empty($period_codes)) {
-        $in = implode("','", array_map([$conn, 'real_escape_string'], $period_codes));
-        // STRICT for all periods: only rows tagged with this period's codes are
-        // counted. Blank/untagged rows belong to no period (matches dashboard
-        // behavior in home.php) and only appear after they are backfilled.
-        $period_filter_sql = " AND rating_period IN ('$in')";
+    $sel_sem_db = $conn->real_escape_string($selected_period['semester']);
+    $sel_yr_db  = $conn->real_escape_string($selected_period['year']);
+    $pd_qry = $conn->query("SELECT * FROM rating_period WHERE semester = '$sel_sem_db' AND year = '$sel_yr_db' ORDER BY id LIMIT 1");
+    if ($pd_qry && $pd_qry->num_rows > 0) {
+        $period_dates = $pd_qry->fetch_assoc();
     }
 }
 
@@ -172,7 +127,7 @@ if ($result && $result->num_rows > 0) {
                 COUNT(DISTINCT task_id) as total_tasks,
                 SUM(CASE WHEN progress = 'Verified' THEN 1 ELSE 0 END) as verified,
                 SUM(CASE WHEN progress = 'For Verification' THEN 1 ELSE 0 END) as for_verification
-            FROM task_progress WHERE faculty_id = $emp_id $period_filter_sql
+            FROM task_progress WHERE faculty_id = $emp_id $period_filter
         ")->fetch_assoc();
         $row['total_tasks'] = $stats['total_tasks'] ?? 0;
         $row['verified'] = $stats['verified'] ?? 0;
@@ -183,7 +138,7 @@ if ($result && $result->num_rows > 0) {
         if (!empty($active_period_code)) {
             $pos_id = $row['position_id'] ?? 0;
             $desig_id = $row['designation_id'] ?? 0;
-            $row['avg_rating'] = computeWeightedRating($conn, $emp_id, $pos_id, $desig_id, $active_period_code, $period_filter_sql);
+            $row['avg_rating'] = computeWeightedRating($conn, $emp_id, $pos_id, $desig_id, $active_period_code, $period_filter);
             if ($row['avg_rating'] !== null) $total_rated++;
         } else {
             $row['avg_rating'] = null;
@@ -205,10 +160,12 @@ if ($result && $result->num_rows > 0) {
 <div class="col-lg-12">
 
     <!-- ===== PERIOD SELECTOR ===== -->
-    <?php if (count($all_periods) > 0):
-        $start = $selected_period['start_date'] ? date('M d, Y', strtotime($selected_period['start_date'])) : '—';
-        $end = $selected_period['end_date'] ? date('M d, Y', strtotime($selected_period['end_date'])) : '—';
-        $sel_key = $selected_period['semester'] . '|' . $selected_period['year'];
+    <?php if (count($real_periods) > 0):
+        $start = ($period_dates && $period_dates['start_date']) ? date('M d, Y', strtotime($period_dates['start_date'])) : '—';
+        $end = ($period_dates && $period_dates['end_date']) ? date('M d, Y', strtotime($period_dates['end_date'])) : '—';
+        $nd_start = ($period_dates && $period_dates['non_desig_start_date']) ? date('M d, Y', strtotime($period_dates['non_desig_start_date'])) : $start;
+        $nd_end = ($period_dates && $period_dates['non_desig_end_date']) ? date('M d, Y', strtotime($period_dates['non_desig_end_date'])) : $end;
+        $sel_key = epes_period_key($selected_period['semester'], $selected_period['year']);
     ?>
     <div class="row mb-3">
         <div class="col-md-8">
@@ -217,7 +174,7 @@ if ($result && $result->num_rows > 0) {
                 <div class="info-box-content">
                     <span class="info-box-text">Rating Period</span>
                     <span class="info-box-number"><?= htmlspecialchars($selected_period['semester']) ?> <?= htmlspecialchars($selected_period['year']) ?> <?= !empty($selected_period['is_active']) ? '<span class="badge badge-light ml-1">Current</span>' : '' ?></span>
-                    <small>Designated: <?= $start ?> — <?= $end ?> | Non-Desig/COS: <?= $selected_period['non_desig_start_date'] ? date('M d, Y', strtotime($selected_period['non_desig_start_date'])) : $start ?> — <?= $selected_period['non_desig_end_date'] ? date('M d, Y', strtotime($selected_period['non_desig_end_date'])) : $end ?></small>
+                    <small>Designated: <?= $start ?> — <?= $end ?> | Non-Desig/COS: <?= $nd_start ?> — <?= $nd_end ?></small>
                 </div>
             </div>
         </div>
@@ -226,8 +183,8 @@ if ($result && $result->num_rows > 0) {
             <select id="period_selector" class="form-control form-control-sm"
                     onchange="window.location.href='index.php?page=faculty_list&period='+encodeURIComponent(this.value)"
                     style="width:auto; font-size:0.85rem; max-width:220px;">
-                <?php foreach ($all_periods as $p):
-                    $pkey = $p['semester'] . '|' . $p['year'];
+                <?php foreach ($real_periods as $p):
+                    $pkey = epes_period_key($p['semester'], $p['year']);
                     $opt_label = $p['semester'] . ' ' . $p['year'] . (!empty($p['is_active']) ? ' (Current)' : '');
                 ?>
                 <option value="<?= htmlspecialchars($pkey) ?>" <?= $pkey === $sel_key ? 'selected' : '' ?>><?= htmlspecialchars($opt_label) ?></option>

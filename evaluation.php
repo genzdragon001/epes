@@ -1,4 +1,5 @@
 <?php include'db_connect.php';
+require_once 'includes/period_builder.php';
 
 // Allow: admin (2), legacy evaluator (1), or faculty with evaluator designation (0 + is_evaluator)
 $login_type = $_SESSION['login_type'] ?? -1;
@@ -51,27 +52,101 @@ if ($qry && $qry->num_rows > 0) {
 ?>
 <div class="col-lg-12">
 	<div class="card card-outline card-success">
-		<div class="card-header">
-			<div class="card-tools">
-				<!-- <a class="btn btn-block btn-sm btn-default btn-flat border-primary" href="./index.php?page=new_evaluation"><i class="fa fa-plus"></i> Add New Evaluation</a> -->
+		<div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+			<div class="d-flex align-items-center flex-wrap">
+				<h3 class="card-title mr-3 mb-0"><i class="fa fa-tasks mr-1"></i> Evaluation</h3>
+				<?php if (count($real_periods) > 0):
+					$sel_key = epes_period_key($selected_period['semester'], $selected_period['year']);
+				?>
+				<span class="badge badge-primary p-2" style="font-size:0.85rem;">
+					<i class="fa fa-calendar-alt mr-1"></i>
+					<?= htmlspecialchars($selected_period['semester']) ?> <?= htmlspecialchars($selected_period['year']) ?>
+					<?= !empty($selected_period['is_active']) ? '<span class="badge badge-light ml-1">Current</span>' : '' ?>
+				</span>
+				<?php endif; ?>
 			</div>
+			<?php if (count($real_periods) > 0): ?>
+			<div class="card-tools ml-auto">
+				<select id="period_selector" class="form-control form-control-sm"
+						onchange="window.location.href='index.php?page=evaluation&id=<?= htmlspecialchars($nameId) ?>&period='+encodeURIComponent(this.value)"
+						style="width:auto; font-size:0.85rem; max-width:240px;">
+					<?php foreach ($real_periods as $p):
+						$pkey = epes_period_key($p['semester'], $p['year']);
+						$opt_label = $p['semester'] . ' ' . $p['year'] . (!empty($p['is_active']) ? ' (Current)' : '');
+					?>
+					<option value="<?= htmlspecialchars($pkey) ?>" <?= $pkey === $sel_key ? 'selected' : '' ?>><?= htmlspecialchars($opt_label) ?></option>
+					<?php endforeach; ?>
+				</select>
+			</div>
+			<?php endif; ?>
 		</div>
 		<div class="card-body">
 
         
             <h5 class="mb-3">Name of Faculty: <b><?= htmlspecialchars($faculty_name); ?></b></h5>
 
-         
+			<style>
+			/* Responsive: transform evaluation table into stacked cards on small screens */
+			@media (max-width: 768px) {
+			    #list thead { display: none; }
+			    #list, #list tbody, #list tr, #list td { display: block; width: 100%; }
+			    #list tr.category-header,
+			    #list tr.sub-header { display: table-row; }
+			    #list tr:not(.category-header):not(.sub-header) {
+			        border: 1px solid #dee2e6;
+			        border-radius: 8px;
+			        margin-bottom: 12px;
+			        padding: 8px 10px;
+			        background: #fff;
+			        box-shadow: 0 1px 3px rgba(0,0,0,.08);
+			    }
+			    #list tr:not(.category-header):not(.sub-header) td {
+			        display: flex;
+			        justify-content: space-between;
+			        align-items: center;
+			        text-align: right !important;
+			        border: none;
+			        border-bottom: 1px solid #f0f0f0;
+			        padding: 6px 4px;
+			    }
+			    #list tr:not(.category-header):not(.sub-header) td:last-child { border-bottom: none; }
+			    #list tr:not(.category-header):not(.sub-header) td::before {
+			        content: attr(data-label);
+			        font-weight: 600;
+			        color: #6c757d;
+			        text-align: left;
+			        margin-right: 12px;
+			        flex: 0 0 auto;
+			    }
+			    /* E/Q/T as inline chips on mobile */
+			    #list td[data-label="E"], #list td[data-label="Q"], #list td[data-label="T"] {
+			        display: inline-flex;
+			        width: 32%;
+			        border: 1px solid #f0f0f0;
+			        border-radius: 6px;
+			        margin: 2px 1%;
+			        justify-content: center;
+			    }
+			    #list td[data-label="E"]::before, #list td[data-label="Q"]::before, #list td[data-label="T"]::before {
+			        margin-right: 0;
+			    }
+			    #list td[data-label="E"] { margin-left: 0; }
+			    #list td[data-label="T"] { margin-right: 0; }
+			}
+			</style>
+
+			<div class="table-responsive">
 			<table class="table table-hover table-bordered table-striped" id="list">
 				<thead class="thead-dark">
 					<tr>
 						<th class="text-center" style="width: 50px;">#</th>
 						<th style="width: 30%;">Success Indicator</th>
 						<th class="text-center" style="width: 100px;">MOV</th>
-                        <th class="text-center" style="width: 130px;">Action</th>
-						<th class="text-center" style="width: 110px;">Efficiency</th>
-						<th class="text-center" style="width: 110px;">Quality</th>
-						<th class="text-center" style="width: 120px;">Timeliness</th>
+						<th class="text-center" style="width: 120px;">Status</th>
+						<th class="text-center" style="width: 90px;">Action</th>
+						<th class="text-center" style="width: 45px;" title="Efficiency">E</th>
+						<th class="text-center" style="width: 45px;" title="Quality">Q</th>
+						<th class="text-center" style="width: 45px;" title="Timeliness">T</th>
 					</tr>
 				</thead>
 				<tbody>
@@ -98,7 +173,8 @@ SELECT
     tp.file_path,
     tp.file_type,
     tp.progress AS task_progress,
-    tp.date_created,
+        tp.date_created,
+        tp.actual_accomplishment,
     CONCAT(e.lastname, ', ', e.firstname, ' ', e.middlename) AS faculty_name,
     
     t.id AS real_task_id,
@@ -115,9 +191,9 @@ SELECT
     r.quality AS rating_quality,
     ((((r.efficiency + r.timeliness + r.quality) / 4) / 5) * 100) AS pa
     FROM task_list t
-    LEFT JOIN task_progress tp ON tp.task_id = t.id AND tp.faculty_id = " . intval($nameId) . "
+    LEFT JOIN task_progress tp ON tp.task_id = t.id AND tp.faculty_id = " . intval($nameId) . " $period_filter
     LEFT JOIN employee_list e ON tp.faculty_id = e.id
-    LEFT JOIN ratings r ON r.employee_id = " . intval($nameId) . " AND r.task_id = t.id
+    LEFT JOIN ratings r ON r.employee_id = " . intval($nameId) . " AND r.task_id = t.id AND r.rating_period IN (" . implode(",", array_map(function($c) use ($conn) { return "'" . $conn->real_escape_string($c) . "'"; }, $period_codes)) . ")
     WHERE t.is_active = 1
         AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = " . intval($fac_position_id) . ")
         AND " . task_designation_match($fac_desig_id) . "
@@ -138,7 +214,7 @@ SELECT
     $sub_labels = ['ter' => 'A.1 Teaching Effectiveness (TER)', 'instructions' => 'A.2 Instructions', 'research' => 'B. Research', 'extension' => 'C. Extension'];
     $sub_colors = ['ter' => 'table-light', 'instructions' => 'table-light', 'research' => 'table-light', 'extension' => 'table-light'];
             if($qry->num_rows == 0):
-                echo '<tr><td colspan="7" class="text-center text-muted py-4">No targets assigned to this faculty.</td></tr>';
+                echo '<tr><td colspan="8" class="text-center text-muted py-4">No targets assigned to this faculty.</td></tr>';
             else:
             while ($row = $qry->fetch_assoc()):
                 $task_category = $row['task_category'] ?? '';
@@ -150,9 +226,9 @@ SELECT
                     $label = $category_labels[$task_category] ?? strtoupper($task_category);
                     $color = $category_colors[$task_category] ?? 'bg-light';
 ?>
-    <tr class="<?= $color ?>">
-        <td colspan="7" class="font-weight-bold py-2">
-            <i class="fa fa-tasks mr-2"></i> <?= $label ?>
+    <tr class="<?= $color ?> category-header">
+        <td colspan="8" class="font-weight-bold py-2">
+                    <i class="fa fa-tasks mr-2"></i> <?= $label ?>
         </td>
     </tr>
 <?php
@@ -163,8 +239,8 @@ SELECT
                     $sub_label = $sub_labels[$task_sub] ?? ucwords($task_sub);
                     $sub_color = $sub_colors[$task_sub] ?? 'table-light';
 ?>
-    <tr class="<?= $sub_color ?>">
-        <td colspan="7" class="font-weight-bold py-1 pl-4">
+    <tr class="<?= $sub_color ?> sub-header">
+        <td colspan="8" class="font-weight-bold py-1 pl-4">
             <i class="fa fa-angle-right mr-2"></i> <?= $sub_label ?>
         </td>
     </tr>
@@ -182,15 +258,10 @@ SELECT
 ?>
     <tr>
         <th class="text-center align-middle"><?= $num++ ?></th>
-        <td class="align-middle"><?= ucwords(htmlspecialchars($row['si'])) ?></td>
-        <td class="text-center align-middle">
+        <td class="align-middle" data-label="Target"><?= ucwords(htmlspecialchars($row['si'])) ?></td>
+        <td class="text-center align-middle" data-label="MOV">
         <?php if ($real_file): ?>
-        <button type="button" 
-           class="btn btn-sm btn-primary view-file-btn"
-           data-file="<?= htmlspecialchars($real_file) ?>"
-           data-filetype="<?= htmlspecialchars($row['file_type']) ?>">
-           View
-        </button>
+            <span class="badge badge-success" title="File submitted">Submitted</span>
         <?php elseif ($has_submission && !empty($row['file_path'])): ?>
             <span class="badge badge-warning" title="File record exists but the file is missing on the server">Missing</span>
         <?php elseif ($is_na): ?>
@@ -198,54 +269,103 @@ SELECT
         <?php else: ?>
             <span class="text-muted">-</span>
         <?php endif; ?>
+        <?php if (!$is_admin_view && $has_submission): ?>
+        <button type="button" class="btn btn-sm btn-outline-info ml-1 view-movs-btn"
+                data-target-id="<?= $row['real_task_id'] ?>" title="View uploaded MOVs">
+            <i class="fa fa-folder-open"></i> MOVs
+        </button>
+        <?php endif; ?>
         </td>
-        <td class="text-center align-middle">
-            <?php if ($is_admin_view): ?>
-                <?php 
-                $statusClass = ($currentStatus == 'Verified') ? 'badge-success' : (($currentStatus == 'For Verification') ? 'badge-warning' : ($is_na ? 'badge-secondary' : 'badge-secondary'));
-                ?>
-                <span class="badge <?= $statusClass ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= $currentStatus ?? 'Pending' ?></span>
-            <?php elseif ($row_locked): ?>
-                <?php 
-                $statusClass = ($currentStatus == 'Verified') ? 'badge-success' : (($currentStatus == 'For Verification') ? 'badge-warning' : ($is_na ? 'badge-secondary' : 'badge-secondary'));
-                ?>
-                <span class="badge <?= $statusClass ?>" title="Strategic Plan tasks can only be rated by the Vice President"><?= $currentStatus ?? 'Pending' ?> <i class="fas fa-lock ml-1" style="font-size:0.65rem;"></i></span>
-            <?php else: ?>
-            <div class="dropdown">
-                <?php 
-                $statusClass = ($currentStatus == 'Verified') ? 'btn-success' : (($currentStatus == 'For Verification') ? 'btn-warning' : ($is_na ? 'btn-info' : 'btn-secondary'));
-                ?>
-                <button class="btn btn-sm <?= $statusClass ?> dropdown-toggle" 
-                        type="button" 
-                        id="statusDropdown<?= $row['real_task_id'] ?>" 
-                        data-toggle="dropdown" 
-                        aria-haspopup="true" 
+        <td class="text-center align-middle" data-label="Status">
+            <?php
+            $badgeClass = ($currentStatus == 'Verified') ? 'badge-success'
+                : (($currentStatus == 'For Verification') ? 'badge-warning'
+                : ($is_na ? 'badge-info' : 'badge-secondary'));
+            ?>
+            <span class="badge <?= $badgeClass ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>>
+                <?= $currentStatus ?? 'Pending' ?>
+                <?= $row_locked ? ' <i class="fas fa-lock ml-1" style="font-size:0.6rem;"></i>' : '' ?>
+            </span>
+        </td>
+        <td class="text-center align-middle" data-label="Actions">
+            <div class="btn-group" role="group">
+            <?php if (!$is_admin_view && !$row_locked): ?>
+            <div class="dropdown d-inline-block">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" 
+                        type="button"
+                        id="statusDropdown<?= $row['real_task_id'] ?>"
+                        data-toggle="dropdown"
+                        aria-haspopup="true"
                         aria-expanded="false"
-                        data-faculty="<?= $nameId ?>">
-                    <?= $currentStatus ?? 'Pending' ?>
+                        data-faculty="<?= $nameId ?>" title="Change status">
+                    <i class="fa fa-cog"></i>
                 </button>
                 <div class="dropdown-menu" aria-labelledby="statusDropdown<?= $row['real_task_id'] ?>">
-                    <a class="dropdown-item set_status" href="javascript:void(0)" 
-                       data-id="<?= $row['real_task_id'] ?>" 
-                       data-faculty="<?= $nameId ?>" 
-                       data-value="For Verification">For Verification</a>
+                    <a class="dropdown-item set_status" href="javascript:void(0)"
+                       data-id="<?= $row['real_task_id'] ?>"
+                       data-faculty="<?= $nameId ?>"
+                       data-value="For Verification"><i class="fa fa-clock mr-2"></i>For Verification</a>
                     <div class="dropdown-divider"></div>
-                    <a class="dropdown-item set_status" href="javascript:void(0)" 
-                       data-id="<?= $row['real_task_id'] ?>" 
-                       data-faculty="<?= $nameId ?>" 
-                       data-value="Verified">Verified</a>
+                    <a class="dropdown-item set_status" href="javascript:void(0)"
+                       data-id="<?= $row['real_task_id'] ?>"
+                       data-faculty="<?= $nameId ?>"
+                       data-value="Verified"><i class="fa fa-check-double mr-2"></i>Verified</a>
                     <?php if ($is_na): ?>
                     <div class="dropdown-divider"></div>
-                    <a class="dropdown-item set_status text-info" href="javascript:void(0)" 
-                       data-id="<?= $row['real_task_id'] ?>" 
-                       data-faculty="<?= $nameId ?>" 
-                       data-value="N/A Verified">Verify N/A</a>
+                    <a class="dropdown-item set_status text-info" href="javascript:void(0)"
+                       data-id="<?= $row['real_task_id'] ?>"
+                       data-faculty="<?= $nameId ?>"
+                       data-value="N/A Verified"><i class="fa fa-ban mr-2"></i>Verify N/A</a>
                     <?php endif; ?>
                 </div>
             </div>
             <?php endif; ?>
+            <?php
+            // Count existing comments for this task/faculty
+            $commentCount = 0;
+            $existingComment = '';
+            if ($has_submission) {
+                $cmt_q = $conn->query("SELECT id, comment_text FROM target_comments WHERE task_id = " . intval($row['real_task_id']) . " AND faculty_id = " . intval($nameId) . " ORDER BY created_at DESC LIMIT 1");
+                if ($cmt_q && $cmt_q->num_rows > 0) {
+                    $cmt_row = $cmt_q->fetch_assoc();
+                    $existingComment = $cmt_row['comment_text'];
+                    $cnt_q = $conn->query("SELECT COUNT(*) AS cnt FROM target_comments WHERE task_id = " . intval($row['real_task_id']) . " AND faculty_id = " . intval($nameId));
+                    if ($cnt_q) $commentCount = $cnt_q->fetch_assoc()['cnt'];
+                }
+            }
+            $acc_text = $row['actual_accomplishment'] ?? '';
+            ?>
+            <?php if ($has_submission && !$is_na): ?>
+                <button type="button" class="btn btn-sm btn-outline-info comment-btn ml-1"
+                        data-task-id="<?= $row['real_task_id'] ?>"
+                        data-faculty="<?= $nameId ?>"
+                        data-comment="<?= htmlspecialchars($existingComment) ?>"
+                        data-task-name="<?= htmlspecialchars($row['si']) ?>"
+                        title="Comment on MOV">
+                    <i class="fa fa-comment"></i>
+                    <?php if ($commentCount > 0): ?>
+                        <span class="badge badge-light ml-1"><?= $commentCount ?></span>
+                    <?php endif; ?>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-success acc-btn ml-1"
+                        data-task-id="<?= $row['real_task_id'] ?>"
+                        data-task-name="<?= htmlspecialchars($row['si']) ?>"
+                        data-acc="<?= htmlspecialchars($acc_text) ?>"
+                        title="View Actual Accomplishment">
+                    <i class="fa fa-check-circle"></i>
+                </button>
+            <?php elseif ($has_submission && $is_na): ?>
+                <button type="button" class="btn btn-sm btn-outline-success acc-btn ml-1"
+                        data-task-id="<?= $row['real_task_id'] ?>"
+                        data-task-name="<?= htmlspecialchars($row['si']) ?>"
+                        data-acc="<?= htmlspecialchars($acc_text) ?>"
+                        title="View Actual Accomplishment">
+                    <i class="fa fa-check-circle"></i>
+                </button>
+            <?php endif; ?>
+            </div>
         </td>
-        <td class="text-center align-middle">
+        <td class="text-center align-middle" data-label="E">
             <?php 
                 $effApplicable = (isset($row['task_efficiency']) && $row['task_efficiency'] === 'Applicable');
                 $currentEff = isset($row['rating_efficiency']) ? $row['rating_efficiency'] : '-';
@@ -296,7 +416,7 @@ SELECT
             </div>
             <?php endif; ?>
         </td>
-        <td class="text-center align-middle">
+        <td class="text-center align-middle" data-label="Q">
             <?php 
                 $qualApplicable = (isset($row['task_quality']) && $row['task_quality'] === 'Applicable');
                 $currentQual = isset($row['rating_quality']) ? $row['rating_quality'] : '-';
@@ -347,7 +467,7 @@ SELECT
             </div>
             <?php endif; ?>
         </td>
-        <td class="text-center align-middle">
+        <td class="text-center align-middle" data-label="T">
             <?php 
                 $timeApplicable = (isset($row['task_timeliness']) && $row['task_timeliness'] === 'Applicable');
                 $currentTime = isset($row['rating_timeliness']) ? $row['rating_timeliness'] : '-';
@@ -402,9 +522,10 @@ SELECT
 <?php endwhile; endif; ?>
 
 				</tbody>
-			</table>
+						</table>
+						</div><!-- /table-responsive -->
 
-    <!-- Add this comment form section after the faculty name display -->
+			    <!-- Add this comment form section after the faculty name display -->
 <?php
    // Fetch existing comment for this faculty-evaluator combination
 $existing_comment = "";
@@ -454,20 +575,58 @@ if($comment_check && $comment_check->num_rows > 0){
 	</div>
 </div>
 
-<div class="modal fade" id="fileViewModal" tabindex="-1" role="dialog" aria-labelledby="fileViewModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+
+<div class="modal fade" id="targetCommentModal" tabindex="-1" role="dialog" aria-labelledby="targetCommentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="fileViewModalLabel">View File</h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="targetCommentModalLabel"><i class="fa fa-comment mr-2"></i>Comment on Target/MOV</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
-            <div class="modal-body text-center" id="fileViewContent">
+            <div class="modal-body">
+                <form id="targetCommentForm">
+                    <input type="hidden" name="task_id" id="commentTaskId">
+                    <input type="hidden" name="faculty_id" id="commentFacultyId">
+                    <div class="form-group">
+                        <label class="font-weight-bold">Target</label>
+                        <p class="text-muted mb-2" id="commentTaskName"></p>
+                    </div>
+                    <div class="form-group">
+                        <label for="commentTextInput" class="font-weight-bold">Your Comment</label>
+                        <textarea class="form-control" id="commentTextInput" name="comment_text" rows="5" placeholder="Write your feedback on the submitted MOV/target..."></textarea>
+                    </div>
+                </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                <a href="#" id="downloadFileBtn" class="btn btn-primary" download>Download</a>
+                <button type="button" class="btn btn-primary" id="saveTargetCommentBtn"><i class="fa fa-save mr-1"></i> Save Comment</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="targetAccomplishmentModal" tabindex="-1" role="dialog" aria-labelledby="targetAccomplishmentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="targetAccomplishmentModalLabel"><i class="fa fa-check-circle mr-2"></i>Actual Accomplishment</h5>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="font-weight-bold">Target</label>
+                    <p class="text-muted mb-2" id="accTaskName"></p>
+                </div>
+                <div class="form-group">
+                    <div class="p-3" style="background:#f8f9fa; border-left:4px solid #28a745; border-radius:4px;" id="accTextDisplay"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
@@ -476,6 +635,79 @@ if($comment_check && $comment_check->num_rows > 0){
 <script>
 
 
+
+$(document).ready(function(){
+    // Target/MOV comment modal open
+    $(document).on('click', '.comment-btn', function(){
+        var taskId = $(this).data('task-id');
+        var facultyId = $(this).data('faculty');
+        var comment = $(this).data('comment') || '';
+        var taskName = $(this).data('task-name') || '';
+        
+        $('#commentTaskId').val(taskId);
+        $('#commentFacultyId').val(facultyId);
+        $('#commentTaskName').text(taskName);
+        $('#commentTextInput').val(comment);
+        $('#targetCommentModal').modal('show');
+    });
+
+    // Actual Accomplishment modal open
+    $(document).on('click', '.acc-btn', function(){
+        var taskName = $(this).data('task-name') || '';
+        var acc = $(this).data('acc') || '';
+        $('#accTaskName').text(taskName);
+        if (acc.trim() === '') {
+            $('#accTextDisplay').html('<span class="text-muted">No actual accomplishment recorded yet.</span>');
+        } else {
+            $('#accTextDisplay').text(acc);
+        }
+        $('#targetAccomplishmentModal').modal('show');
+    });
+
+    // Save target comment
+    $('#saveTargetCommentBtn').click(function(){
+        var btn = $(this);
+        var taskId = $('#commentTaskId').val();
+        var facultyId = $('#commentFacultyId').val();
+        var comment = $('#commentTextInput').val().trim();
+        
+        if (!comment) {
+            alert_toast('Please enter a comment.', 'warning');
+            return;
+        }
+        
+        btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin mr-1"></i> Saving...');
+        
+        $.ajax({
+            url: 'ajax.php?action=save_target_comment',
+            method: 'POST',
+            data: {
+                task_id: taskId,
+                faculty_id: facultyId,
+                comment_text: comment
+            },
+            success: function(resp){
+                try {
+                    var r = typeof resp === 'string' ? JSON.parse(resp) : resp;
+                    if (r.status === 'success') {
+                        alert_toast(r.message || 'Comment saved.', 'success');
+                        $('#targetCommentModal').modal('hide');
+                        setTimeout(function(){ location.reload(); }, 1000);
+                    } else {
+                        alert_toast(r.message || 'Failed to save comment.', 'danger');
+                    }
+                } catch(e) {
+                    alert_toast('Failed to save comment.', 'danger');
+                }
+                btn.prop('disabled', false).html('<i class="fa fa-save mr-1"></i> Save Comment');
+            },
+            error: function(){
+                alert_toast('Connection error.', 'danger');
+                btn.prop('disabled', false).html('<i class="fa fa-save mr-1"></i> Save Comment');
+            }
+        });
+    });
+});
 
 $(document).ready(function(){
     $(document).on("click", ".set_rating", function(){
@@ -718,28 +950,9 @@ $(document).ready(function(){
 });
 
 $(document).ready(function(){
-    $(document).on('click', '.view-file-btn', function(){
-        var filePath = $(this).data('file');
-        var fileType = $(this).data('filetype').toLowerCase();
-        var modal = $('#fileViewModal');
-        var content = $('#fileViewContent');
-        var downloadBtn = $('#downloadFileBtn');
-        
-        content.empty();
-        downloadBtn.attr('href', filePath);
-        
-        var imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
-        var pdfExt = 'pdf';
-        
-        if (imageExts.includes(fileType)) {
-            content.html('<img src="' + filePath + '" class="img-fluid" style="max-height: 70vh;">');
-        } else if (fileType === pdfExt) {
-            content.html('<iframe src="' + filePath + '" style="width: 100%; height: 70vh; border: none;"></iframe>');
-        } else {
-            content.html('<p>Cannot preview this file type. Please download to view.</p>');
-        }
-        
-        modal.modal('show');
+    $(document).on('click', '.view-movs-btn', function(){
+    var targetId = $(this).data('target-id');
+    uni_modal('<i class="fa fa-folder-open"></i> Uploaded MOVs', 'view_target_movs.php?target_id=' + targetId + '&faculty_id=<?= htmlspecialchars($nameId) ?>', 'large');
     });
 });
 

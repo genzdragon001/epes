@@ -1730,6 +1730,7 @@ function submit_file() {
     $task_id = isset($_POST['task_id']) ? (int) $_POST['task_id'] : 0;
     $faculty_id = $_SESSION['login_id'] ?? 0;
     $rating_period = isset($_POST['rating_period']) ? $this->db->real_escape_string($_POST['rating_period']) : '';
+    $actual_accomplishment = isset($_POST['actual_accomplishment']) ? $this->db->real_escape_string($_POST['actual_accomplishment']) : '';
     
     if ($task_id === 0 || $faculty_id === 0) {
         echo json_encode(["status" => "error", "message" => "Invalid task or faculty ID."]);
@@ -1766,9 +1767,9 @@ function submit_file() {
         if ($check && $check->num_rows > 0) {
             $row = $check->fetch_assoc();
             $progressId = (int) $row['id'];
-            $this->db->query("UPDATE task_progress SET file_path = '$uploadDir$newFileName', file_type = '$fileType', progress = 'For Verification', date_created = NOW(), rating_period = '$rating_period' WHERE id = $progressId");
+            $this->db->query("UPDATE task_progress SET file_path = '$uploadDir$newFileName', file_type = '$fileType', progress = 'For Verification', date_created = NOW(), rating_period = '$rating_period', actual_accomplishment = '$actual_accomplishment' WHERE id = $progressId");
         } else {
-            $this->db->query("INSERT INTO task_progress (task_id, faculty_id, file_path, file_type, progress, date_created, rating_period) VALUES ($task_id, $faculty_id, '$uploadDir$newFileName', '$fileType', 'For Verification', NOW(), '$rating_period')");
+            $this->db->query("INSERT INTO task_progress (task_id, faculty_id, file_path, file_type, progress, date_created, rating_period, actual_accomplishment) VALUES ($task_id, $faculty_id, '$uploadDir$newFileName', '$fileType', 'For Verification', NOW(), '$rating_period', '$actual_accomplishment')");
         }
         
         echo json_encode(["status" => "success", "message" => "File submitted successfully."]);
@@ -2454,6 +2455,29 @@ function submit_file() {
 			return 1;
 		}
 		return 0;
+	}
+
+	function verify_mov(){
+		extract($_POST);
+		$id = intval($id);
+		$status = $this->db->real_escape_string($status);
+		$verified_by = intval($_SESSION['login_id'] ?? 0);
+		$remarks = isset($remarks) ? $this->db->real_escape_string($remarks) : '';
+		$now = date('Y-m-d H:i:s');
+
+		if ($status === 'Verified') {
+			$sql = "UPDATE mov_uploads
+				SET status = 'Verified', verified_by = $verified_by, verified_date = '$now', remarks = ''
+				WHERE id = $id";
+		} else {
+			// Rejected (or any non-Verified) — keep/store remarks
+			$sql = "UPDATE mov_uploads
+				SET status = 'Rejected', verified_by = $verified_by, verified_date = '$now', remarks = '$remarks'
+				WHERE id = $id";
+		}
+
+		$update = $this->db->query($sql);
+		return $update ? 1 : 0;
 	}
 	
 	function get_mov_summary(){

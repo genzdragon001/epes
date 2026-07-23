@@ -37,6 +37,420 @@ function getAllocation($conn, $position_id, $designation_id, $category, $sub_cat
 }
 }
 
+if (!function_exists('computeRatingBreakdown')) {
+/**
+ * Full rating breakdown — mirrors rating.php computation exactly.
+ * Returns an array with all section values, task details, allocations,
+ * and the overall total. Used by ipcr_generator.php (IPCR View) to ensure
+ * the IPCR preview matches rating.php numbers.
+ *
+ * @param mysqli $conn
+ * @param int $faculty_id
+ * @param int $position_id
+ * @param int $designation_id  Raw designation_id from employee_list (may be 0)
+ * @param string $period_code  Canonical rating_period code
+ * @param string $period_filter  SQL fragment "AND rating_period IN (...)"
+ * @return array|null  Full breakdown or null if no active sections
+ */
+function computeRatingBreakdown($conn, $faculty_id, $position_id, $designation_id, $period_code, $period_filter = '') {
+    $is_cos = ($position_id == 19);
+    $can_see_re = ($position_id >= 1 && $position_id <= 18);
+
+    // --- Allocations (same fallback as rating.php) ---
+    $FACULTY_DESIG_ID = 3;
+    $alloc_desig_id = intval($designation_id ?? 0);
+    if ($alloc_desig_id > 0) {
+        $chk = $conn->query("SELECT COUNT(*) AS n FROM percentage_allocation WHERE position_id = $position_id AND designation_id = $alloc_desig_id AND is_active = 1");
+        $has_own_alloc = $chk ? (int)$chk->fetch_assoc()['n'] : 0;
+        if ($has_own_alloc == 0 && !$is_cos) {
+            $alloc_desig_id = $FACULTY_DESIG_ID;
+        }
+    } elseif ($is_cos) {
+        $alloc_desig_id = $FACULTY_DESIG_ID;
+    }
+    $desig_cond = ($alloc_desig_id > 0)
+        ? "designation_id = " . intval($alloc_desig_id)
+        : "(designation_id IS NULL OR designation_id = 0)";
+    $allocations = [];
+    $alloc_qry = $conn->query("SELECT * FROM percentage_allocation WHERE position_id = $position_id AND $desig_cond AND is_active = 1");
+    while ($row = $alloc_qry->fetch_assoc()) {
+        $key = $row['category'];
+        if ($row['sub_category']) $key .= '_' . $row['sub_category'];
+        if (!isset($allocations[$key])) $allocations[$key] = floatval($row['percentage']);
+    }
+    if (isset($allocations['core_instruction']) && !isset($allocations['core_instructions'])) {
+        $allocations['core_instructions'] = $allocations['core_instruction'];
+    }
+
+    $str_pct = $allocations['strategic'] ?? 0;
+    $core_pct = $allocations['core_total'] ?? 0;
+    $res_pct = $allocations['core_research'] ?? 0;
+    $ext_pct = $allocations['core_extension'] ?? 0;
+    $supp_pct = $allocations['support'] ?? 0;
+    $ter_pct = $allocations['core_ter'] ?? 0;
+    $instr_pct_raw = $allocations['core_instructions'] ?? 0;
+    $inst_pct = $ter_pct + $instr_pct_raw;
+    $ter_split = $ter_pct;
+    $instr_split = $instr_pct_raw;
+
+    // Strategic override for designated positions
+    if (!$is_cos) {
+        $has_strat_alloc = isset($allocations['strategic']) && $allocations['strategic'] > 0;
+        if ($has_strat_alloc) {
+            $str_pct = $allocations['strategic'];
+        } elseif ($designation_id > 0) {
+            $desig_qry = $conn->query("SELECT designation FROM designation_list WHERE id = " . intval($designation_id));
+            if ($desig_qry && $desig_row = $desig_qry->fetch_assoc()) {
+                $dname = $desig_row['designation'];
+                if (stripos($dname, 'Department Head') !== false || stripos($dname, 'Director') !== false ||
+                    stripos($dname, 'Dean') !== false || stripos($dname, 'Vice President') !== false) {
+                    $sa = $conn->query("SELECT percentage FROM percentage_allocation WHERE position_id = $position_id AND designation_id = " . intval($designation_id) . " AND category = 'strategic' AND is_active = 1 LIMIT 1");
+                    if ($sa && $sar = $sa->fetch_assoc()) $str_pct = floatval($sar['percentage']);
+                }
+            }
+        }
+    }
+
+    $core_total_display = getAllocation($conn, $position_id, $alloc_desig_id, 'core', null);
+    if ($core_total_display == 0) $core_total_display = $core_pct;
+    $core_effective_pct = $core_total_display;
+
+    // --- Category visibility ---
+    $has_instructions = isset($allocations['core_instructions']) && $allocations['core_instructions'] > 0;
+    $has_research = isset($allocations['core_research']) && $allocations['core_research'] > 0 && $can_see_re;
+    $has_extension = isset($allocations['core_extension']) && $allocations['core_extension'] > 0 && $can_see_re;
+    $has_support = isset($allocations['support']) && $allocations['support'] > 0;
+
+    $cat_filters = ["t.category = 'strategic'"];
+    if ($has_instructions) $cat_filters[] = "(t.category = 'core' AND (t.sub_category IS NULL OR t.sub_category IN ('instructions','ter','instruction')))";
+    if ($has_research) $cat_filters[] = "(t.category = 'core' AND t.sub_category = 'research')";
+    if ($has_extension) $cat_filters[] = "(t.category = 'core' AND t.sub_category = 'extension')";
+    if ($has_support) $cat_filters[] = "t.category = 'support'";
+
+    // --- Task query (same filters as rating.php) ---
+    $where = "t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id)";
+    if (!empty($designation_id) && $designation_id > 0) {
+        $where .= " AND t.id NOT IN (SELECT task_id FROM target_exemptions WHERE position_id = $position_id OR designation_id = " . intval($designation_id) . ")";
+    } else {
+        $where .= " AND t.id NOT IN (SELECT task_id FROM target_exemptions WHERE position_id = $position_id)";
+    }
+    if ($is_cos) {
+        $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0)";
+    } elseif (!empty($designation_id) && $designation_id > 0) {
+        $where .= " AND " . task_designation_match($designation_id);
+    } else {
+        $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0)";
+    }
+    $where .= " AND (" . implode(" OR ", $cat_filters) . ")";
+
+    $tp_on = "tp.task_id = t.id AND tp.faculty_id = $faculty_id";
+    if ($period_filter !== '') {
+        $tp_on .= " " . $period_filter;
+    }
+
+    $qry = $conn->query("
+        SELECT t.id, t.category, t.sub_category, t.success_indicators, t.targets_measures,
+               t.quality as tq, t.timeliness as tt, t.efficiency as te,
+               tp.progress, tp.date_submitted, tp.date_verified, tp.file_path,
+               r.efficiency as re, r.timeliness as rt, r.quality as rq
+        FROM task_list t
+        LEFT JOIN task_progress tp ON $tp_on
+        LEFT JOIN ratings r ON r.task_id = t.id AND r.employee_id = $faculty_id
+        WHERE $where ORDER BY t.category, t.sub_category, t.id
+    ");
+
+    // --- Build task data (same as rating.php) ---
+    $tasks_by_section = [
+        'strategic' => [], 'core_instructions' => [],
+        'core_research' => [], 'core_extension' => [], 'support' => []
+    ];
+    $all_tasks = []; // flat list for indicator table
+    if ($qry) {
+        while ($row = $qry->fetch_assoc()) {
+            $cat = strtolower($row['category'] ?? '');
+            $sub = strtolower($row['sub_category'] ?? '');
+            $progress = $row['progress'] ?? null;
+            $is_na = ($progress === 'N/A');
+            $has_submission = !empty($progress) && $progress == 'Verified';
+
+            if ($is_na) {
+                $task_data = [
+                    'task_id' => $row['id'],
+                    'success_indicators' => $row['success_indicators'] ?? '',
+                    'targets_measures' => $row['targets_measures'] ?? '',
+                    'average' => 'N/A',
+                    'efficiency' => 'N/A',
+                    'timeliness' => 'N/A',
+                    'quality' => 'N/A',
+                    'has_submission' => false,
+                    'is_na' => true,
+                    'sub_category' => $row['sub_category'] ?? '',
+                    'category' => $row['category'] ?? '',
+                    'progress' => $progress,
+                    'date_submitted' => $row['date_submitted'] ?? null,
+                    'date_verified' => $row['date_verified'] ?? null,
+                    'file_path' => $row['file_path'] ?? null,
+                ];
+            } elseif (!$has_submission) {
+                $task_data = [
+                    'task_id' => $row['id'],
+                    'success_indicators' => $row['success_indicators'] ?? '',
+                    'targets_measures' => $row['targets_measures'] ?? '',
+                    'average' => '0',
+                    'efficiency' => '-',
+                    'timeliness' => '-',
+                    'quality' => '-',
+                    'has_submission' => false,
+                    'is_na' => false,
+                    'sub_category' => $row['sub_category'] ?? '',
+                    'category' => $row['category'] ?? '',
+                    'progress' => $progress,
+                    'date_submitted' => $row['date_submitted'] ?? null,
+                    'date_verified' => $row['date_verified'] ?? null,
+                    'file_path' => $row['file_path'] ?? null,
+                ];
+            } else {
+                $re = (isset($row['re']) && is_numeric($row['re']) && $row['re'] > 0) ? (float)$row['re'] : null;
+                $rt = (isset($row['rt']) && is_numeric($row['rt']) && $row['rt'] > 0) ? (float)$row['rt'] : null;
+                $rq = (isset($row['rq']) && is_numeric($row['rq']) && $row['rq'] > 0) ? (float)$row['rq'] : null;
+                $criteria = [];
+                if ($row['te'] == 'Applicable' && $re !== null) $criteria['efficiency'] = $re;
+                if ($row['tt'] == 'Applicable' && $rt !== null) $criteria['timeliness'] = $rt;
+                if ($row['tq'] == 'Applicable' && $rq !== null) $criteria['quality'] = $rq;
+                $average = count($criteria) > 0 ? number_format(array_sum($criteria) / count($criteria), 2) : '0';
+                $task_data = [
+                    'task_id' => $row['id'],
+                    'success_indicators' => $row['success_indicators'] ?? '',
+                    'targets_measures' => $row['targets_measures'] ?? '',
+                    'average' => $average,
+                    'efficiency' => ($row['te'] == 'Applicable' && $re !== null) ? $re : '-',
+                    'timeliness' => ($row['tt'] == 'Applicable' && $rt !== null) ? $rt : '-',
+                    'quality' => ($row['tq'] == 'Applicable' && $rq !== null) ? $rq : '-',
+                    'has_submission' => true,
+                    'is_na' => false,
+                    'sub_category' => $row['sub_category'] ?? '',
+                    'category' => $row['category'] ?? '',
+                    'progress' => $progress,
+                    'date_submitted' => $row['date_submitted'] ?? null,
+                    'date_verified' => $row['date_verified'] ?? null,
+                    'file_path' => $row['file_path'] ?? null,
+                ];
+            }
+
+            $all_tasks[] = $task_data;
+            if ($cat == 'strategic') $tasks_by_section['strategic'][] = $task_data;
+            elseif ($cat == 'core') {
+                if ($sub == 'research') $tasks_by_section['core_research'][] = $task_data;
+                elseif ($sub == 'extension') $tasks_by_section['core_extension'][] = $task_data;
+                else $tasks_by_section['core_instructions'][] = $task_data;
+            } elseif ($cat == 'support') $tasks_by_section['support'][] = $task_data;
+        }
+    }
+
+    // --- calcAverage ---
+    $calcAverage = function($tasks) {
+        $sum = 0; $count = 0;
+        foreach ($tasks as $task) {
+            if (isset($task['is_na']) && $task['is_na']) continue;
+            if (isset($task['has_submission']) && $task['has_submission'] && is_numeric($task['average'])) {
+                $sum += (float)$task['average'];
+                $count++;
+            }
+        }
+        return ['sum' => $sum, 'count' => $count, 'ave' => $count > 0 ? number_format($sum / $count, 2) : 0];
+    };
+
+    $str_ave = $calcAverage($tasks_by_section['strategic']);
+    $inst_ave = $calcAverage($tasks_by_section['core_instructions']);
+    $res_ave = $calcAverage($tasks_by_section['core_research']);
+    $ext_ave = $calcAverage($tasks_by_section['core_extension']);
+
+    // --- Instruction rating: TER (50%) + Instruction (50%) ---
+    $ter_sum = 0; $ter_count = 0;
+    $instruction_sum = 0; $instruction_count = 0;
+    foreach ($tasks_by_section['core_instructions'] as $task) {
+        if (isset($task['is_na']) && $task['is_na']) continue;
+        if (isset($task['has_submission']) && $task['has_submission'] && is_numeric($task['average'])) {
+            $sub = strtolower($task['sub_category'] ?? '');
+            if ($sub == 'ter') { $ter_sum += (float)$task['average']; $ter_count++; }
+            elseif ($sub == 'instruction' || $sub == 'instructions') { $instruction_sum += (float)$task['average']; $instruction_count++; }
+        }
+    }
+    $ter_ave = $ter_count > 0 ? $ter_sum / $ter_count : 0;
+    $inst_divisor = $instruction_count > 0 ? $instruction_count : 1;
+    $instruction_div = $instruction_count > 0 ? $instruction_sum / $inst_divisor : 0;
+    $instruction_rating = ($ter_ave * 0.50) + ($instruction_div * 0.50);
+    $inst_val = floatval(number_format($instruction_rating, 2));
+
+    // --- Research (divide by expected count) ---
+    $res_val = 0;
+    if (count($tasks_by_section['core_research']) > 0 || $has_research) {
+        $research_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'research' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
+        $expected_research_count = $research_task_qry ? (int)$research_task_qry->fetch_assoc()['task_count'] : 0;
+        $r_divisor = $expected_research_count > 0 ? $expected_research_count : ($res_ave['count'] > 0 ? $res_ave['count'] : 1);
+        $res_val = $res_ave['count'] > 0 ? $res_ave['sum'] / $r_divisor : 0;
+        $res_val = floatval(number_format($res_val, 2));
+    }
+
+    // --- Extension (divide by expected count) ---
+    $ext_val = 0;
+    if (count($tasks_by_section['core_extension']) > 0 || $has_extension) {
+        $extension_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'extension' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
+        $expected_extension_count = $extension_task_qry ? (int)$extension_task_qry->fetch_assoc()['task_count'] : 0;
+        $e_divisor = $expected_extension_count > 0 ? $expected_extension_count : ($ext_ave['count'] > 0 ? $ext_ave['count'] : 1);
+        $ext_val = $ext_ave['count'] > 0 ? $ext_ave['sum'] / $e_divisor : 0;
+        $ext_val = floatval(number_format($ext_val, 2));
+    }
+
+    // --- Support (divide by all non-N/A tasks) ---
+    $supp_sum = 0; $supp_count = 0;
+    foreach ($tasks_by_section['support'] as $stask) {
+        if (isset($stask['is_na']) && $stask['is_na']) continue;
+        $supp_count++;
+        if (isset($stask['has_submission']) && $stask['has_submission'] && is_numeric($stask['average'])) {
+            $supp_sum += (float)$stask['average'];
+        }
+    }
+    $supp_val = $supp_count > 0 ? floatval(number_format($supp_sum / $supp_count, 2)) : 0;
+
+    // --- Active flags ---
+    $str_active = ($str_ave['count'] > 0);
+    $inst_active = ($inst_ave['count'] > 0);
+    $res_active = ($res_ave['count'] > 0);
+    $ext_active = ($ext_ave['count'] > 0);
+    $supp_active = ($supp_count > 0);
+
+    if (!$str_active && !$inst_active && !$res_active && !$ext_active && !$supp_active) return null;
+
+    // --- Core weighted average ---
+    $show_instructions_pct = $core_pct > 0;
+    $show_research_pct = $has_research;
+    $show_extension_pct = $has_extension;
+
+    $core_weighted_sum = 0;
+    $core_total_sub_pct = 0;
+    if ($show_instructions_pct) {
+        $core_weighted_sum += ($inst_active ? $inst_val : 0) * $inst_pct;
+        $core_total_sub_pct += $inst_pct;
+    }
+    if ($show_research_pct) {
+        $core_weighted_sum += ($res_active ? $res_val : 0) * $res_pct;
+        $core_total_sub_pct += $res_pct;
+    }
+    if ($show_extension_pct) {
+        $core_weighted_sum += ($ext_active ? $ext_val : 0) * $ext_pct;
+        $core_total_sub_pct += $ext_pct;
+    }
+    $core_function = $core_total_sub_pct > 0 ? $core_weighted_sum / $core_total_sub_pct : 0;
+    $core_weighted = $core_function * ($core_effective_pct / 100);
+    $core_weighted_pct = ($inst_active || $res_active || $ext_active) ? $core_total_sub_pct : 0;
+
+    // --- Total: sum of portions ---
+    $str_val = floatval($str_ave['ave']);
+    $str_portion = ($str_active ? $str_val * ($str_pct / 100) : 0);
+    $core_portion = $core_weighted;
+    $supp_portion = ($supp_active ? $supp_val * ($supp_pct / 100) : 0);
+    $total = $str_portion + $core_portion + $supp_portion;
+
+    // Split instruction tasks into TER and Instruction sub-lists
+    $ter_tasks = [];
+    $instr_tasks = [];
+    foreach ($tasks_by_section['core_instructions'] as $task) {
+        $sub = strtolower($task['sub_category'] ?? '');
+        if ($sub == 'ter') $ter_tasks[] = $task;
+        else $instr_tasks[] = $task;
+    }
+
+    return [
+        // Section tasks (for detail table)
+        'tasks_by_section' => $tasks_by_section,
+        'all_tasks' => $all_tasks,
+        'ter_tasks' => $ter_tasks,
+        'instr_tasks' => $instr_tasks,
+
+        // Section averages
+        'str_ave' => $str_ave,
+        'inst_ave' => $inst_ave,
+        'res_ave' => $res_ave,
+        'ext_ave' => $ext_ave,
+        'supp_ave' => ['sum' => $supp_sum, 'count' => $supp_count, 'ave' => $supp_count > 0 ? number_format($supp_sum / $supp_count, 2) : 0],
+
+        // Instruction breakdown
+        'ter_ave' => $ter_count > 0 ? number_format($ter_ave, 2) : '0.00',
+        'ter_count' => $ter_count,
+        'instruction_div' => number_format($instruction_div, 2),
+        'instruction_count' => $instruction_count,
+        'instruction_rating' => number_format($instruction_rating, 2),
+        'inst_divisor' => $inst_divisor,
+
+        // Research/Extension
+        'res_val' => $res_val,
+        'ext_val' => $ext_val,
+
+        // Section values (for over-all table)
+        'str_val' => $str_val,
+        'inst_val' => $inst_val,
+        'supp_val' => $supp_val,
+
+        // Active flags
+        'str_active' => $str_active,
+        'inst_active' => $inst_active,
+        'res_active' => $res_active,
+        'ext_active' => $ext_active,
+        'supp_active' => $supp_active,
+
+        // Percentages
+        'str_pct' => $str_pct,
+        'core_pct' => $core_pct,
+        'res_pct' => $res_pct,
+        'ext_pct' => $ext_pct,
+        'supp_pct' => $supp_pct,
+        'ter_pct' => $ter_pct,
+        'instr_pct_raw' => $instr_pct_raw,
+        'inst_pct' => $inst_pct,
+        'ter_split' => $ter_split,
+        'instr_split' => $instr_split,
+        'core_total_display' => $core_total_display,
+        'core_effective_pct' => $core_effective_pct,
+
+        // Visibility
+        'show_strategic' => (!$is_cos && ($str_pct > 0 || $designation_id > 0)),
+        'show_instructions' => $has_instructions,
+        'show_research' => $has_research,
+        'show_extension' => $has_extension,
+        'show_support' => $has_support,
+        'show_strategic_pct' => (!$is_cos && $str_pct > 0),
+        'show_instructions_pct' => $core_pct > 0,
+        'show_research_pct' => $has_research,
+        'show_extension_pct' => $has_extension,
+        'show_support_pct' => $has_support,
+        'is_cos' => $is_cos,
+
+        // Core computation
+        'core_function' => $core_function,
+        'core_weighted' => $core_weighted,
+        'core_weighted_pct' => $core_weighted_pct,
+
+        // Portions
+        'str_portion' => $str_portion,
+        'core_portion' => $core_portion,
+        'supp_portion' => $supp_portion,
+
+        // Final
+        'total' => round($total, 2),
+        'total_portion' => round($total, 2),
+        'adjectival' => getAdjectivalRating($total),
+
+        // Allocations (for weight table)
+        'allocations' => $allocations,
+        'alloc_desig_id' => $alloc_desig_id,
+    ];
+}
+}
+
+// ====================================================================
+// computeWeightedRating — returns only the final total (for faculty_list)
+// ====================================================================
 if (!function_exists('computeWeightedRating')) {
 function computeWeightedRating($conn, $faculty_id, $position_id, $designation_id, $period_code, $period_filter = '') {
     // ====================================================================
@@ -57,6 +471,9 @@ function computeWeightedRating($conn, $faculty_id, $position_id, $designation_id
         if ($has_own_alloc == 0 && !$is_cos) {
             $alloc_desig_id = $FACULTY_DESIG_ID;
         }
+    } elseif ($is_cos) {
+        // COS with designation_id=0: fall back to Faculty designation (3)
+        $alloc_desig_id = $FACULTY_DESIG_ID;
     }
     $desig_cond = ($alloc_desig_id > 0)
         ? "designation_id = " . intval($alloc_desig_id)

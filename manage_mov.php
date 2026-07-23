@@ -1,6 +1,6 @@
 <?php
-session_start();
 include 'db_connect.php';
+// Session already started by db_connect.php; do NOT call session_start() again.
 
 $faculty_id = $_SESSION['login_id'] ?? 0;
 if ($faculty_id == 0) {
@@ -9,6 +9,7 @@ if ($faculty_id == 0) {
 }
 $preselect_target_id = isset($_GET['target_id']) ? intval($_GET['target_id']) : 0;
 $mov_type = isset($_GET['type']) ? $_GET['type'] : '';
+$preselect_period = isset($_GET['period']) ? $_GET['period'] : '';  // format: "Semester|Year"
 
 // Get faculty details
 $faculty = $conn->query("SELECT e.position_id, e.designation_id, e.department_id,
@@ -214,7 +215,9 @@ $targets = $conn->query($target_query);
                 $periods = $conn->query("SELECT id, semester, year FROM rating_period ORDER BY id DESC");
                 while ($p = $periods->fetch_assoc()) {
                     $period_value = $p['semester'] . ' ' . $p['year'];
-                    echo "<option value='{$period_value}'>{$period_value}</option>";
+                    $period_key = $p['semester'] . '|' . $p['year'];
+                    $sel = ($preselect_period !== '' && $period_key === $preselect_period) ? ' selected' : '';
+                    echo "<option value='{$period_value}'{$sel}>{$period_value}</option>";
                 }
                 ?>
             </select>

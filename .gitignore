@@ -28,7 +28,16 @@ debug_log.txt
 SUMMARY-SHEET-2025.xlsx
 manuscript_text.txt
 epes_db.sql
-database/epes_db.sql
+# BUT keep version-controlled migration scripts
+!migrations/
+!migrations/*.sql
+
+# Design mockups / throwaway sketches (not part of the app)
+sketches/
+
+# Stray backup / demo files
+*.bak
+target_list_layout_demo.php
 
 # Database folder (schema/migrations kept out of version control)
 database/

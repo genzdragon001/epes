@@ -41,6 +41,7 @@ $csrf_protected_actions = [
 	'save_percentage_allocation', 'delete_percentage_allocation',
 	'save_percentage_allocation_quick',
 	'delete_mov',
+	'verify_mov',
 	'update_period', 'cascade_compute',
 	'delete_period'
 ];
@@ -295,10 +296,48 @@ if($action == 'save_comment'){
 	if($save_comment)
 		echo $save_comment;
 }
+if($action == 'save_target_comment'){
+	header('Content-Type: application/json');
+	$task_id = isset($_POST['task_id']) ? (int)$_POST['task_id'] : 0;
+	$faculty_id = isset($_POST['faculty_id']) ? (int)$_POST['faculty_id'] : 0;
+	$evaluator_id = $_SESSION['login_id'] ?? 0;
+	$comment_text = isset($_POST['comment_text']) ? $conn->real_escape_string($_POST['comment_text']) : '';
+	if ($task_id > 0 && $faculty_id > 0 && $evaluator_id > 0 && !empty($comment_text)) {
+		$conn->query("INSERT INTO target_comments (task_id, faculty_id, evaluator_id, comment_text, rating_period) VALUES ($task_id, $faculty_id, $evaluator_id, '$comment_text', '')");
+		echo json_encode(["status" => "success", "message" => "Comment saved."]);
+	} else {
+		echo json_encode(["status" => "error", "message" => "Invalid comment data."]);
+	}
+	exit;
+}
 if($action == 'submit_file'){
 	$submit_file = $crud->submit_file();
 	if($submit_file)
 		echo $submit_file;
+}
+if($action == 'update_accomplishment'){
+	header('Content-Type: application/json');
+	$task_id = isset($_POST['task_id']) ? (int)$_POST['task_id'] : 0;
+	$faculty_id = $_SESSION['login_id'] ?? 0;
+	$accomplishment = isset($_POST['actual_accomplishment']) ? $conn->real_escape_string($_POST['actual_accomplishment']) : '';
+	if ($task_id > 0 && $faculty_id > 0) {
+		// Only allow update if not yet verified
+		$check = $conn->query("SELECT id, progress FROM task_progress WHERE task_id = $task_id AND faculty_id = $faculty_id ORDER BY unix_timestamp(date_created) DESC LIMIT 1");
+		if ($check && $check->num_rows > 0) {
+			$row = $check->fetch_assoc();
+			if ($row['progress'] === 'Verified') {
+				echo json_encode(["status" => "error", "message" => "Cannot update — target is already verified."]);
+			} else {
+				$conn->query("UPDATE task_progress SET actual_accomplishment = '$accomplishment' WHERE id = " . (int)$row['id']);
+				echo json_encode(["status" => "success", "message" => "Accomplishment updated."]);
+			}
+		} else {
+			echo json_encode(["status" => "error", "message" => "No submission found for this target."]);
+		}
+	} else {
+		echo json_encode(["status" => "error", "message" => "Invalid request."]);
+	}
+	exit;
 }
 if($action == 'submit_na'){
 	$submit_na = $crud->submit_na();
@@ -350,6 +389,11 @@ if($action == 'get_faculty_movs'){
 }
 if($action == 'delete_mov'){
 	echo $crud->delete_mov();
+}
+if($action == 'verify_mov'){
+	$verify_mov = $crud->verify_mov();
+	if($verify_mov)
+		echo $verify_mov;
 }
 if($action == 'get_mov_summary'){
 	echo $crud->get_mov_summary();

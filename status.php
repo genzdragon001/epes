@@ -3,6 +3,9 @@
 <?php
 $id = intval($_SESSION['login_id']);
 
+// Period filter for single-table queries (no alias needed)
+// The JOIN query below prefixes rating_period with tp. to avoid ambiguity with ratings.rating_period
+
 $total_logs = $conn->query("SELECT COUNT(*) FROM task_progress WHERE faculty_id = $id $period_filter")->fetch_row()[0];
 $verified_count = $conn->query("SELECT COUNT(*) FROM task_progress WHERE faculty_id = $id AND progress = 'Verified' $period_filter")->fetch_row()[0];
 $for_verification = $conn->query("SELECT COUNT(*) FROM task_progress WHERE faculty_id = $id AND progress = 'For Verification' $period_filter")->fetch_row()[0];
@@ -12,11 +15,27 @@ $qry = $conn->query("
     SELECT tp.*, t.success_indicators, r.date_created as rated_on
     FROM task_progress tp
     INNER JOIN task_list t ON tp.task_id = t.id
-    LEFT JOIN ratings r ON r.task_id = tp.task_id AND r.employee_id = tp.faculty_id
-    WHERE tp.faculty_id = $id $period_filter
+    LEFT JOIN ratings r ON r.task_id = tp.task_id AND r.employee_id = tp.faculty_id AND r.rating_period = tp.rating_period
+    WHERE tp.faculty_id = $id" . str_replace('rating_period', 'tp.rating_period', $period_filter) . "
     ORDER BY tp.date_created DESC
 ");
 ?>
+
+<div class="col-lg-12">
+    <?php if ($selected_period): ?>
+    <div class="row mb-2">
+        <div class="col-md-8">
+            <div class="info-box bg-gradient-primary" style="min-height:60px;">
+                <span class="info-box-icon" style="width:50px;"><i class="fa fa-calendar-alt"></i></span>
+                <div class="info-box-content">
+                    <span class="info-box-text">Rating Period</span>
+                    <span class="info-box-number" style="font-size:1rem;"><?= htmlspecialchars($selected_period['semester']) ?> <?= htmlspecialchars($selected_period['year']) ?> <?= !empty($selected_period['is_active']) ? '<span class="badge badge-light ml-1">Current</span>' : '' ?></span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+</div>
 
 <div class="row">
     <div class="col-lg-3 col-6">
