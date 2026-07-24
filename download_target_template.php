@@ -48,6 +48,9 @@ $headers = [
     'quality',             // Applicable | Not Applicable (default Applicable)
     'timeliness',          // Applicable | Not Applicable (default Applicable)
     'efficiency',          // Applicable | Not Applicable (default Applicable)
+    'quality_scale',       // TEXT rating scale for Quality (optional; shown only when Quality = Applicable)
+    'timeliness_scale',    // TEXT rating scale for Timeliness (optional; shown only when Timeliness = Applicable)
+    'efficiency_scale',    // TEXT rating scale for Efficiency (optional; shown only when Efficiency = Applicable)
     'is_active',           // 1 | 0 (default 1)
 ];
 fputcsv($out, $headers);
@@ -58,21 +61,33 @@ fputcsv($out, [
     'Teaching effectiveness rating of at least 4.0',
     'Attain a mean rating of 4.0 in student/peer evaluation',
     'Teaching Effectiveness', '2026-06-30',
-    'Applicable', 'Applicable', 'Applicable', '1',
+    'Applicable', 'Applicable', 'Applicable',
+    '5 - Excellent, 4 - Very Good, 3 - Good, 2 - Fair, 1 - Poor',
+    '5 - before the deadline, 3 - on the deadline, 2 - beyond the deadline, 1 - no submission',
+    '5 - 100%, 4 - 90-99%, 3 - 80-89%, 2 - 51-79%, 1 - 50% and below',
+    '1',
 ]);
 fputcsv($out, [
     'core', 'research', '', 'Associate Professor I', '3',
     'At least 1 research published in a reputable journal',
     '1 published research paper within the rating period',
     'Research Publication', '2026-12-15',
-    'Applicable', 'Not Applicable', 'Applicable', '1',
+    'Applicable', 'Not Applicable', 'Applicable',
+    '5 - Excellent, 4 - Very Good, 3 - Good, 2 - Fair, 1 - Poor',
+    '',
+    '5 - 100%, 4 - 90-99%, 3 - 80-89%, 2 - 51-79%, 1 - 50% and below',
+    '1',
 ]);
 fputcsv($out, [
     'strategic', '', 'Department Head|Dean', '', '0',
     'Submission of departmental strategic plan',
     'Approved strategic plan submitted on or before deadline',
     'Strategic Planning', '2026-05-31',
-    'Applicable', 'Applicable', 'Applicable', '1',
+    'Applicable', 'Applicable', 'Applicable',
+    '5 - Excellent, 4 - Very Good, 3 - Good, 2 - Fair, 1 - Poor',
+    '5 - before the deadline, 3 - on the deadline, 2 - beyond the deadline, 1 - no submission',
+    '5 - 100%, 4 - 90-99%, 3 - 80-89%, 2 - 51-79%, 1 - 50% and below',
+    '1',
 ]);
 
 // ---- Reference block (commented; importer ignores lines starting with #) ----
@@ -84,6 +99,7 @@ fputcsv($out, ['# designation', 'blank = All. Multiple: separate with | (e.g. De
 fputcsv($out, ['# academic_rank', 'blank = All. Valid: ' . implode(' ; ', $ranks)]);
 fputcsv($out, ['# mfo', 'Major Function Output index 0-4 (grouping). Default 0']);
 fputcsv($out, ['# quality/timeliness/efficiency', 'Applicable | Not Applicable (also accepts Yes/No/N/A). Default Applicable']);
+fputcsv($out, ['# quality_scale / timeliness_scale / efficiency_scale', 'optional free-text rating scale; only used when the matching criterion = Applicable. e.g. "5 - Excellent, 4 - Very Good, 3 - Good, 2 - Fair, 1 - Poor"']);
 fputcsv($out, ['# is_active', '1 = Active (default), 0 = Inactive']);
 
 fclose($out);

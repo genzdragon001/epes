@@ -399,8 +399,8 @@ $ind_labels = array_map(fn($p) => ft_label($p['semester'], $p['year']), $all_per
       <table>
         <thead><tr>
           <th style="text-align:left;">Period</th>
-          <th>IPCR</th><th>DP</th><th>OPCR</th>
-          <th>IPCR Rating</th><th>DP Rating</th><th>OPCR Rating</th>
+          <th>IPCR</th>
+          <th>IPCR Rating</th>
         </tr></thead>
         <tbody>
         <?php foreach ($ind_labels as $i => $lab):
@@ -412,11 +412,7 @@ $ind_labels = array_map(fn($p) => ft_label($p['semester'], $p['year']), $all_per
           <tr>
             <td class="name"><strong><?= htmlspecialchars($lab) ?></strong></td>
             <td class="badge <?= ft_adjClass($ip) ?>"><?= $ip_str ?></td>
-            <td class="badge <?= ft_adjClass($dp) ?>"><?= $dp_str ?></td>
-            <td class="badge <?= ft_adjClass($op) ?>"><?= $op_str ?></td>
             <td><?= $ip !== null ? getAdjectivalRating($ip) : '' ?></td>
-            <td><?= $dp !== null ? getAdjectivalRating($dp) : '' ?></td>
-            <td><?= $op !== null ? getAdjectivalRating($op) : '' ?></td>
           </tr>
         <?php endforeach; ?>
         </tbody>
@@ -470,7 +466,13 @@ $ind_labels = array_map(fn($p) => ft_label($p['semester'], $p['year']), $all_per
   .ft-page .bands{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:.78rem;color:var(--epes-muted);}
   .ft-page .bands span b{color:#34465c;}
 
-  .ft-page table{width:100%;border-collapse:collapse;font-size:.82rem;}
+  /* table-layout:fixed + explicit display keeps the body cells on the SAME
+     column grid as the header row. Without this, a global AdminLTE rule can
+     flip <td> to display:inline-block on init, which makes data cells flow
+     independently of the headers (e.g. the narrow IPCR cell and POOR landing
+     under the wrong column). */
+  .ft-page table{width:100%;border-collapse:collapse;font-size:.82rem;table-layout:fixed;}
+  .ft-page table th,.ft-page table td{display:table-cell !important;}
   .ft-page th,.ft-page td{padding:9px 10px;text-align:center;border-bottom:1px solid var(--epes-border);}
   .ft-page th{background:var(--epes-dark);color:#fff;font-weight:600;}
   .ft-page tbody tr:nth-child(even){background:#fafbfd;}

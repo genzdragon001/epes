@@ -120,6 +120,9 @@ while (($row = fgetcsv($fh)) !== false) {
     $quality  = cell($row, $idx, 'quality');
     $timeli   = cell($row, $idx, 'timeliness');
     $effic    = cell($row, $idx, 'efficiency');
+    $q_scale  = cell($row, $idx, 'quality_scale');
+    $t_scale  = cell($row, $idx, 'timeliness_scale');
+    $e_scale  = cell($row, $idx, 'efficiency_scale');
     $active_r = cell($row, $idx, 'is_active');
 
     $rowErr = [];
@@ -221,6 +224,9 @@ while (($row = fgetcsv($fh)) !== false) {
         'quality' => $q,
         'timeliness' => $t,
         'efficiency' => $e,
+        'quality_scale' => ($q_scale !== '' ? $q_scale : null),
+        'timeliness_scale' => ($t_scale !== '' ? $t_scale : null),
+        'efficiency_scale' => ($e_scale !== '' ? $e_scale : null),
         'is_active' => $is_active,
     ];
 }
@@ -241,8 +247,9 @@ try {
         "INSERT INTO task_list
          (mfo, designation_id, academic_rank_id, category, sub_category, major_output,
           success_indicators, targets_measures, deadline, quality, timeliness, efficiency,
+          quality_scale, timeliness_scale, efficiency_scale,
           is_active, created_by, date_created)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
     );
     if (!$stmt) throw new Exception($conn->error);
 
@@ -252,12 +259,18 @@ try {
     if (!$jstmt) throw new Exception($conn->error);
 
     foreach ($rowsToInsert as $r) {
+        // types: mfo i | designation_id i | academic_rank_id i
+        //        category s | sub_category s | major_output s | success_indicators s
+        //        targets_measures s | deadline s | quality s | timeliness s | efficiency s
+        //        quality_scale s | timeliness_scale s | efficiency_scale s
+        //        is_active i | created_by i
         $stmt->bind_param(
-            'iiisssssssss' . 'ii',
+            'iii' . 'ssssssssssss' . 'ii',
             $r['mfo'], $r['designation_id'], $r['academic_rank_id'], $r['category'],
             $r['sub_category'], $r['major_output'], $r['success_indicators'],
             $r['targets_measures'], $r['deadline'], $r['quality'], $r['timeliness'],
-            $r['efficiency'], $r['is_active'], $created_by
+            $r['efficiency'], $r['quality_scale'], $r['timeliness_scale'], $r['efficiency_scale'],
+            $r['is_active'], $created_by
         );
         $stmt->execute();
         $newTaskId = $conn->insert_id;
