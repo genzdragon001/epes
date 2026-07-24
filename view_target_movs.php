@@ -20,7 +20,44 @@ $can_verify = is_evaluator();
 $viewer_id = intval($_SESSION['login_id'] ?? 0);
 $is_owner = ($viewer_id === $faculty_id) && !$can_verify;
 
-// Get MOVs for this target from mov_uploads
+// ---------------------------------------------------------------------------
+// PRIMARY / MAIN MOV: submission uploaded from the Target List (task_progress).
+// This is the authoritative submission for the target.
+// ---------------------------------------------------------------------------
+$progress = null;
+$pq = $conn->query("SELECT * FROM task_progress 
+    WHERE task_id = $target_id AND faculty_id = $faculty_id 
+    ORDER BY date_created DESC LIMIT 1");
+if ($pq && $pq->num_rows > 0) {
+    $progress = $pq->fetch_assoc();
+    $progress['real_path'] = epes_real_file_path($progress['file_path'], $progress['file_type']) ?: '';
+    $progress['progress']  = $progress['progress'] ?? '';
+}
+
+$prog_status = $progress['progress'] ?? '';
+$prog_badge = [
+    'For Verification' => 'badge-warning',
+    'Verified'         => 'badge-success',
+    'N/A'              => 'badge-secondary',
+    ''                 => 'badge-secondary'
+][$prog_status] ?? 'badge-secondary';
+
+$main_type  = strtolower($progress['file_type'] ?? '');
+$main_size  = '';
+if (!empty($progress['real_path']) && file_exists($progress['real_path'])) {
+    $bytes = filesize($progress['real_path']);
+    $su = ['B','KB','MB','GB'];
+    $si = 0;
+    while ($bytes >= 1024 && $si < count($su) - 1) { $bytes /= 1024; $si++; }
+    $main_size = round($bytes, 2) . ' ' . $su[$si];
+}
+$main_date = !empty($progress['date_created']) ? date('M d, Y h:i A', strtotime($progress['date_created'])) : '';
+
+$image_types = ['jpg','jpeg','png','gif','bmp','webp'];
+
+// ---------------------------------------------------------------------------
+// EXTRA MOVs: additional evidence uploaded via MOV Management (mov_uploads).
+// ---------------------------------------------------------------------------
 $movs = $conn->query("SELECT m.*, 
     DATE_FORMAT(m.date_submitted, '%Y-%m-%d %H:%i') as date_submitted
     FROM mov_uploads m
@@ -35,7 +72,56 @@ $movs = $conn->query("SELECT m.*,
         <small><i class="fa fa-check-circle"></i> <?php echo htmlspecialchars($target['success_indicators']); ?></small>
         <?php endif; ?>
     </div>
-    
+
+    <!-- ============ MAIN SUBMISSION (from Target List) ============ -->
+    <div class="card mb-3 border-primary">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h6 class="mb-0"><i class="fa fa-upload mr-1"></i> Submitted MOV <small class="font-weight-normal">(from Target List)</small></h6>
+            <span class="badge <?= $prog_badge ?>"><?= htmlspecialchars($prog_status ?: 'None') ?></span>
+        </div>
+        <div class="card-body">
+            <?php if ($progress && !empty($progress['real_path'])): ?>
+                <?php if (in_array($main_type, $image_types)): ?>
+                    <div class="text-center mb-2">
+                        <img src="<?= htmlspecialchars($progress['real_path']) ?>" class="img-fluid" style="max-height: 360px;" alt="Submitted MOV">
+                    </div>
+                <?php elseif ($main_type === 'pdf'): ?>
+                    <iframe src="<?= htmlspecialchars($progress['real_path']) ?>" style="width:100%; height:360px; border:1px solid #ddd;"></iframe>
+                <?php else: ?>
+                    <p class="text-muted mb-2"><i class="fa fa-file-o"></i> Preview not available for this file type. Use the download button below.</p>
+                <?php endif; ?>
+                <div class="small text-muted mb-2">
+                    <?= strtoupper($main_type) ?><?= $main_size ? ' &middot; ' . htmlspecialchars($main_size) : '' ?>
+                    <?= $main_date ? ' &middot; Submitted ' . htmlspecialchars($main_date) : '' ?>
+                </div>
+                <?php if (!empty($progress['actual_accomplishment'])): ?>
+                    <div class="p-2 mb-2" style="background:#f8f9fa; border-left:4px solid #007bff; border-radius:4px;">
+                        <small class="font-weight-bold text-muted">Actual Accomplishment:</small><br>
+                        <?= nl2br(htmlspecialchars($progress['actual_accomplishment'])) ?>
+                    </div>
+                <?php endif; ?>
+                <a href="<?= htmlspecialchars($progress['real_path']) ?>" target="_blank" class="btn btn-sm btn-info">
+                    <i class="fa fa-external-link"></i> Open
+                </a>
+                <a href="<?= htmlspecialchars($progress['real_path']) ?>" download class="btn btn-sm btn-outline-primary">
+                    <i class="fa fa-download"></i> Download
+                </a>
+            <?php elseif ($progress): ?>
+                <p class="text-muted mb-0">
+                    <?php if ($prog_status === 'N/A'): ?>
+                        <i class="fa fa-minus-circle"></i> Marked as N/A — no file submitted for this target.
+                    <?php else: ?>
+                        <i class="fa fa-clock"></i> Submission recorded (<?= htmlspecialchars($prog_status) ?>) but no file is attached.
+                    <?php endif; ?>
+                </p>
+            <?php else: ?>
+                <p class="text-muted mb-0"><i class="fa fa-info-circle"></i> No submission from Target List for this target yet.</p>
+            <?php endif; ?>
+        </div>
+    </div>
+
+    <!-- ============ EXTRA MOVs (from MOV Management) ============ -->
+    <h6 class="text-muted mb-2"><i class="fa fa-folder-open mr-1"></i> Additional MOVs <small class="font-weight-normal">(from MOV Management)</small></h6>
     <?php if ($movs && $movs->num_rows > 0): ?>
     <div class="table-responsive">
         <table class="table table-hover table-striped table-bordered">
@@ -108,20 +194,19 @@ $movs = $conn->query("SELECT m.*,
             </tbody>
             <tfoot class="thead-dark">
                 <tr>
-                    <td colspan="2" class="text-right"><strong>Total:</strong></td>
-                    <td colspan="5"><strong><?php echo $i - 1; ?> MOV<?php echo ($i - 1) !== 1 ? 's' : ''; ?></strong></td>
+                    <td colspan="2" class="text-right"><strong>Total Additional:</strong></td>
+                    <td colspan="3"><strong><?php echo $i - 1; ?> MOV<?php echo ($i - 1) !== 1 ? 's' : ''; ?></strong></td>
                 </tr>
             </tfoot>
         </table>
     </div>
     <?php else: ?>
-    <div class="alert alert-warning text-center">
-        <i class="fa fa-exclamation-triangle fa-3x mb-3"></i>
-        <h5>No MOVs uploaded for this target yet</h5>
-        <p>Click "Add MOV" to upload your first MOV for this target</p>
+    <div class="alert alert-light border text-center py-3 mb-0">
+        <i class="fa fa-folder-open fa-2x text-muted mb-2"></i>
+        <p class="mb-0 text-muted">No additional MOVs uploaded via MOV Management for this target.</p>
     </div>
     <?php endif; ?>
-    
+
     <div class="text-right mt-3">
         <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
     </div>

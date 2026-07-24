@@ -6,6 +6,11 @@ $faculty_id = intval($_SESSION['login_id'] ?? 0);
 $period = $_GET['period'] ?? '';
 $target_id = isset($_GET['target_id']) ? intval($_GET['target_id']) : 0;
 
+// Stored rating_period uses "Semester Year" (space). Callers may pass a pipe or
+// underscore (e.g. "1st Semester|2025-2026"); normalize so the lookup matches the
+// value stored in mov_uploads.rating_period / efficiency_attendance.rating_period.
+$period = str_replace(['|', '_'], ' ', $period);
+
 // Get faculty info
 $stmt_fac = $conn->prepare("SELECT CONCAT(e.lastname, ', ', e.firstname, ' ', e.middlename) as name, 
     e.position_id, p.position, e.department_id, d.designation, e.evaluator_id
@@ -69,9 +74,12 @@ if (strpos($period, '2nd') !== false) {
     $year = $year + 1;
 }
 
-// Build semester date filter
-$semester_filter = " AND MONTH(m.date_submitted) BETWEEN $start_month AND $end_month";
-$semester_filter .= " AND YEAR(m.date_submitted) = $year";
+// NOTE: rating_period already identifies the period uniquely, so we filter the
+// MOV list by rating_period only (consistent with the timeliness and efficiency
+// sections below). A separate month/year check on date_submitted is intentionally
+// omitted: submission dates legitimately fall in the calendar months that the
+// academic-period label spans (e.g. 1st Semester Aug-Dec can be dated the same
+// year), and adding it here previously excluded valid uploads.
 
 // Get MOV data
 $where = "WHERE m.faculty_id = $faculty_id";
@@ -81,8 +89,6 @@ if (!empty($period)) {
 if ($target_id > 0) {
     $where .= " AND m.target_id = $target_id";
 }
-// Add semester date range filter
-$where .= $semester_filter;
 
 $movs = $conn->query("SELECT m.*, 
     COALESCE(t.major_output, t.success_indicators) as target_name,

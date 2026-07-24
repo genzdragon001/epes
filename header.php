@@ -38,6 +38,8 @@
   <!-- Theme style -->
   <link rel="stylesheet" href="assets/dist/css/adminlte.min.css">
   <link rel="stylesheet" href="assets/dist/css/styles.css">
+  <!-- EPES unified UI (sidebar sections, shared dashboard components, mobile) -->
+  <link rel="stylesheet" href="assets/dist/css/epes-ui.css">
 	<script src="assets/plugins/jquery/jquery.min.js"></script>
   <!-- jQuery UI 1.11.4 -->
   <script src="assets/plugins/jquery-ui/jquery-ui.min.js"></script>

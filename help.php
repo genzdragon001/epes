@@ -16,7 +16,7 @@ if ($check && $check->fetch_assoc()['c'] == 0) {
     initializeHelpContent();
 }
 
-// Get help articles from DB — filtered by user role
+// Get help articles from DB — filtered by user role via target_role column
 $articles = [];
 $cats = [];
 $stmt = $conn->prepare("SELECT * FROM help_docs WHERE is_active = 1 AND (target_role = 'all' OR target_role = ?) ORDER BY category, `order`");

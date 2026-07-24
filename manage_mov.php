@@ -101,37 +101,52 @@ $targets = $conn->query($target_query);
         </div>
         
         <div class="form-group">
-            <label for="target_id">Associated Target <span class="text-danger">*</span></label>
-            <select class="form-control" id="target_id" name="target_id" required <?php echo $preselect_target_id > 0 ? 'readonly' : ''; ?>>
+            <label for="target_id">Associated Target <span class="text-danger">*</span>
+                <?php if ($preselect_target_id > 0): ?><i class="fa fa-lock text-warning" title="Locked to this target"></i><?php endif; ?>
+            </label>
+            <select class="form-control" id="target_id" name="target_id" required <?php echo $preselect_target_id > 0 ? 'disabled' : ''; ?>>
                 <option value="">-- Select Your Assigned Target --</option>
-                <?php 
+                <?php
+                $found_preselect = false;
                 if ($targets && $targets->num_rows > 0) {
-                    $current_category = '';
-                    while ($t = $targets->fetch_assoc()): 
-                        if ($current_category != $t['category']) {
-                            if ($current_category != '') echo '</optgroup>';
-                            echo '<optgroup label="' . strtoupper($t['category']) . ' FUNCTION">';
-                            $current_category = $t['category'];
-                        }
+                    while ($t = $targets->fetch_assoc()):
                         $display = !empty($t['major_output']) ? $t['major_output'] : $t['target_display'];
                         $display = substr($display, 0, 100);
                         $selected = ($t['id'] == $preselect_target_id) ? 'selected' : '';
-                    ?>
-                        <option value="<?php echo $t['id']; ?>" 
+                        if ($selected) $found_preselect = true;
+                        $cat_label = strtoupper($t['category']);
+                ?>
+                        <option value="<?php echo $t['id']; ?>"
                             data-indicators="<?php echo htmlspecialchars($t['success_indicators']); ?>"
                             data-deadline="<?php echo htmlspecialchars($t['deadline']); ?>"
+                            data-mov-type="<?php echo htmlspecialchars(strtolower($t['efficiency'] === 'Applicable' ? 'efficiency' : ($t['quality'] === 'Applicable' ? 'quality' : 'general'))); ?>"
                             <?php echo $selected; ?>>
-                            [MFO-<?php echo $t['mfo']; ?>] <?php echo $display; ?>
+                            [<?php echo $cat_label; ?> · MFO-<?php echo htmlspecialchars($t['mfo']); ?>] <?php echo htmlspecialchars($display); ?>
                         </option>
-                    <?php 
-                    endwhile; 
-                    if ($current_category != '') echo '</optgroup>';
+                <?php
+                    endwhile;
                 } else {
                 ?>
                     <option value="" disabled>No targets assigned to your position</option>
-                <?php } ?>
+                <?php
+                }
+                // If a preselected target was requested but is not in the assigned list,
+                // inject it so the form still submits against the intended target.
+                if ($preselect_target_id > 0 && !$found_preselect) {
+                    $pt = $conn->query("SELECT COALESCE(major_output, success_indicators) as d, category, mfo
+                        FROM task_list WHERE id = $preselect_target_id LIMIT 1")->fetch_assoc();
+                    if ($pt) {
+                ?>
+                    <option value="<?php echo $preselect_target_id; ?>" selected>
+                        [<?php echo htmlspecialchars(strtoupper($pt['category'])); ?> · MFO-<?php echo htmlspecialchars($pt['mfo']); ?>] <?php echo htmlspecialchars(substr($pt['d'], 0, 100)); ?> (pre-selected)
+                    </option>
+                <?php
+                    }
+                }
+                ?>
             </select>
             <?php if ($preselect_target_id > 0): ?>
+            <input type="hidden" name="target_id" value="<?php echo $preselect_target_id; ?>">
             <small class="form-text text-success">
                 <i class="fa fa-check-circle"></i> Target pre-selected from MOV Management
             </small>
@@ -207,20 +222,21 @@ $targets = $conn->query($target_query);
             </small>
         </div>
         
+        <?php
+        // Rating Period: pre-selected from MOV Management (sel_key). The standalone
+        // dropdown is redundant since the caller always passes the active period, so we
+        // submit it as a hidden value and show it as read-only text instead.
+        $rp_value = $preselect_period !== '' ? str_replace('|', ' ', $preselect_period) : '';
+        ?>
         <div class="form-group">
-            <label for="rating_period">Rating Period <span class="text-danger">*</span></label>
-            <select class="form-control" id="rating_period" name="rating_period" required>
-                <option value="">-- Select Rating Period --</option>
-                <?php
-                $periods = $conn->query("SELECT id, semester, year FROM rating_period ORDER BY id DESC");
-                while ($p = $periods->fetch_assoc()) {
-                    $period_value = $p['semester'] . ' ' . $p['year'];
-                    $period_key = $p['semester'] . '|' . $p['year'];
-                    $sel = ($preselect_period !== '' && $period_key === $preselect_period) ? ' selected' : '';
-                    echo "<option value='{$period_value}'{$sel}>{$period_value}</option>";
-                }
-                ?>
-            </select>
+            <label>Rating Period</label>
+            <p class="form-control-plaintext font-weight-bold text-primary mb-0">
+                <i class="fa fa-calendar-check mr-1"></i><?php echo htmlspecialchars($rp_value); ?>
+            </p>
+            <input type="hidden" name="rating_period" id="rating_period" value="<?php echo htmlspecialchars($rp_value); ?>">
+            <small class="form-text text-muted">
+                <i class="fa fa-info-circle"></i> Inherited from the selected rating period — no need to choose again.
+            </small>
         </div>
         
         <div class="form-group">
@@ -234,7 +250,6 @@ $targets = $conn->query($target_query);
     </form>
     
     <div class="text-right mt-3">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="submitMOV()">
             <i class="fa fa-upload"></i> Upload MOV
         </button>
@@ -250,36 +265,56 @@ $('#document').on('change', function() {
 
 // Show/hide fields based on mov_type
 var movType = '<?php echo $mov_type; ?>';
-if (movType === 'efficiency') {
-    $('.efficiency-fields').show();
-    $('#percentage').prop('required', true);
-    $('#date_conducted').prop('required', true);
-    $('#date_submitted').closest('.form-group').hide();
-    $('#deadline').closest('.form-group').hide();
-} else if (movType === 'quality') {
-    $('#deadline').closest('.form-group').hide();
-}
 
-// Show success indicators and deadline when target is selected
-$('#target_id').on('change', function() {
-    var selectedOption = $(this).find('option:selected');
-    var indicators = selectedOption.data('indicators');
-    var deadline = selectedOption.data('deadline');
-    
+function applyMovType(type) {
+    var isEff = (type === 'efficiency');
+    var isQual = (type === 'quality');
+    if (isEff) {
+        $('.efficiency-fields').show();
+        $('#percentage').prop('required', true);
+        $('#date_conducted').prop('required', true);
+        $('#date_submitted').closest('.form-group').hide();
+        $('#deadline').closest('.form-group').hide();
+        $('#deadline_display').hide(); // efficiency targets have no deadline
+    } else {
+        $('.efficiency-fields').hide();
+        $('#percentage').prop('required', false);
+        $('#date_conducted').prop('required', false);
+        $('#date_submitted').closest('.form-group').show();
+        if (isQual) {
+            $('#deadline').closest('.form-group').hide();
+            $('#deadline_display').hide(); // quality targets have no deadline
+        } else {
+            $('#deadline').closest('.form-group').show();
+        }
+    }
+}
+applyMovType(movType);
+
+// When a target is (pre)selected, also derive the mov_type from the target's
+// applicable criteria so the correct fields show even without a ?type= hint.
+function applyTargetType() {
+    var sel = $('#target_id').find('option:selected');
+    var tType = sel.data('mov-type');
+    if (tType) applyMovType(tType);
+    // Refresh indicators / deadline display
+    var indicators = sel.data('indicators');
+    var deadline = sel.data('deadline');
     if (indicators && indicators.trim() !== '') {
         $('#indicators_text').text(indicators);
         $('#success_indicators_display').fadeIn();
     } else {
         $('#success_indicators_display').fadeOut();
     }
-    
-    if (deadline) {
+    if (deadline && tType !== 'efficiency' && tType !== 'quality') {
         $('#deadline_text').text(deadline);
         $('#deadline_display').fadeIn();
     } else {
         $('#deadline_display').fadeOut();
     }
-});
+}
+applyTargetType();
+$('#target_id').on('change', applyTargetType);
 
 function submitMOV() {
     if (!$('#confirm_submission').is(':checked')) {
@@ -341,6 +376,16 @@ function submitMOV() {
         }
     });
 }
+
+// This modal uses its own in-form "Upload MOV" button, so hide the shared
+// shell (#uni_modal) "Save" button while this modal is open. Restore it on
+// close so other modals keep their normal Save footer.
+$('#uni_modal').on('shown.bs.modal', function() {
+    $('#uni_modal #submit').hide();
+}).on('hidden.bs.modal', function() {
+    $('#uni_modal #submit').show();
+});
+$('#uni_modal #submit').hide();
 </script>
 
 <style>
