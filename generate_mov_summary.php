@@ -136,22 +136,30 @@ $rows = [];
 $total_timeliness = 0;
 $timeliness_count = 0;
 foreach ($movs as $m) {
-    // Resolve the deadline: match the submitted month/year to a target deadline.
+    // Resolve the deadline: prefer the per-MOV deadline stored in
+    // mov_uploads.deadline. Fall back to matching the submission month/year
+    // to a target_deadlines row (for older MOVs without a stored deadline).
     $deadline_display = '—';
     $deadline_ts = null;
-    $deadlines = !empty($target['deadlines']) ? explode('|', $target['deadlines']) : [];
-    if (!empty($deadlines)) {
-        $sub_month = date('n', strtotime($m['date_submitted']));
-        $sub_year = date('Y', strtotime($m['date_submitted']));
-        foreach ($deadlines as $dl) {
-            if (!empty($dl) && date('n', strtotime($dl)) == $sub_month && date('Y', strtotime($dl)) == $sub_year) {
-                $deadline_display = date('M d, Y', strtotime($dl));
-                $deadline_ts = strtotime($dl);
-                break;
+
+    if (!empty($m['deadline'])) {
+        $deadline_display = date('M d, Y', strtotime($m['deadline']));
+        $deadline_ts = strtotime($m['deadline']);
+    } else {
+        $deadlines = !empty($target['deadlines']) ? explode('|', $target['deadlines']) : [];
+        if (!empty($deadlines)) {
+            $sub_month = date('n', strtotime($m['date_submitted']));
+            $sub_year = date('Y', strtotime($m['date_submitted']));
+            foreach ($deadlines as $dl) {
+                if (!empty($dl) && date('n', strtotime($dl)) == $sub_month && date('Y', strtotime($dl)) == $sub_year) {
+                    $deadline_display = date('M d, Y', strtotime($dl));
+                    $deadline_ts = strtotime($dl);
+                    break;
+                }
             }
+            // No deadline matches the submission's month/year: leave as "—"
+            // rather than fall back to an unrelated deadline (misleading).
         }
-        // No deadline matches the submission's month/year: leave as "—" rather
-        // than fall back to an unrelated deadline (which would be misleading).
     }
 
     $date_display = !empty($m['date_submitted'])

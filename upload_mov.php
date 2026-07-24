@@ -86,9 +86,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['document'])) {
         exit;
     }
     
-    // Generate unique file path
-    $newFileName = $upload_dir . bin2hex(random_bytes(16));
-    $dest_path = $newFileName . "." . $fileExtension;
+    // Generate unique file path — keep the original file name (sanitized),
+    // prepend a short random prefix to avoid collisions between uploads.
+    $safeName = preg_replace('/[^A-Za-z0-9._-]/', '_', pathinfo($fileName, PATHINFO_FILENAME));
+    $prefix = bin2hex(random_bytes(4));
+    $storedFileName = $prefix . '_' . $safeName . '.' . $fileExtension;
+    $dest_path = $upload_dir . $storedFileName;
     
     // Allow multiple MOVs for the same target (removed duplicate check)
     // Faculty can upload multiple files as evidence for the same target
@@ -98,20 +101,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['document'])) {
         $stmt = $conn->prepare("
             INSERT INTO mov_uploads 
             (faculty_id, task_id, target_id, title, description, file_path, file_type, file_name, file_size, 
-             date_submitted, rating_period, mov_type) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             date_submitted, rating_period, mov_type, deadline) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ");
         
         $task_id = 0;
-        $stmt->bind_param("iiissssissss", 
+        $storedFilePath = $upload_dir . $prefix . '_' . $safeName;
+        $stmt->bind_param("iiissssisssss", 
             $faculty_id, $task_id, $target_id, $title, $description, 
-            $newFileName, $fileExtension, $fileName, $fileSize, 
-            $date_submitted, $rating_period, $mov_type);
+            $storedFilePath, $fileExtension, $fileName, $fileSize, 
+            $date_submitted, $rating_period, $mov_type, $deadline);
         
         if ($stmt->execute()) {
-            // Save deadline if provided
+            // Deadline is now stored per-MOV in mov_uploads.deadline (added above).
+            // The target_deadlines table is kept for backward compatibility with
+            // older MOVs that don't have a per-MOV deadline.
             if (!empty($deadline)) {
-                $conn->query("INSERT INTO target_deadlines (target_id, deadline) VALUES ($target_id, '$deadline') ON DUPLICATE KEY UPDATE deadline = '$deadline'");
+                $d_esc = $conn->real_escape_string($deadline);
+                $conn->query("INSERT INTO target_deadlines (target_id, deadline) VALUES ($target_id, '$d_esc') ON DUPLICATE KEY UPDATE deadline = '$d_esc'");
             }
             
             // If efficiency type, also save to efficiency_attendance

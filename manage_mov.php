@@ -309,6 +309,12 @@ function applyTargetType() {
     if (deadline && tType !== 'efficiency' && tType !== 'quality') {
         $('#deadline_text').text(deadline);
         $('#deadline_display').fadeIn();
+        // Pre-fill the deadline input with the target's deadline (if any).
+        if (deadline && deadline !== 'N/A') {
+            // Parse "YYYY-MM-DD" from the display value.
+            var dlDate = deadline.match(/(\d{4}-\d{2}-\d{2})/);
+            if (dlDate) $('#deadline').val(dlDate[1]);
+        }
     } else {
         $('#deadline_display').fadeOut();
     }
@@ -367,12 +373,12 @@ function submitMOV() {
                 alert_toast('File already exists for this target and period', 'warning');
             } else {
                 end_load();
-                alert_toast('Upload failed. Please try again.', 'danger');
+                alert_toast('Upload failed. Please try again.', 'error');
             }
         },
         error: function() {
             end_load();
-            alert_toast('Error occurred during upload', 'danger');
+            alert_toast('Error occurred during upload', 'error');
         }
     });
 }

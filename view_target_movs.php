@@ -6,10 +6,19 @@ include 'db_connect.php';
 $target_id = intval($_GET['target_id']);
 $faculty_id = isset($_GET['faculty_id']) ? intval($_GET['faculty_id']) : intval($_SESSION['login_id'] ?? 0);
 
-// Get target info
+// Get target info (include deadlines for the Additional MOVs table)
 $target = $conn->query("SELECT COALESCE(major_output, success_indicators) as name, 
     category, mfo, success_indicators 
     FROM task_list WHERE id = $target_id")->fetch_assoc();
+
+// Fetch all deadlines for this target (matched per-MOV by submission month/year)
+$target_deadlines = [];
+$dl_res = $conn->query("SELECT deadline FROM target_deadlines WHERE target_id = $target_id ORDER BY deadline");
+if ($dl_res) {
+    while ($dl_row = $dl_res->fetch_assoc()) {
+        $target_deadlines[] = $dl_row['deadline'];
+    }
+}
 
 // Access: use shared helper — covers login_type 1 (legacy evaluator)
 // and login_type 0 with is_evaluator flag (Dean/Dept Head/VP/Director).
@@ -130,7 +139,7 @@ $movs = $conn->query("SELECT m.*,
                     <th class="text-center" style="width: 40px;">#</th>
                     <th style="width: 25%;">File</th>
                     <th style="width: 25%;">Date Submitted</th>
-                    <th style="width: 20%;">Rating Period</th>
+                    <th style="width: 20%;">Deadline</th>
                     <th class="text-center" style="width: 100px;">Action</th>
                 </tr>
             </thead>
@@ -162,7 +171,24 @@ $movs = $conn->query("SELECT m.*,
                         <br><small><?php echo $formatted_size; ?> - <?php echo strtoupper($mov['file_type']); ?></small>
                     </td>
                     <td><?php echo date('M d, Y h:i A', strtotime($mov['date_submitted'])); ?></td>
-                    <td><small><?php echo htmlspecialchars($mov['rating_period']); ?></small></td>
+                    <td><small><?php
+                        // Use the per-MOV deadline stored in mov_uploads.deadline.
+                        // Fall back to matching target_deadlines by month/year for older MOVs.
+                        $mov_deadline = '—';
+                        if (!empty($mov['deadline'])) {
+                            $mov_deadline = date('M d, Y', strtotime($mov['deadline']));
+                        } else {
+                            $sub_month = date('n', strtotime($mov['date_submitted']));
+                            $sub_year  = date('Y', strtotime($mov['date_submitted']));
+                            foreach ($target_deadlines as $dl) {
+                                if (date('n', strtotime($dl)) == $sub_month && date('Y', strtotime($dl)) == $sub_year) {
+                                    $mov_deadline = date('M d, Y', strtotime($dl));
+                                    break;
+                                }
+                            }
+                        }
+                        echo htmlspecialchars($mov_deadline);
+                    ?></small></td>
                     <td class="text-center">
                         <button type="button" class="btn btn-sm btn-default btn-flat border-info" 
                             onclick="viewMOV(<?php echo $mov['id']; ?>)" title="View">
