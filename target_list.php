@@ -170,7 +170,7 @@ $alloc_text = implode(' · ', $alloc_labels);
                         <tr>
                             <th style="width:30px;">#</th>
                             <th>Success Indicators / Target</th>
-                            <th style="width:25%;">Actual Accomplishment</th>
+                            <?php if($login_type != 2): ?><th style="width:25%;">Actual Accomplishment</th><?php endif; ?>
                             <th style="width:70px;">Rating</th>
                             <?php if($login_type == 0): ?>
                             <th style="width:110px;">Status</th>
@@ -208,7 +208,7 @@ $alloc_text = implode(' · ', $alloc_labels);
                         if ($cat !== $current_cat) {
                             $current_cat = $cat;
                             $pct_label = $cat_pct_map[$cat] > 0 ? " ({$cat_pct_map[$cat]}%)" : '';
-                            $colspan = $login_type == 0 ? 6 : 8;
+                            $colspan = $login_type == 0 ? 6 : ($login_type == 2 ? 7 : 8);
                     ?>
                     <tr class="row-group" data-cat="<?= $cat ?>">
                         <td colspan="<?= $colspan ?>"><span class="cat-dot <?= $cat ?>"></span> <?= $cat_labels[$cat] ?? ucfirst($cat) ?><?= $pct_label ?></td>
@@ -266,6 +266,22 @@ $alloc_text = implode(' · ', $alloc_labels);
                         <td>
                             <b><?= htmlspecialchars($row['success_indicators']) ?></b>
                             <br><small class="text-muted"><?= htmlspecialchars($row['targets_measures']) ?></small>
+                            <?php
+                            $scale_parts = [];
+                            $fix_nl = function($s) { return str_replace(["\\r\\n", "\\n", "\\r"], "\n", $s); };
+                            if (($row['quality'] ?? '') == 'Applicable' && !empty(trim($row['quality_scale'] ?? ''))) {
+                                $scale_parts[] = '<span class="badge badge-quality">Q</span> ' . nl2br(htmlspecialchars(trim($fix_nl($row['quality_scale']))));
+                            }
+                            if (($row['timeliness'] ?? '') == 'Applicable' && !empty(trim($row['timeliness_scale'] ?? ''))) {
+                                $scale_parts[] = '<span class="badge badge-timeliness">T</span> ' . nl2br(htmlspecialchars(trim($fix_nl($row['timeliness_scale']))));
+                            }
+                            if (($row['efficiency'] ?? '') == 'Applicable' && !empty(trim($row['efficiency_scale'] ?? ''))) {
+                                $scale_parts[] = '<span class="badge badge-efficiency">E</span> ' . nl2br(htmlspecialchars(trim($fix_nl($row['efficiency_scale']))));
+                            }
+                            if ($scale_parts) {
+                                echo '<br><small class="text-muted rating-scale-inline">' . implode(' &nbsp; ', $scale_parts) . '</small>';
+                            }
+                            ?>
                         </td>
                         <?php if($login_type == 0): ?>
                         <td>
@@ -277,19 +293,6 @@ $alloc_text = implode(' · ', $alloc_labels);
                             <?php else: ?>
                                 <span class="text-muted" style="font-size:0.8rem;">—</span>
                             <?php endif; ?>
-                        </td>
-                        <?php endif; ?>
-                        <?php if($login_type == 2): ?>
-                        <td>
-                            <?php
-                            $admin_prog = $conn->query("SELECT actual_accomplishment, progress FROM task_progress WHERE task_id = {$row['id']} $period_filter ORDER BY unix_timestamp(date_created) DESC LIMIT 1");
-                            $admin_acc = '';
-                            if ($admin_prog && $admin_prog->num_rows > 0) {
-                                $ap = $admin_prog->fetch_assoc();
-                                $admin_acc = $ap['actual_accomplishment'] ?? '';
-                            }
-                            ?>
-                            <?= !empty($admin_acc) ? '<div style="font-size:0.8rem;color:#555;">' . nl2br(htmlspecialchars($admin_acc)) . '</div>' : '<span class="text-muted" style="font-size:0.8rem;">—</span>' ?>
                         </td>
                         <?php endif; ?>
                         <td><span class="rating-dims"><?= $rating_dims ?></span></td>
@@ -526,7 +529,15 @@ table p { margin: unset !important; }
 .rating-dims { font-size: 0.75rem; color: #ccc; white-space: nowrap; }
 .rating-dims .active { color: #28a745; font-weight: 600; }
 
-/* Action buttons */
+/* Rating scale inline (inside Success Indicators / Target cell) */
+.rating-scale-inline { display: block; margin-top: 2px; }
+.rating-scale-inline .badge-quality,
+.rating-scale-inline .badge-timeliness,
+.rating-scale-inline .badge-efficiency { font-size: 0.6rem; font-weight: 700; padding: 1px 4px; border-radius: 3px; margin-right: 2px; vertical-align: middle; }
+.rating-scale-inline .badge-quality { background: #28a745; color: #fff; }
+.rating-scale-inline .badge-timeliness { background: #17a2b8; color: #fff; }
+.rating-scale-inline .badge-efficiency { background: #6f42c1; color: #fff; }
+
 .action-btns { display: flex; gap: 4px; }
 .action-btns .btn { font-size: 0.75rem; padding: 4px 8px; line-height: 1.3; }
 

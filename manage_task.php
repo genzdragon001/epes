@@ -21,12 +21,16 @@ if(isset($_GET['id'])){
     while ($td = $tdq->fetch_assoc()) { $assigned_desigs[] = $td['designation_id']; }
     $assigned_desigs = array_values(array_unique($assigned_desigs));
 }
-?><div class="container-fluid">
+// Convert literal \r\n (stored as text in DB) to real newlines for textarea display
+$fix_nl = function($s) { return $s !== null ? str_replace(["\\r\\n", "\\n", "\\r"], "\n", $s) : ''; };
+?>
+<div class="container-fluid">
     <form action="" id="manage-output">
         <input type="hidden" name="id" value="<?php echo isset($id) ? $id : '' ?>">
 
+        <!-- Row 1: Category (left) + Sub-Category (right) -->
         <div class="row">
-            <div class="col-md-3">
+            <div class="col-md-6">
                 <div class="form-group">
                     <label><b>Category</b></label>
                     <select class="form-control form-control-sm" name="category" id="task_category" required>
@@ -37,7 +41,7 @@ if(isset($_GET['id'])){
                     </select>
                 </div>
             </div>
-            <div class="col-md-3" id="sub_category_wrapper" style="<?php echo (isset($category) && $category == 'core') ? '' : 'display:none;' ?>">
+            <div class="col-md-6" id="sub_category_wrapper" style="<?php echo (isset($category) && $category == 'core') ? '' : 'display:none;' ?>">
                 <div class="form-group">
                     <label><b>Sub-Category</b></label>
                     <select class="form-control form-control-sm" name="sub_category" id="task_sub_category">
@@ -48,7 +52,11 @@ if(isset($_GET['id'])){
                     </select>
                 </div>
             </div>
-            <div class="col-md-4">
+        </div>
+
+        <!-- Row 2: Designation (left) + Academic Rank (right) -->
+        <div class="row">
+            <div class="col-md-8">
                 <div class="form-group">
                     <label><b>Designation(s)</b></label>
                     <select class="form-control form-control-sm select2" name="designation_id[]" id="designation_id" multiple="multiple" style="width:100%;">
@@ -63,7 +71,7 @@ if(isset($_GET['id'])){
                     <small class="text-muted">Leave empty to apply to <b>All Designations</b>. Select multiple (e.g. Dept Head + Dean) as needed.</small>
                 </div>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-4">
                 <div class="form-group">
                     <label><b>Academic Rank</b></label>
                     <select class="form-control form-control-sm" name="academic_rank_id" id="academic_rank_id">
@@ -80,21 +88,23 @@ if(isset($_GET['id'])){
             </div>
         </div>
 
+        <!-- Success Indicators + Targets + Measures: full width -->
         <div class="form-group">
             <label><b>Success Indicators</b></label>
-            <textarea name="success_indicators" class="form-control form-control-sm" rows="3" required><?php echo isset($success_indicators) ? htmlspecialchars($success_indicators) : '' ?></textarea>
+            <textarea name="success_indicators" class="form-control form-control-sm" rows="3" required><?php echo isset($success_indicators) ? htmlspecialchars($fix_nl($success_indicators)) : '' ?></textarea>
         </div>
 
         <div class="form-group">
             <label><b>Targets + Measures</b></label>
-            <textarea name="targets_measures" class="form-control form-control-sm" rows="3" required><?php echo isset($targets_measures) ? htmlspecialchars($targets_measures) : '' ?></textarea>
+            <textarea name="targets_measures" class="form-control form-control-sm" rows="3" required><?php echo isset($targets_measures) ? htmlspecialchars($fix_nl($targets_measures)) : '' ?></textarea>
         </div>
 
+        <!-- Q / T / E selects: three columns side by side -->
         <div class="row">
             <div class="col-md-4">
                 <div class="form-group">
                     <label><b>Quality</b></label>
-                    <select name="quality" class="form-control form-control-sm" required>
+                    <select name="quality" id="quality_sel" class="form-control form-control-sm" required>
                         <option value="N/A" <?php echo (isset($quality) && $quality == "N/A") ? "selected" : "" ?>>N/A</option>
                         <option value="Applicable" <?php echo (isset($quality) && $quality == "Applicable") ? "selected" : "" ?>>Applicable</option>
                     </select>
@@ -103,7 +113,7 @@ if(isset($_GET['id'])){
             <div class="col-md-4">
                 <div class="form-group">
                     <label><b>Timeliness</b></label>
-                    <select name="timeliness" class="form-control form-control-sm" required>
+                    <select name="timeliness" id="timeliness_sel" class="form-control form-control-sm" required>
                         <option value="N/A" <?php echo (isset($timeliness) && $timeliness == "N/A") ? "selected" : "" ?>>N/A</option>
                         <option value="Applicable" <?php echo (isset($timeliness) && $timeliness == "Applicable") ? "selected" : "" ?>>Applicable</option>
                     </select>
@@ -112,12 +122,26 @@ if(isset($_GET['id'])){
             <div class="col-md-4">
                 <div class="form-group">
                     <label><b>Efficiency</b></label>
-                    <select name="efficiency" class="form-control form-control-sm" required>
+                    <select name="efficiency" id="efficiency_sel" class="form-control form-control-sm" required>
                         <option value="N/A" <?php echo (isset($efficiency) && $efficiency == "N/A") ? "selected" : "" ?>>N/A</option>
                         <option value="Applicable" <?php echo (isset($efficiency) && $efficiency == "Applicable") ? "selected" : "" ?>>Applicable</option>
                     </select>
                 </div>
             </div>
+        </div>
+
+        <!-- Rating Scale textareas: full width, shown only when Applicable -->
+        <div class="form-group quality-scale-wrap" style="<?php echo (isset($quality) && $quality == 'Applicable') ? '' : 'display:none;' ?>">
+            <label class="text-muted"><small>Quality Rating Scale</small></label>
+            <textarea name="quality_scale" class="form-control form-control-sm" rows="3" placeholder="e.g. 5 – Excellent, 4 – Very Good, 3 – Good, 2 – Fair, 1 – Poor"><?php echo isset($quality_scale) ? htmlspecialchars($fix_nl($quality_scale)) : '' ?></textarea>
+        </div>
+        <div class="form-group timeliness-scale-wrap" style="<?php echo (isset($timeliness) && $timeliness == 'Applicable') ? '' : 'display:none;' ?>">
+            <label class="text-muted"><small>Timeliness Rating Scale</small></label>
+            <textarea name="timeliness_scale" class="form-control form-control-sm" rows="3" placeholder="e.g. 5 – before the deadline, 3 – on the deadline, 2 – beyond the deadline, 1 – no submission"><?php echo isset($timeliness_scale) ? htmlspecialchars($fix_nl($timeliness_scale)) : '' ?></textarea>
+        </div>
+        <div class="form-group efficiency-scale-wrap" style="<?php echo (isset($efficiency) && $efficiency == 'Applicable') ? '' : 'display:none;' ?>">
+            <label class="text-muted"><small>Efficiency Rating Scale</small></label>
+            <textarea name="efficiency_scale" class="form-control form-control-sm" rows="3" placeholder="e.g. 5 – 100%, 4 – 90-99%, 3 – 80-89%, 2 – 51-79%, 1 – 50% and below"><?php echo isset($efficiency_scale) ? htmlspecialchars($fix_nl($efficiency_scale)) : '' ?></textarea>
         </div>
 
         <div class="form-group">
@@ -140,6 +164,18 @@ $('#task_category').change(function(){
         $('#task_sub_category').val('');
     }
 });
+
+// Show/hide each rating-scale textarea based on its dimension select
+function toggleScale(sel, wrap) {
+    if ($(sel).val() === 'Applicable') {
+        $(wrap).show();
+    } else {
+        $(wrap).hide();
+    }
+}
+$('#quality_sel').change(function(){ toggleScale(this, '.quality-scale-wrap'); });
+$('#timeliness_sel').change(function(){ toggleScale(this, '.timeliness-scale-wrap'); });
+$('#efficiency_sel').change(function(){ toggleScale(this, '.efficiency-scale-wrap'); });
 
 $(document).ready(function(){
     if ($.fn.select2) {

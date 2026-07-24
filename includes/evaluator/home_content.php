@@ -1,5 +1,6 @@
 <?php
 // === EVALUATOR DASHBOARD (Dean + Dept Head) ===
+require_once 'includes/rating_functions.php';
 $eval_id = intval($_SESSION['login_id']);
 $eval_dept_id = 0;
 $is_dean = false;
@@ -98,6 +99,7 @@ if(!$is_dean) {
         $targets = (int)$tq->fetch_assoc()['cnt'];
         $sq = $conn->query("SELECT COUNT(DISTINCT task_id) as submitted, SUM(CASE WHEN progress='Verified' THEN 1 ELSE 0 END) as verified FROM task_progress WHERE faculty_id=$fid $period_filter");
         $subs = $sq->fetch_assoc();
+        $avg_rating = (!empty($active_period_code)) ? computeWeightedRating($conn, $fid, $fpos, $fdes, $active_period_code, $period_filter) : null;
         $fac_table[] = [
             'name' => $f['lastname'] . ', ' . $f['firstname'],
             'faculty_id' => $f['id'],
@@ -106,9 +108,20 @@ if(!$is_dean) {
             'submitted' => (int)$subs['submitted'],
             'verified' => (int)$subs['verified'],
             'completion_pct' => $targets > 0 ? round(((int)$subs['verified'] / $targets) * 100) : 0,
+            'rating' => $avg_rating,
             'is_director' => ($fdes == 6),
         ];
     }
+}
+
+// Department-wide DPCR rating = average of all faculty ratings in the department (dept head view)
+$dept_dpcr = null;
+if (!$is_dean && !empty($fac_table)) {
+    $dpcr_sum = 0; $dpcr_cnt = 0;
+    foreach ($fac_table as $ft) {
+        if ($ft['rating'] !== null) { $dpcr_sum += floatval($ft['rating']); $dpcr_cnt++; }
+    }
+    $dept_dpcr = $dpcr_cnt > 0 ? round($dpcr_sum / $dpcr_cnt, 2) : null;
 }
 
 // Recent activity
@@ -154,9 +167,15 @@ $recent = $conn->query($recent_sql);
     <div class="col-6 col-md-3 mb-2">
         <div class="stat-card accent-teal">
             <div class="stat-icon teal"><i class="fas fa-chart-line"></i></div>
+            <?php if(!$is_dean): ?>
+            <div class="stat-value"><?= $dept_dpcr !== null ? number_format($dept_dpcr, 2) : '—' ?></div>
+            <div class="stat-label">DPCR Rating</div>
+            <div class="stat-sub <?= ($dept_dpcr ?? 0) >= 3.61 ? 'green' : (($dept_dpcr ?? 0) >= 2.61 ? 'amber' : 'red') ?>"><?= $dept_dpcr !== null ? getAdjectivalRating($dept_dpcr) : 'No rating' ?></div>
+            <?php else: ?>
             <div class="stat-value"><?= $completion_pct ?>%</div>
             <div class="stat-label">Completion</div>
             <div class="stat-sub <?= $completion_pct >= 70 ? 'green' : ($completion_pct >= 40 ? 'amber' : 'red') ?>"><?= $verified ?>/<?= $total_submissions ?> verified</div>
+            <?php endif; ?>
         </div>
     </div>
 </div>
@@ -235,6 +254,7 @@ $recent = $conn->query($recent_sql);
                             <th class="text-center">Targets</th>
                             <th class="text-center">Submitted</th>
                             <th class="text-center">Verified</th>
+                            <th class="text-center">Rating</th>
                             <th class="text-right">Completion</th>
                         </tr>
                     </thead>
@@ -253,6 +273,20 @@ $recent = $conn->query($recent_sql);
                             <td class="text-center"><?= $ft['targets'] ?></td>
                             <td class="text-center"><?= $ft['submitted'] ?></td>
                             <td class="text-center"><?= $ft['verified'] ?></td>
+                            <td class="text-center">
+                                <?php if($ft['rating'] !== null):
+                                    $r = floatval($ft['rating']);
+                                    if ($r >= 4.75) { $rcls = 'success'; $radj = 'Outstanding'; }
+                                    elseif ($r >= 3.61) { $rcls = 'success'; $radj = 'Very Sat.'; }
+                                    elseif ($r >= 2.61) { $rcls = 'info'; $radj = 'Satis.'; }
+                                    elseif ($r >= 1.61) { $rcls = 'warning'; $radj = 'Unsat.'; }
+                                    else { $rcls = 'danger'; $radj = 'Poor'; }
+                                ?>
+                                <span class="badge badge-<?= $rcls ?>" style="font-size:0.7rem;" title="<?= $radj ?>"><?= number_format($r, 2) ?></span>
+                                <?php else: ?>
+                                <span class="text-muted" style="font-size:0.75rem;">—</span>
+                                <?php endif; ?>
+                            </td>
                             <td class="text-right">
                                 <div style="display:flex; align-items:center; gap:8px; justify-content:flex-end;">
                                     <div style="flex:1; max-width:80px; height:6px; background:#e9ecef; border-radius:3px; overflow:hidden;">

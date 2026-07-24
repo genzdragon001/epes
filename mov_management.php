@@ -85,6 +85,9 @@ $target_query = "SELECT DISTINCT t.id,
     t.quality,
     t.timeliness,
     t.efficiency,
+    t.quality_scale,
+    t.timeliness_scale,
+    t.efficiency_scale,
     (SELECT COUNT(*) FROM mov_uploads m WHERE m.target_id = t.id AND m.faculty_id = $faculty_id $mov_period_filter) as mov_count,
     (SELECT COUNT(*) FROM mov_uploads m WHERE m.target_id = t.id AND m.faculty_id = $faculty_id AND m.status = 'Verified' $mov_period_filter) as verified_count,
     (SELECT COUNT(*) FROM mov_uploads m WHERE m.target_id = t.id AND m.faculty_id = $faculty_id AND m.status = 'Pending' $mov_period_filter) as pending_count,
@@ -223,9 +226,26 @@ $cat_meta = [
                             <td class="text-center font-weight-bold"><?php echo $i++; ?></td>
                             <td>
                                 <span class="target-text"><?php echo htmlspecialchars($row['target_display']); ?></span>
-                                <?php if (!empty($row['targets_measures'])): ?>
-                                <br><small class="text-muted"><i class="fa fa-check"></i> <?php echo nl2br(htmlspecialchars($row['targets_measures'])); ?></small>
+                                <?php
+                                $fix_nl = function($s) { return str_replace(["\\r\\n", "\\n", "\\r"], "\n", $s); };
+                                if (!empty($row['targets_measures'])): ?>
+                                <br><small class="text-muted"><i class="fa fa-check"></i> <?php echo nl2br(htmlspecialchars($fix_nl($row['targets_measures']))); ?></small>
                                 <?php endif; ?>
+                                <?php
+                                $scale_parts = [];
+                                if (($row['quality'] ?? '') == 'Applicable' && !empty(trim($row['quality_scale'] ?? ''))) {
+                                    $scale_parts[] = '<span class="badge badge-quality">Q</span> ' . nl2br(htmlspecialchars(trim($fix_nl($row['quality_scale']))));
+                                }
+                                if (($row['timeliness'] ?? '') == 'Applicable' && !empty(trim($row['timeliness_scale'] ?? ''))) {
+                                    $scale_parts[] = '<span class="badge badge-timeliness">T</span> ' . nl2br(htmlspecialchars(trim($fix_nl($row['timeliness_scale']))));
+                                }
+                                if (($row['efficiency'] ?? '') == 'Applicable' && !empty(trim($row['efficiency_scale'] ?? ''))) {
+                                    $scale_parts[] = '<span class="badge badge-efficiency">E</span> ' . nl2br(htmlspecialchars(trim($fix_nl($row['efficiency_scale']))));
+                                }
+                                if ($scale_parts) {
+                                    echo '<br><small class="text-muted rating-scale-inline">' . implode(' &nbsp; ', $scale_parts) . '</small>';
+                                }
+                                ?>
                             </td>
                             <td class="text-center align-middle">
                                 <?php if ($total_mov == 0): ?>
@@ -289,6 +309,13 @@ $cat_meta = [
 .btn-block-sm { display:block; width:100%; margin-bottom:4px; }
 .target-row { transition: background-color 0.2s; }
 .target-row:hover { background-color:#f8f9fa; }
+.rating-scale-inline { display: block; margin-top: 2px; }
+.rating-scale-inline .badge-quality,
+.rating-scale-inline .badge-timeliness,
+.rating-scale-inline .badge-efficiency { font-size: 0.6rem; font-weight: 700; padding: 1px 4px; border-radius: 3px; margin-right: 2px; vertical-align: middle; }
+.rating-scale-inline .badge-quality { background: #28a745; color: #fff; }
+.rating-scale-inline .badge-timeliness { background: #17a2b8; color: #fff; }
+.rating-scale-inline .badge-efficiency { background: #6f42c1; color: #fff; }
 </style>
 
 <script>

@@ -1174,6 +1174,9 @@ Class Action {
 			$quality      = $_POST['quality'] ?? 'Applicable';
 			$timeliness   = $_POST['timeliness'] ?? 'Applicable';
 			$efficiency   = $_POST['efficiency'] ?? 'Applicable';
+			$quality_scale    = isset($_POST['quality_scale']) ? $this->db->real_escape_string(trim($_POST['quality_scale'])) : null;
+			$timeliness_scale = isset($_POST['timeliness_scale']) ? $this->db->real_escape_string(trim($_POST['timeliness_scale'])) : null;
+			$efficiency_scale = isset($_POST['efficiency_scale']) ? $this->db->real_escape_string(trim($_POST['efficiency_scale'])) : null;
 			$success      = $_POST['success_indicators'] ?? '';
 			$targets      = $_POST['targets_measures'] ?? '';
 			$major_output = $_POST['major_output'] ?? null;
@@ -1199,21 +1202,28 @@ Class Action {
 				$stmt = $this->db->prepare(
 					"INSERT INTO task_list
 					 (mfo, designation_id, academic_rank_id, category, sub_category, major_output,
-					  success_indicators, targets_measures, quality, timeliness, efficiency, is_active, created_by, date_created)
-					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
+					  success_indicators, targets_measures, quality, timeliness, efficiency,
+					  quality_scale, timeliness_scale, efficiency_scale,
+					  is_active, created_by, date_created)
+					 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())"
 				);
-				$stmt->bind_param('iiisssssssssi',
+				$stmt->bind_param('iiisssssssssssii',
 					$mfo, $designation_id, $academic_rank_id, $category, $sub_category, $major_output,
-					$success, $targets, $quality, $timeliness, $efficiency, $is_active, $created_by);
+					$success, $targets, $quality, $timeliness, $efficiency,
+					$quality_scale, $timeliness_scale, $efficiency_scale,
+					$is_active, $created_by);
 			} else {
 				$stmt = $this->db->prepare(
 					"UPDATE task_list SET mfo=?, designation_id=?, academic_rank_id=?, category=?, sub_category=?,
 					 major_output=?, success_indicators=?, targets_measures=?, quality=?, timeliness=?, efficiency=?,
+					 quality_scale=?, timeliness_scale=?, efficiency_scale=?,
 					 is_active=? WHERE id=?"
 				);
-				$stmt->bind_param('iiisssssssssi',
+				$stmt->bind_param('iiisssssssssssii',
 					$mfo, $designation_id, $academic_rank_id, $category, $sub_category, $major_output,
-					$success, $targets, $quality, $timeliness, $efficiency, $is_active, $id);
+					$success, $targets, $quality, $timeliness, $efficiency,
+					$quality_scale, $timeliness_scale, $efficiency_scale,
+					$is_active, $id);
 			}
 			$stmt->execute();
 			$task_id = empty($id) ? $this->db->insert_id : $id;
@@ -1366,15 +1376,38 @@ Class Action {
 			$stmt->close();
 			return 1;
 		}
+	}
 	
-		
+	
+
+
+	function save_mov_rating(){
+		// Admin (login_type 2) is view-only — reject all rating operations
+		if ((($_SESSION['login_type'] ?? -1)) == 2) {
+			return 0;
+		}
+		extract($_POST);
+		$mov_id = intval($mov_id ?? 0);
+		$dim = in_array($dim ?? '', ['timeliness', 'quality', 'efficiency']) ? $dim : '';
+		if ($mov_id === 0 || $dim === '') {
+			return 0;
+		}
+		if ($dim === 'efficiency') {
+			$val = isset($value) ? (intval($value) ? 1 : 0) : 0;
+			$stmt = $this->db->prepare("UPDATE mov_uploads SET efficiency_submitted = ? WHERE id = ?");
+			$stmt->bind_param('ii', $val, $mov_id);
+		} else {
+			$val = ($value === '' || $value === null) ? null : intval($value);
+			$col = $dim === 'timeliness' ? 'timeliness_rating' : 'quality_rating';
+			$stmt = $this->db->prepare("UPDATE mov_uploads SET {$col} = ? WHERE id = ?");
+			$stmt->bind_param('ii', $val, $mov_id);
+		}
+		$ok = $stmt->execute();
+		$stmt->close();
+		return $ok ? 1 : 0;
 	}
 
 	function save_comment(){
-		// Admin (login_type 2) is view-only — reject all comment operations
-		if (($login_type = ($_SESSION['login_type'] ?? -1)) == 2) {
-			return 0;
-		}
 		if(isset($_POST['faculty_id']) && isset($_POST['evaluator_id']) && isset($_POST['comment'])){
 			$faculty_id = intval($_POST['faculty_id']);
 			$evaluator_id = intval($_POST['evaluator_id']);

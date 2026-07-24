@@ -50,7 +50,13 @@ if ($active_period) {
       <span class="dashboard-section-title"><i class="fas fa-user-tie mr-1"></i>
       <?php
       $role = $_SESSION['evaluator_role'] ?? 'evaluator';
-      echo ucfirst($role);
+      $role_labels = [
+          'dept_head' => 'Department Head',
+          'dean'      => 'Dean',
+          'vp'        => 'Vice President',
+          'evaluator' => 'Evaluator',
+      ];
+      echo $role_labels[$role] ?? ucfirst(str_replace('_', ' ', $role));
       ?>
       Dashboard</span>
       <small class="text-muted">Faculty under your supervision</small>

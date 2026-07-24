@@ -33,6 +33,7 @@ $csrf_protected_actions = [
 	'save_progress', 'delete_progress',
 	'save_evaluation', 'delete_evaluation',
 	'save_rating', 'save_status', 'delete_file',
+	'save_mov_rating',
 	'update_semester', 'register_user',
 	'save_comment', 'submit_file',
 	'save_renewal_recommendation', 'submit_dean_decision',
@@ -263,6 +264,13 @@ if($action == 'save_rating'){
 		error_log("save_rating exception: " . $e->getMessage());
 		echo 0;
 	}
+}
+if($action == 'save_mov_rating'){
+	$save = $crud->save_mov_rating();
+	if($save)
+		echo $save;
+	else
+		echo 0;
 }
 if($action == 'save_status'){
 	$save_status = $crud->save_status();
