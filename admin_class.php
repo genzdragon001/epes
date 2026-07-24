@@ -2685,63 +2685,67 @@ function submit_file() {
 		// department and average them. The IPCR overall rating is computed using
 		// the weighted computation from rating_functions.php (strategic + core +
 		// support with percentage allocations), NOT a simple average of E/T/Q.
-		if($period['auto_cascade']){
-			require_once 'includes/rating_functions.php';
+		// NOTE: This runs on manual "Compute Now" click regardless of auto_cascade.
+		require_once 'includes/rating_functions.php';
+		
+		// Get all departments
+		$dept_qry = $this->db->query("SELECT id, department FROM department_list ORDER BY department");
+		while($dept = $dept_qry->fetch_assoc()){
+			$dept_id = $dept['id'];
 			
-			// Get all departments
-			$dept_qry = $this->db->query("SELECT id, department FROM department_list ORDER BY department");
-			while($dept = $dept_qry->fetch_assoc()){
-				$dept_id = $dept['id'];
-				
-				// Get all faculty in this department
-				$fac_qry = $this->db->query("SELECT id, position_id, designation_id FROM employee_list WHERE department_id = $dept_id");
-				$ipcr_scores = [];
-				while($fac = $fac_qry->fetch_assoc()){
-					$fid = (int)$fac['id'];
-					$fpos = (int)$fac['position_id'];
-					$fdes = (int)$fac['designation_id'];
-					$pf = " AND rating_period IN ('$in_codes')";
-					$score = computeWeightedRating($this->db, $fid, $fpos, $fdes, '', $pf);
-					if ($score !== null && $score > 0) {
-						$ipcr_scores[] = $score;
-					}
+			// Get all faculty in this department
+			$fac_qry = $this->db->query("SELECT id, position_id, designation_id FROM employee_list WHERE department_id = $dept_id");
+			$ipcr_scores = [];
+			while($fac = $fac_qry->fetch_assoc()){
+				$fid = (int)$fac['id'];
+				$fpos = (int)$fac['position_id'];
+				$fdes = (int)$fac['designation_id'];
+				$pf = " AND rating_period IN ('$in_codes')";
+				$score = computeWeightedRating($this->db, $fid, $fpos, $fdes, '', $pf);
+				if ($score !== null && $score > 0) {
+					$ipcr_scores[] = $score;
 				}
+			}
+			
+			if(count($ipcr_scores) > 0){
+				$overall = round(array_sum($ipcr_scores) / count($ipcr_scores), 2);
 				
-				if(count($ipcr_scores) > 0){
-					$overall = round(array_sum($ipcr_scores) / count($ipcr_scores), 2);
-					
-					// Also compute average E/T/Q for display
-					$avg_qry = $this->db->query("
-						SELECT AVG(r.efficiency) as avg_eff, AVG(r.timeliness) as avg_time, AVG(r.quality) as avg_qual
-						FROM ratings r
-						INNER JOIN employee_list e ON r.employee_id = e.id
-						WHERE e.department_id = $dept_id
-						AND r.rating_period IN ('$in_codes')
-						AND r.efficiency > 0 AND r.timeliness > 0 AND r.quality > 0
-					");
-					$avg = $avg_qry ? $avg_qry->fetch_assoc() : ['avg_eff'=>0,'avg_time'=>0,'avg_qual'=>0];
-					$eff = round((float)($avg['avg_eff'] ?? 0), 2);
-					$time = round((float)($avg['avg_time'] ?? 0), 2);
-					$qual = round((float)($avg['avg_qual'] ?? 0), 2);
-					
-					// Upsert DP
-					$stmt = $this->db->prepare("
-						INSERT INTO cascading_ratings 
-							(source_period_id, target_period_id, department_id, level, 
-							 avg_efficiency, avg_timeliness, avg_quality, overall_rating)
-						VALUES (?, ?, ?, 'DP', ?, ?, ?, ?)
-						ON DUPLICATE KEY UPDATE
-							avg_efficiency = VALUES(avg_efficiency),
-							avg_timeliness = VALUES(avg_timeliness),
-							avg_quality = VALUES(avg_quality),
-							overall_rating = VALUES(overall_rating),
-							computed_at = CURRENT_TIMESTAMP
-					");
-					$stmt->bind_param('iiidddd', $period_id, $period_id, $dept_id, $eff, $time, $qual, $overall);
-					$stmt->execute();
-					$stmt->close();
-					$dp_count++;
-				}
+				// Compute average E/T/Q for display. Each dimension is stored in
+				// a SEPARATE row (one row has efficiency>0, another has timeliness>0,
+				// etc.), so we must AVG each column independently with its own > 0
+				// filter — NOT all three > 0 in the same row.
+				$avg_qry = $this->db->query("
+					SELECT 
+						AVG(CASE WHEN r.efficiency > 0 THEN r.efficiency END) as avg_eff,
+						AVG(CASE WHEN r.timeliness > 0 THEN r.timeliness END) as avg_time,
+						AVG(CASE WHEN r.quality > 0 THEN r.quality END) as avg_qual
+					FROM ratings r
+					INNER JOIN employee_list e ON r.employee_id = e.id
+					WHERE e.department_id = $dept_id
+					AND r.rating_period IN ('$in_codes')
+				");
+				$avg = $avg_qry ? $avg_qry->fetch_assoc() : ['avg_eff'=>0,'avg_time'=>0,'avg_qual'=>0];
+				$eff = round((float)($avg['avg_eff'] ?? 0), 2);
+				$time = round((float)($avg['avg_time'] ?? 0), 2);
+				$qual = round((float)($avg['avg_qual'] ?? 0), 2);
+				
+				// Upsert DP
+				$stmt = $this->db->prepare("
+					INSERT INTO cascading_ratings 
+						(source_period_id, target_period_id, department_id, level, 
+						 avg_efficiency, avg_timeliness, avg_quality, overall_rating)
+					VALUES (?, ?, ?, 'DP', ?, ?, ?, ?)
+					ON DUPLICATE KEY UPDATE
+						avg_efficiency = VALUES(avg_efficiency),
+						avg_timeliness = VALUES(avg_timeliness),
+						avg_quality = VALUES(avg_quality),
+						overall_rating = VALUES(overall_rating),
+						computed_at = CURRENT_TIMESTAMP
+				");
+				$stmt->bind_param('iiidddd', $period_id, $period_id, $dept_id, $eff, $time, $qual, $overall);
+				$stmt->execute();
+				$stmt->close();
+				$dp_count++;
 			}
 		}
 		
@@ -2750,53 +2754,55 @@ function submit_file() {
 		// Each Dept Head is a faculty member with designation_id=2 (Department Head)
 		// or is listed in evaluator_list with type=0.
 		// The Dean's OPCR is computed from the Dept Heads they supervise.
-		if($period['auto_cascade']){
-			require_once 'includes/rating_functions.php';
-			
-			// Get all Department Head employees (designation_id = 2)
-			$dh_qry = $this->db->query("
-				SELECT e.id, e.position_id, e.designation_id, e.department_id
-				FROM employee_list e
-				WHERE e.designation_id = 2
-				ORDER BY e.department_id
-			");
-			$dh_scores = [];
-			while($dh = $dh_qry->fetch_assoc()){
-				$dh_id = (int)$dh['id'];
-				$dh_pos = (int)$dh['position_id'];
-				$dh_des = (int)$dh['designation_id'];
-				$pf = " AND rating_period IN ('$in_codes')";
-				$score = computeWeightedRating($this->db, $dh_id, $dh_pos, $dh_des, '', $pf);
-				if ($score !== null && $score > 0) {
-					$dh_scores[] = $score;
-				}
+		// NOTE: This runs on manual "Compute Now" click regardless of auto_cascade.
+		
+		// Get all Department Head employees (designation_id = 2)
+		$dh_qry = $this->db->query("
+			SELECT e.id, e.position_id, e.designation_id, e.department_id
+			FROM employee_list e
+			WHERE e.designation_id = 2
+			ORDER BY e.department_id
+		");
+		$dh_scores = [];
+		while($dh = $dh_qry->fetch_assoc()){
+			$dh_id = (int)$dh['id'];
+			$dh_pos = (int)$dh['position_id'];
+			$dh_des = (int)$dh['designation_id'];
+			$pf = " AND rating_period IN ('$in_codes')";
+			$score = computeWeightedRating($this->db, $dh_id, $dh_pos, $dh_des, '', $pf);
+			if ($score !== null && $score > 0) {
+				$dh_scores[] = $score;
 			}
+		}
+		
+		if(count($dh_scores) > 0){
+			$overall = round(array_sum($dh_scores) / count($dh_scores), 2);
 			
-			if(count($dh_scores) > 0){
-				$overall = round(array_sum($dh_scores) / count($dh_scores), 2);
-				
-				// Also compute average E/T/Q for display
-				$dh_ids = [];
-				$dh_qry2 = $this->db->query("SELECT id FROM employee_list WHERE designation_id = 2");
-				while($dh2 = $dh_qry2->fetch_assoc()) $dh_ids[] = (int)$dh2['id'];
-				$dh_in = implode(',', $dh_ids);
-				$avg_qry = $this->db->query("
-					SELECT AVG(r.efficiency) as avg_eff, AVG(r.timeliness) as avg_time, AVG(r.quality) as avg_qual
-					FROM ratings r
-					WHERE r.employee_id IN ($dh_in)
-					AND r.rating_period IN ('$in_codes')
-					AND r.efficiency > 0 AND r.timeliness > 0 AND r.quality > 0
-				");
-				$avg = $avg_qry ? $avg_qry->fetch_assoc() : ['avg_eff'=>0,'avg_time'=>0,'avg_qual'=>0];
-				$eff = round((float)($avg['avg_eff'] ?? 0), 2);
-				$time = round((float)($avg['avg_time'] ?? 0), 2);
-				$qual = round((float)($avg['avg_qual'] ?? 0), 2);
-				
-				// Office-level OPCR (department_id = 0 means "all departments")
-				$stmt = $this->db->prepare("
-					INSERT INTO cascading_ratings 
-						(source_period_id, target_period_id, department_id, level,
-						 avg_efficiency, avg_timeliness, avg_quality, overall_rating)
+			// Compute average E/T/Q for display. Same per-column CASE approach as DP
+			// — each dimension is in a separate row, so AVG independently.
+			$dh_ids = [];
+			$dh_qry2 = $this->db->query("SELECT id FROM employee_list WHERE designation_id = 2");
+			while($dh2 = $dh_qry2->fetch_assoc()) $dh_ids[] = (int)$dh2['id'];
+			$dh_in = implode(',', $dh_ids);
+			$avg_qry = $this->db->query("
+				SELECT 
+					AVG(CASE WHEN r.efficiency > 0 THEN r.efficiency END) as avg_eff,
+					AVG(CASE WHEN r.timeliness > 0 THEN r.timeliness END) as avg_time,
+					AVG(CASE WHEN r.quality > 0 THEN r.quality END) as avg_qual
+				FROM ratings r
+				WHERE r.employee_id IN ($dh_in)
+				AND r.rating_period IN ('$in_codes')
+			");
+			$avg = $avg_qry ? $avg_qry->fetch_assoc() : ['avg_eff'=>0,'avg_time'=>0,'avg_qual'=>0];
+			$eff = round((float)($avg['avg_eff'] ?? 0), 2);
+			$time = round((float)($avg['avg_time'] ?? 0), 2);
+			$qual = round((float)($avg['avg_qual'] ?? 0), 2);
+			
+			// Office-level OPCR (department_id = 0 means "all departments")
+			$stmt = $this->db->prepare("
+				INSERT INTO cascading_ratings 
+					(source_period_id, target_period_id, department_id, level,
+					 avg_efficiency, avg_timeliness, avg_quality, overall_rating)
 					VALUES (?, ?, 0, 'OPCR', ?, ?, ?, ?)
 					ON DUPLICATE KEY UPDATE
 						avg_efficiency = VALUES(avg_efficiency),
@@ -2804,12 +2810,11 @@ function submit_file() {
 						avg_quality = VALUES(avg_quality),
 						overall_rating = VALUES(overall_rating),
 						computed_at = CURRENT_TIMESTAMP
-				");
-				$stmt->bind_param('iidddd', $period_id, $period_id, $eff, $time, $qual, $overall);
-				$stmt->execute();
-				$stmt->close();
-				$opcr_count = 1;
-			}
+			");
+			$stmt->bind_param('iidddd', $period_id, $period_id, $eff, $time, $qual, $overall);
+			$stmt->execute();
+			$stmt->close();
+			$opcr_count = 1;
 		}
 		
 		// ---- STEP 3: Intervention Flags (3 consecutive low IPCR) ----
