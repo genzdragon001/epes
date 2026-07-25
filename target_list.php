@@ -143,7 +143,8 @@ $alloc_text = implode(' · ', $alloc_labels);
 
             <?php
             // Shared data fetch
-            $where = "t.is_active = 1";
+            // Admin sees all targets (JS filter handles active/inactive); faculty sees only active
+            $where = ($login_type == 2) ? "1=1" : "t.is_active = 1";
             if ($login_type == 0) {
                 $where .= " AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $emp_position_id)";
                 $where .= " AND " . task_designation_match($emp_designation_id);
@@ -269,7 +270,7 @@ $alloc_text = implode(' · ', $alloc_labels);
                         <td class="text-center drag-handle" style="cursor:grab;"><i class="fa fa-grip-vertical text-muted"></i></td>
                         <?php endif; ?>
                         <td>
-                            <b><?= htmlspecialchars($row['success_indicators']) ?></b>
+                            <b><?= htmlspecialchars($row['success_indicators']) ?></b><?php if($row['is_active'] == 0): ?> <span class="badge badge-secondary" style="font-size:0.6rem;">Inactive</span><?php endif; ?>
                             <br><small class="text-muted"><?= htmlspecialchars($row['targets_measures']) ?></small>
                             <?php
                             $scale_parts = [];

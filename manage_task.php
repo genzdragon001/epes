@@ -105,7 +105,7 @@ $fix_nl = function($s) { return $s !== null ? str_replace(["\\r\\n", "\\n", "\\r
                 <div class="form-group">
                     <label><b>Quality</b></label>
                     <select name="quality" id="quality_sel" class="form-control form-control-sm" required>
-                        <option value="N/A" <?php echo (isset($quality) && $quality == "N/A") ? "selected" : "" ?>>N/A</option>
+                        <option value="Not Applicable" <?php echo (isset($quality) && $quality == "Not Applicable") ? "selected" : "" ?>>N/A</option>
                         <option value="Applicable" <?php echo (isset($quality) && $quality == "Applicable") ? "selected" : "" ?>>Applicable</option>
                     </select>
                 </div>
@@ -114,7 +114,7 @@ $fix_nl = function($s) { return $s !== null ? str_replace(["\\r\\n", "\\n", "\\r
                 <div class="form-group">
                     <label><b>Timeliness</b></label>
                     <select name="timeliness" id="timeliness_sel" class="form-control form-control-sm" required>
-                        <option value="N/A" <?php echo (isset($timeliness) && $timeliness == "N/A") ? "selected" : "" ?>>N/A</option>
+                        <option value="Not Applicable" <?php echo (isset($timeliness) && $timeliness == "Not Applicable") ? "selected" : "" ?>>N/A</option>
                         <option value="Applicable" <?php echo (isset($timeliness) && $timeliness == "Applicable") ? "selected" : "" ?>>Applicable</option>
                     </select>
                 </div>
@@ -123,7 +123,7 @@ $fix_nl = function($s) { return $s !== null ? str_replace(["\\r\\n", "\\n", "\\r
                 <div class="form-group">
                     <label><b>Efficiency</b></label>
                     <select name="efficiency" id="efficiency_sel" class="form-control form-control-sm" required>
-                        <option value="N/A" <?php echo (isset($efficiency) && $efficiency == "N/A") ? "selected" : "" ?>>N/A</option>
+                        <option value="Not Applicable" <?php echo (isset($efficiency) && $efficiency == "Not Applicable") ? "selected" : "" ?>>N/A</option>
                         <option value="Applicable" <?php echo (isset($efficiency) && $efficiency == "Applicable") ? "selected" : "" ?>>Applicable</option>
                     </select>
                 </div>
