@@ -203,7 +203,7 @@ SELECT
              WHEN t.category = 'core' THEN 1
              WHEN t.category = 'support' THEN 2
              ELSE 3 END,
-        t.sub_category,
+        t.sort_order,
         t.id");
    
     $num=1;

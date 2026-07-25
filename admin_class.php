@@ -1263,6 +1263,36 @@ Class Action {
 		}
 	}
 	
+	/**
+	 * Save drag-and-drop target ordering (admin only).
+	 * Receives a JSON array of task IDs in the new display order.
+	 * Updates sort_order within each category group.
+	 */
+	function save_target_order(){
+		// Admin only
+		if (($_SESSION['login_type'] ?? -1) != 2) {
+			return json_encode(['status' => 'error', 'message' => 'Admin only']);
+		}
+		$orders = $_POST['orders'] ?? '';
+		if (empty($orders)) {
+			return json_encode(['status' => 'error', 'message' => 'No order data']);
+		}
+		$ids = json_decode($orders, true);
+		if (!is_array($ids) || empty($ids)) {
+			return json_encode(['status' => 'error', 'message' => 'Invalid order data']);
+		}
+		$sort = 0;
+		$stmt = $this->db->prepare("UPDATE task_list SET sort_order = ? WHERE id = ?");
+		foreach ($ids as $tid) {
+			$tid = intval($tid);
+			$stmt->bind_param('ii', $sort, $tid);
+			$stmt->execute();
+			$sort++;
+		}
+		$stmt->close();
+		return json_encode(['status' => 'success', 'updated' => $sort]);
+	}
+	
 	function get_exemptions(){
 		extract($_POST);
 		$task_id = intval($task_id);

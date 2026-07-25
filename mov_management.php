@@ -100,7 +100,7 @@ $target_query = "SELECT DISTINCT t.id,
     AND " . task_designation_match($designation_id) . "
     AND te.id IS NULL
     $category_where
-    ORDER BY t.category, t.sub_category, t.mfo";
+    ORDER BY FIELD(t.category, 'strategic', 'core', 'support'), t.sort_order, t.mfo";
 
 $targets = $conn->query($target_query);
 

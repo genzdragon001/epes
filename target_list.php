@@ -157,7 +157,7 @@ $alloc_text = implode(' · ', $alloc_labels);
                 LEFT JOIN position_list r ON t.academic_rank_id = r.id 
                 WHERE $where 
                 GROUP BY t.id
-                ORDER BY t.category, t.sub_category, t.id");
+                ORDER BY FIELD(t.category, 'strategic', 'core', 'support'), t.sort_order, t.id");
             $tasks = $qry ? $qry->fetch_all(MYSQLI_ASSOC) : [];
             $matched_count = count($tasks);
             ?>
@@ -169,6 +169,7 @@ $alloc_text = implode(' · ', $alloc_labels);
                     <thead>
                         <tr>
                             <th style="width:30px;">#</th>
+                            <?php if($login_type == 2): ?><th style="width:30px;">&nbsp;</th><?php endif; ?>
                             <th>Success Indicators / Target</th>
                             <?php if($login_type != 2): ?><th style="width:25%;">Actual Accomplishment</th><?php endif; ?>
                             <th style="width:70px;">Rating</th>
@@ -208,7 +209,7 @@ $alloc_text = implode(' · ', $alloc_labels);
                         if ($cat !== $current_cat) {
                             $current_cat = $cat;
                             $pct_label = $cat_pct_map[$cat] > 0 ? " ({$cat_pct_map[$cat]}%)" : '';
-                            $colspan = $login_type == 0 ? 6 : ($login_type == 2 ? 7 : 8);
+                            $colspan = $login_type == 0 ? 6 : ($login_type == 2 ? 8 : 8);
                     ?>
                     <tr class="row-group" data-cat="<?= $cat ?>">
                         <td colspan="<?= $colspan ?>"><span class="cat-dot <?= $cat ?>"></span> <?= $cat_labels[$cat] ?? ucfirst($cat) ?><?= $pct_label ?></td>
@@ -256,6 +257,7 @@ $alloc_text = implode(' · ', $alloc_labels);
                         }
                     ?>
                     <tr class="target-row"
+                        data-task-id="<?php echo $row['id'] ?>"
                         data-designation="<?php echo $row['designation_id'] ?>"
                         data-rank="<?php echo $row['academic_rank_id'] ?>"
                         data-category="<?php echo $row['category'] ?>"
@@ -263,6 +265,9 @@ $alloc_text = implode(' · ', $alloc_labels);
                         data-status="<?php echo $row['is_active'] ?>"
                         data-search="<?php echo htmlspecialchars(strtolower(($row['success_indicators'] ?? '') . ' ' . ($row['targets_measures'] ?? '') . ' ' . ($row['category'] ?? '') . ' ' . ($row['sub_category'] ?? '') . ' ' . ($row['junction_designations'] ?? '') . ' ' . ($row['rank_name'] ?? ''))) ?>">
                         <td class="text-center font-weight-bold"><?= $i++ ?></td>
+                        <?php if($login_type == 2): ?>
+                        <td class="text-center drag-handle" style="cursor:grab;"><i class="fa fa-grip-vertical text-muted"></i></td>
+                        <?php endif; ?>
                         <td>
                             <b><?= htmlspecialchars($row['success_indicators']) ?></b>
                             <br><small class="text-muted"><?= htmlspecialchars($row['targets_measures']) ?></small>
@@ -492,6 +497,11 @@ $alloc_text = implode(' · ', $alloc_labels);
 <style>
 table p { margin: unset !important; }
 .table td { vertical-align: middle !important; }
+
+/* Drag-and-drop sortable */
+.sortable-ghost { opacity: 0.4; background: #eef2ff !important; }
+.sortable-chosen { background: #f0f7ff !important; }
+.drag-handle:active { cursor: grabbing !important; }
 
 /* Info strip */
 .info-strip { display: flex; gap: 16px; padding: 10px 16px; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.05); font-size: 0.82rem; flex-wrap: wrap; }
@@ -937,3 +947,73 @@ $(document).on('click', '.remove-exemption', function(){
 });
 </script>
 <?php endif; ?>
+
+<?php if($login_type == 2): ?>
+<script>
+// ── Drag-and-drop target reordering (admin only) ──
+// Uses Sortable.js (CDN). Drag rows within a category group to reorder.
+// Category group headers (Strategic/Core/Support) are not draggable.
+(function(){
+    var tbody = document.querySelector('#list tbody');
+    if (!tbody) return;
+
+    // Load Sortable.js from CDN if not already present
+    if (typeof Sortable === 'undefined') {
+        var s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js';
+        s.onload = initSortable;
+        document.head.appendChild(s);
+    } else {
+        initSortable();
+    }
+
+    function initSortable() {
+        Sortable.create(tbody, {
+            handle: '.drag-handle',
+            draggable: '.target-row',
+            filter: '.row-group',
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            chosenClass: 'sortable-chosen',
+            onEnd: function(evt) {
+                // Collect all target-row task IDs in DOM order
+                var rows = tbody.querySelectorAll('.target-row');
+                var ids = [];
+                rows.forEach(function(r) {
+                    var tid = r.getAttribute('data-task-id');
+                    if (tid) ids.push(parseInt(tid));
+                });
+                if (ids.length === 0) return;
+
+                // Save to server
+                var formData = new FormData();
+                formData.append('orders', JSON.stringify(ids));
+
+                fetch('ajax.php?action=save_target_order', {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: formData
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.status === 'success') {
+                        alert_toast('Target order saved', 'success');
+                        // Renumber the # column
+                        var num = 1;
+                        rows.forEach(function(r) {
+                            var numCell = r.querySelector('td:first-child');
+                            if (numCell) numCell.textContent = num++;
+                        });
+                    } else {
+                        alert_toast('Failed to save order', 'error');
+                    }
+                })
+                .catch(function() {
+                    alert_toast('Error saving order', 'error');
+                });
+            }
+        });
+    }
+})();
+<?php endif; ?>
+</script>
