@@ -45,12 +45,17 @@ if ($dean_q) {
     if ($dean) $dean_name = $dean['name'];
 }
 
-// Get Department Head's name (employee with designation_id = 2), if faculty is not the dept head
+// Get Department Head's name (employee with designation_id = 2) for the
+// CURRENT faculty's department, if the faculty is not the dept head themselves.
 $dept_head_name = 'N/A';
 if (!$is_dept_head) {
-    $dh_q = $conn->query("SELECT CONCAT(e.firstname, ' ', e.middlename, ' ', e.lastname) as name
+    $fac_dept_id = intval($faculty['department_id'] ?? 0);
+    $dh_stmt = $conn->prepare("SELECT CONCAT(e.firstname, ' ', e.middlename, ' ', e.lastname) as name
         FROM employee_list e
-        WHERE e.designation_id = 2 LIMIT 1");
+        WHERE e.designation_id = 2 AND e.department_id = ? LIMIT 1");
+    $dh_stmt->bind_param("i", $fac_dept_id);
+    $dh_stmt->execute();
+    $dh_q = $dh_stmt->get_result();
     if ($dh_q) {
         $dh = $dh_q->fetch_assoc();
         if ($dh) $dept_head_name = $dh['name'];
