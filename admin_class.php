@@ -288,34 +288,37 @@ Class Action {
 			return 5; // Rate limited — too many attempts from this IP
 		}
 	
-		// Choose table: check users (admin) first, then employee_list (faculty)
-		// Auto-detect — no dropdown needed
-		$stmt = $this->db->prepare("SELECT *, CONCAT(firstname,' ',lastname) AS name FROM users WHERE email = ? LIMIT 1");
-		$stmt->bind_param('s', $email);
-		$stmt->execute();
-		$qry = $stmt->get_result();
-		$stmt->close();
-
-		if ($qry->num_rows > 0) {
-			// Admin login
-			$login = 2;
-			$table = "users";
-		} else {
-			// Fall back to faculty/employee
-			$login = 0;
-			$table = "employee_list";
-			$stmt = $this->db->prepare("SELECT *, CONCAT(firstname,' ',lastname) AS name FROM {$table} WHERE email = ? LIMIT 1");
+		// Resolve which table this email belongs to and set the matching login_type.
+		// Priority: users (admin, type 2) > employee_list (faculty, type 0)
+		//           > evaluator_list (evaluator, type 1). Auto-detect — no dropdown.
+		$fallback_order = [
+			['type' => 2, 'table' => 'users'],
+			['type' => 0, 'table' => 'employee_list'],
+			['type' => 1, 'table' => 'evaluator_list'],
+		];
+		$resolved   = null;
+		$qry        = null;
+		foreach ($fallback_order as $cand) {
+			$tbl   = $cand['table'];
+			$stmt  = $this->db->prepare("SELECT *, CONCAT(firstname,' ',lastname) AS name FROM {$tbl} WHERE email = ? LIMIT 1");
 			$stmt->bind_param('s', $email);
 			$stmt->execute();
 			$qry = $stmt->get_result();
 			$stmt->close();
+			if ($qry->num_rows > 0) {
+				$resolved = $cand;
+				break;
+			}
 		}
-	
-		if ($qry->num_rows === 0) {
+
+		if (!$resolved) {
 			// Log attempt with unknown email
 			$this->logAudit(NULL, $email, $ip_address, $user_agent, "FAILED", "Email not found");
 			return 2; // Email not found
 		}
+
+		$login = $resolved['type'];
+		$table = $resolved['table'];
 	
 		$user = $qry->fetch_array();
 	
