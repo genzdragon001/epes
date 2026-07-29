@@ -12,8 +12,10 @@ $(function () {
   // - MONTHLY SALES CHART -
   //-----------------------
 
-  // Get context with jQuery - using jQuery's .get() method.
-  var salesChartCanvas = $('#salesChart').get(0).getContext('2d')
+  // Guard: only init charts when the canvas elements exist on the page
+  var salesChartEl = $('#salesChart').get(0);
+  if (!salesChartEl) return;
+  var salesChartCanvas = salesChartEl.getContext('2d')
 
   var salesChartData = {
     labels: ['January', 'February', 'March', 'April', 'May', 'June', 'July'],
@@ -80,7 +82,9 @@ $(function () {
   // - PIE CHART -
   //-------------
   // Get context with jQuery - using jQuery's .get() method.
-  var pieChartCanvas = $('#pieChart').get(0).getContext('2d')
+  var pieChartEl = $('#pieChart').get(0);
+  if (!pieChartEl) return;
+  var pieChartCanvas = pieChartEl.getContext('2d')
   var pieData = {
     labels: [
       'Chrome',
@@ -119,15 +123,17 @@ $(function () {
    * ------------
    * Create a world map with markers
    */
-  $('#world-map-markers').mapael({
-    map: {
-      name: 'usa_states',
-      zoom: {
-        enabled: true,
-        maxLevel: 10
+  if ($('#world-map-markers').length) {
+    $('#world-map-markers').mapael({
+      map: {
+        name: 'usa_states',
+        zoom: {
+          enabled: true,
+          maxLevel: 10
+        }
       }
-    }
-  })
+    })
+  }
 
   // $('#world-map-markers').vectorMap({
   //   map              : 'world_en',

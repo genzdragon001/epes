@@ -146,8 +146,11 @@ $('.number').on('input keyup keypress',function(){
 
 <!-- AdminLTE for demo purposes -->
 <script src="assets/dist/js/demo.js"></script>
-<!-- AdminLTE dashboard demo (This is only for demo purposes) -->
+<!-- AdminLTE dashboard demo — only loaded on pages with chart canvases -->
+<?php $cur_page = $_GET['page'] ?? 'home'; ?>
+<?php if (in_array($cur_page, ['home', 'dashboard'])): ?>
 <script src="assets/dist/js/pages/dashboard2.js"></script>
+<?php endif; ?>
 <!-- DataTables  & Plugins -->
 <script src="assets/plugins/datatables/jquery.dataTables.min.js"></script>
 <script src="assets/plugins/datatables-bs4/js/dataTables.bootstrap4.min.js"></script>

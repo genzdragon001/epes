@@ -14,7 +14,7 @@
 						<tr>
 							<th class="text-center" style="width: 50px;">#</th>
 							<th style="width: 25%;">Name</th>
-							<th style="width: 15%;">Type</th>
+							<th style="width: 15%;">Designation</th>
 							<th style="width: 15%;">Department</th>
 							<th style="width: 20%;">Email</th>
 							<th class="text-center" style="width: 100px;">Status</th>
@@ -28,6 +28,11 @@
 						$dept_arr = [];
 						while($d = $departments->fetch_assoc()){
 							$dept_arr[$d['id']] = $d['department'];
+						}
+						$designations = $conn->query("SELECT * FROM designation_list");
+						$desig_arr = [];
+						while($ds = $designations->fetch_assoc()){
+							$desig_arr[$ds['id']] = $ds['designation'];
 						}
 						$qry = $conn->query("SELECT ev.*, concat(ev.lastname,', ',ev.firstname,' ',ev.middlename) as name FROM evaluator_list ev WHERE ev.type IN ('0', '1') order by concat(ev.lastname,', ',ev.firstname,' ',ev.middlename) asc");
 						while($row= $qry->fetch_assoc()):
@@ -52,7 +57,12 @@
 								</div>
 							</td>
 							<td>
-								<span class="badge badge-<?php echo $type_class ?>"><?php echo $type_text ?></span>
+								<select class="desig-select form-control form-control-sm" data-id="<?php echo $row['id'] ?>">
+									<option value="0" <?php echo ($row['designation_id'] ?? 0) == 0 ? 'selected' : '' ?>>— None —</option>
+									<?php foreach($desig_arr as $did => $dname): ?>
+									<option value="<?php echo $did ?>" <?php echo intval($row['designation_id'] ?? 0) == $did ? 'selected' : '' ?>><?php echo $dname ?></option>
+									<?php endforeach; ?>
+								</select>
 							</td>
 							<td>
 								<select class="dept-select form-control form-control-sm" data-id="<?php echo $row['id'] ?>">
@@ -136,6 +146,25 @@
 						alert_toast("Department updated successfully",'success');
 					}else{
 						alert_toast("Failed to update department",'danger');
+					}
+					end_load();
+				}
+			});
+		});
+
+		$(document).on('change', '.desig-select', function(){
+			var id = $(this).data('id');
+			var designation_id = $(this).val();
+			start_load();
+			$.ajax({
+				url: 'ajax.php?action=update_evaluator_designation',
+				method: 'POST',
+				data: {id: id, designation_id: designation_id},
+				success: function(resp){
+					if(resp == 1){
+						alert_toast("Designation updated successfully",'success');
+					}else{
+						alert_toast("Failed to update designation",'danger');
 					}
 					end_load();
 				}

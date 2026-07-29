@@ -34,8 +34,9 @@
           $eval_type = null;
           if ($lt == 1) {
               // legacy evaluator: look up type from DB
+              $eval_id = intval($_SESSION['login_id'] ?? 0);
               $stmt = $conn->prepare("SELECT type FROM evaluator_list WHERE id = ?");
-              $stmt->bind_param("i", intval($_SESSION['login_id'] ?? 0));
+              $stmt->bind_param("i", $eval_id);
               $stmt->execute();
               $stmt->bind_result($eval_type);
               $stmt->fetch(); $stmt->close();
@@ -264,6 +265,12 @@
             <a href="./index.php?page=new_evaluator" class="nav-link nav-new_evaluator tree-item">
               <i class="nav-icon fas fa-user-secret"></i>
               <p>Manage Evaluators</p>
+            </a>
+          </li>
+          <li class="nav-item">
+            <a href="./index.php?page=assign_evaluator" class="nav-link nav-assign_evaluator tree-item">
+              <i class="nav-icon fas fa-user-check"></i>
+              <p>Assign Evaluator</p>
             </a>
           </li>
           <li class="nav-item">

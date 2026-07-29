@@ -27,7 +27,8 @@ $csrf_protected_actions = [
 	'save_employee', 'delete_employee',
 	'save_evaluator', 'delete_evaluator',
 	'save_academic_rank', 'delete_academic_rank',
-	'update_evaluator_department',
+	'update_evaluator_department', 'update_evaluator_designation',
+	'save_assign_evaluator',
 	'save_task', 'delete_task', 'save_target_order',
 	'save_exemption', 'delete_exemption',
 	'save_progress', 'delete_progress',
@@ -190,6 +191,16 @@ if($action == 'delete_academic_rank'){
 }
 if($action == 'update_evaluator_department'){
 	$save = $crud->update_evaluator_department();
+	if($save)
+		echo $save;
+}
+if($action == 'update_evaluator_designation'){
+	$save = $crud->update_evaluator_designation();
+	if($save)
+		echo $save;
+}
+if($action == 'save_assign_evaluator'){
+	$save = $crud->save_assign_evaluator();
 	if($save)
 		echo $save;
 }

@@ -1167,6 +1167,85 @@ Class Action {
 		if($update)
 			return 1;
 	}
+	function update_evaluator_designation(){
+		extract($_POST);
+		$id = intval($id);
+		$designation_id = intval($designation_id);
+		// Sync the legacy `type` flag: Dean designation => 1, everything else => 0,
+		// so is_dean()/is_program_head() role checks keep working.
+		$type = 0;
+		if ($designation_id > 0) {
+			$ds = $this->db->prepare("SELECT LOWER(designation) AS name FROM designation_list WHERE id = ? LIMIT 1");
+			$ds->bind_param('i', $designation_id);
+			$ds->execute();
+			$dsr = $ds->get_result()->fetch_assoc();
+			$ds->close();
+			if ($dsr && strpos($dsr['name'], 'dean') !== false) {
+				$type = 1;
+			}
+		}
+		$stmt = $this->db->prepare("UPDATE evaluator_list SET designation_id = ?, type = ? WHERE id = ?");
+		$stmt->bind_param('iii', $designation_id, $type, $id);
+		$update = $stmt->execute();
+		$stmt->close();
+		if($update)
+			return 1;
+	}
+	function save_assign_evaluator(){
+		if (session_status() === PHP_SESSION_NONE) session_start();
+		if (intval($_SESSION['login_type'] ?? -1) !== 2) return 0; // admin only
+
+		// Verify the evaluator's designation is allowed to evaluate the employee designation.
+		// Faculty (3) -> evaluator must be a Department Head (2)
+		// Department Head (2) -> evaluator must be a Dean (1)
+		// All other employee designations -> any evaluator
+		$isAllowedEvaluator = function($emp_desig, $eval_id) {
+			if (intval($eval_id) <= 0) return false;
+			if ($emp_desig == 3) $required = 2;
+			elseif ($emp_desig == 2) $required = 1;
+			else return true; // unrestricted
+			$st = $this->db->prepare("SELECT designation_id FROM evaluator_list WHERE id = ? LIMIT 1");
+			$st->bind_param('i', $eval_id);
+			$st->execute();
+			$row = $st->get_result()->fetch_assoc();
+			$st->close();
+			return $row && intval($row['designation_id']) === $required;
+		};
+
+		// Bulk "Apply All"
+		if (!empty($_POST['bulk']) && !empty($_POST['assignments'])) {
+			$assignments = json_decode($_POST['assignments'], true);
+			if (!is_array($assignments) || empty($assignments)) return 0;
+			$this->db->begin_transaction();
+			try {
+				$stmt = $this->db->prepare("UPDATE employee_list SET evaluator_id = ? WHERE designation_id = ?");
+				foreach ($assignments as $a) {
+					$did = intval($a['designation_id'] ?? 0);
+					$eid = intval($a['evaluator_id'] ?? 0);
+					if ($did <= 0 || !$isAllowedEvaluator($did, $eid)) continue;
+					$stmt->bind_param('ii', $eid, $did);
+					$stmt->execute();
+				}
+				$stmt->close();
+				$this->db->commit();
+				return 1;
+			} catch (Exception $e) {
+				$this->db->rollback();
+				return 0;
+			}
+		}
+
+		// Single designation apply
+		$designation_id = intval($_POST['designation_id'] ?? 0);
+		$evaluator_id   = intval($_POST['evaluator_id'] ?? 0);
+		if ($designation_id <= 0 || !$isAllowedEvaluator($designation_id, $evaluator_id)) return 0;
+
+		$stmt = $this->db->prepare("UPDATE employee_list SET evaluator_id = ? WHERE designation_id = ?");
+		$stmt->bind_param('ii', $evaluator_id, $designation_id);
+		$done = $stmt->execute();
+		$stmt->close();
+		if ($done) return 1;
+	}
 	function save_task(){
 		$this->db->begin_transaction();
 		try {
@@ -1364,13 +1443,16 @@ Class Action {
 			return 0;
 		}
 
-		// Get rating_period from POST or fall back to session/DB
+		// Get rating_period from POST, or fall back to the active period code
 		$rating_period = $rating_period ?? '';
 		if (empty($rating_period)) {
-			$rating_period = $_SESSION['rating_period'] ?? '';
+			// Fall back to the active rating period's canonical code
+			$rp_qry = $this->db->query("SELECT code FROM rating_period WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
+			if ($rp_qry && $rp_qry->num_rows > 0) {
+				$rating_period = $rp_qry->fetch_assoc()['code'] ?? '';
+			}
 		}
 		if (empty($rating_period)) {
-			// Fall back to latest active rating period
 			$rp_qry = $this->db->query("SELECT code FROM rating_period ORDER BY id DESC LIMIT 1");
 			if ($rp_qry && $rp_qry->num_rows > 0) {
 				$rating_period = $rp_qry->fetch_assoc()['code'] ?? '';
@@ -1384,9 +1466,9 @@ Class Action {
 		$period_type = 'IPCR';
 		$evaluator_id = intval($_SESSION['login_id'] ?? 0);
 
-		// Check if rating already exists
-		$stmt = $this->db->prepare("SELECT id FROM ratings WHERE task_id = ? AND employee_id = ?");
-		$stmt->bind_param('ii', $task_id, $employee_id);
+		// Check if rating already exists for this task+employee+period
+		$stmt = $this->db->prepare("SELECT id FROM ratings WHERE task_id = ? AND employee_id = ? AND rating_period = ?");
+		$stmt->bind_param('iis', $task_id, $employee_id, $rating_period);
 		$stmt->execute();
 		$check = $stmt->get_result();
 		$stmt->close();

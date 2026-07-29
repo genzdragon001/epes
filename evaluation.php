@@ -634,7 +634,23 @@ if($comment_check && $comment_check->num_rows > 0){
 
 <script>
 
-
+// Pass the selected period code to JS for rating AJAX calls
+<?php
+// Build the canonical code for the SELECTED period (not necessarily the active one)
+$selected_period_code = '';
+if ($selected_period) {
+    $sel_key = epes_period_key($selected_period['semester'], $selected_period['year']);
+    foreach ($raw_periods as $p) {
+        if (epes_period_key($p['semester'], $p['year']) === $sel_key) {
+            $selected_period_code = $p['code'];
+            break;
+        }
+    }
+}
+// Fall back to active if no selected period code found
+if (empty($selected_period_code)) $selected_period_code = $active_period_code;
+?>
+var EPES_RATING_PERIOD = '<?= htmlspecialchars($selected_period_code) ?>';
 
 $(document).ready(function(){
     // Target/MOV comment modal open
@@ -719,7 +735,7 @@ $(document).ready(function(){
         $.ajax({
             url: "ajax.php?action=save_rating",
             method: "POST",
-            data: { task_id: taskId, faculty_id: facultyId, field: field, value: value },
+            data: { task_id: taskId, faculty_id: facultyId, field: field, value: value, rating_period: EPES_RATING_PERIOD },
             success: function(resp){
                 if(resp == 1){
                     alert_toast("Rating saved successfully", "success");
@@ -823,7 +839,7 @@ $(document).ready(function(){
         $.ajax({
             url: "ajax.php?action=save_rating",
             method: "POST",
-            data: { task_id: taskId, faculty_id: facultyId, field: field, value: value },
+            data: { task_id: taskId, faculty_id: facultyId, field: field, value: value, rating_period: EPES_RATING_PERIOD },
             success: function(resp){
                 if(resp == 1){
                     alert_toast("Custom rating saved successfully", "success");
@@ -855,7 +871,7 @@ $(document).ready(function(){
         $.ajax({
             url: "ajax.php?action=save_rating",
             method: "POST",
-            data: { task_id: taskId, faculty_id: facultyId, field: field, value: value },
+            data: { task_id: taskId, faculty_id: facultyId, field: field, value: value, rating_period: EPES_RATING_PERIOD },
             success: function(resp){
                 if(resp == 1){
                     alert_toast("Rating saved successfully", "success");
