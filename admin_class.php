@@ -1910,7 +1910,7 @@ function submit_file() {
     $destPath = $uploadDir . $newFileName . "." . $fileType;
     
     if (move_uploaded_file($fileTmpName, $destPath)) {
-        $check = $this->db->query("SELECT id FROM task_progress WHERE task_id = $task_id AND faculty_id = $faculty_id LIMIT 1");
+        $check = $this->db->query("SELECT id FROM task_progress WHERE task_id = $task_id AND faculty_id = $faculty_id AND rating_period = '$rating_period' LIMIT 1");
         
         if ($check && $check->num_rows > 0) {
             $row = $check->fetch_assoc();
@@ -1939,8 +1939,8 @@ function submit_file() {
 	        return;
 	    }
 
-	    // Check if a submission already exists
-	    $check = $this->db->query("SELECT id FROM task_progress WHERE task_id = $task_id AND faculty_id = $faculty_id LIMIT 1");
+	    // Check if a submission already exists for this period
+	    $check = $this->db->query("SELECT id FROM task_progress WHERE task_id = $task_id AND faculty_id = $faculty_id AND rating_period = '$rating_period' LIMIT 1");
 	    if ($check && $check->num_rows > 0) {
 	        $row = $check->fetch_assoc();
 	        $progressId = (int) $row['id'];
@@ -1954,19 +1954,22 @@ function submit_file() {
 
 	function delete_file(){
 		extract($_POST);
-		 // Get user info for audit
-		 $userId   = $_SESSION['login_id'] ?? null;
-		 $username = $_SESSION['login_email'] ?? 'Unknown';
-		 $ip       = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
-		 $userAgent= $_SERVER['HTTP_USER_AGENT'] ?? '';
-		 // Safety check
-		 if (empty($task_id) || empty($faculty_id)) {
-			echo 0;
-			exit;
-		}
-	
-		// Delete record from task_progress
-		$delete = $this->db->query("DELETE FROM task_progress WHERE task_id = $task_id AND faculty_id = $faculty_id");
+	 // Get user info for audit
+	 $userId   = $_SESSION['login_id'] ?? null;
+	 $username = $_SESSION['login_email'] ?? 'Unknown';
+	 $ip       = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+	 $userAgent= $_SERVER['HTTP_USER_AGENT'] ?? '';
+	 // Safety check
+	 if (empty($task_id) || empty($faculty_id)) {
+		echo 0;
+		exit;
+	}
+	 $rp = isset($rating_period) ? $this->db->real_escape_string($rating_period) : '';
+
+	// Delete record from task_progress (scoped to the selected period)
+	$delete_sql = "DELETE FROM task_progress WHERE task_id = $task_id AND faculty_id = $faculty_id";
+	if (!empty($rp)) $delete_sql .= " AND rating_period = '$rp'";
+	$delete = $this->db->query($delete_sql);
 		$activity_log = 'Deleted file successfuly';
 		if ($delete) {
 			$this->db->query("INSERT INTO login_audit_trail (user_id, username, ip_address, user_agent, login_status, failure_reason) 

@@ -6,8 +6,21 @@ $faculty_id = $_SESSION['login_id'] ?? 0;
 
 include 'includes/period_builder.php';
 
-// Current rating period code (for new submissions — uses the active period)
-$rating_period = $active_period_code;
+// Rating period code for new submissions — uses the SELECTED period
+// (not necessarily the active one) so uploads are saved against the
+// period the faculty is currently viewing.
+$selected_period_code = '';
+if ($selected_period) {
+    $sel_key = epes_period_key($selected_period['semester'], $selected_period['year']);
+    foreach ($raw_periods as $p) {
+        if (epes_period_key($p['semester'], $p['year']) === $sel_key) {
+            $selected_period_code = $p['code'];
+            break;
+        }
+    }
+}
+if (empty($selected_period_code)) $selected_period_code = $active_period_code;
+$rating_period = $selected_period_code;
 
 $emp_qry = $conn->query("SELECT e.*, p.position as position_name, d.designation as designation_name 
     FROM employee_list e 
@@ -719,7 +732,7 @@ function delete_file(taskId, facultyId) {
     $.ajax({
         url: 'ajax.php?action=delete_file',
         method: 'POST',
-        data: { task_id: taskId, faculty_id: facultyId },
+        data: { task_id: taskId, faculty_id: facultyId, rating_period: '<?= $rating_period ?>' },
         success: function(resp) {
             if (resp == 1) {
                 alert_toast("File successfully deleted", "success");
