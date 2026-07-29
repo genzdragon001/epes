@@ -25,7 +25,7 @@ if (!empty($_SESSION['is_evaluator'])) {
     $stmt_type->fetch();
     $stmt_type->close();
     $is_dean = ($eval_type == 1);
-    $is_vp   = ($eval_desig_id == 4);
+    $is_vp   = in_array($eval_desig_id ?? 0, [4, 18, 19]);
 }
 
 if($is_dean) {
@@ -33,6 +33,12 @@ if($is_dean) {
     $total_submissions  = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.id!=$eval_id $period_filter")->fetch_row()[0];
     $verified           = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.id!=$eval_id AND tp.progress='Verified' $period_filter")->fetch_row()[0];
     $for_verif          = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.id!=$eval_id AND tp.progress='For Verification' $period_filter")->fetch_row()[0];
+} elseif($is_vp) {
+    // VP sees faculty explicitly assigned to them via evaluator_id
+    $total_faculty      = $conn->query("SELECT COUNT(*) FROM employee_list WHERE evaluator_id=$eval_id")->fetch_row()[0];
+    $total_submissions  = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.evaluator_id=$eval_id $period_filter")->fetch_row()[0];
+    $verified           = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.evaluator_id=$eval_id AND tp.progress='Verified' $period_filter")->fetch_row()[0];
+    $for_verif          = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.evaluator_id=$eval_id AND tp.progress='For Verification' $period_filter")->fetch_row()[0];
 } else {
     $total_faculty      = $conn->query("SELECT COUNT(*) FROM employee_list WHERE department_id=$eval_dept_id")->fetch_row()[0];
     $total_submissions  = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id AND e.id != $eval_id $period_filter")->fetch_row()[0];
@@ -79,18 +85,30 @@ if($is_dean) {
     }
 }
 
-// Faculty table data for dept head
+// Faculty table data for dept head or VP
 $fac_table = [];
 if(!$is_dean) {
-    $fq = $conn->query("
-        SELECT e.id, e.firstname, e.lastname, e.designation_id, e.position_id,
-               d.designation as designation_name, p.position as position_name
-        FROM employee_list e
-        LEFT JOIN designation_list d ON e.designation_id=d.id
-        LEFT JOIN position_list p ON e.position_id=p.id
-        WHERE e.department_id=$eval_dept_id AND e.id != $eval_id
-        ORDER BY e.lastname, e.firstname
-    ");
+    if ($is_vp) {
+        $fq = $conn->query("
+            SELECT e.id, e.firstname, e.lastname, e.designation_id, e.position_id,
+                   d.designation as designation_name, p.position as position_name
+            FROM employee_list e
+            LEFT JOIN designation_list d ON e.designation_id=d.id
+            LEFT JOIN position_list p ON e.position_id=p.id
+            WHERE e.evaluator_id=$eval_id
+            ORDER BY e.lastname, e.firstname
+        ");
+    } else {
+        $fq = $conn->query("
+            SELECT e.id, e.firstname, e.lastname, e.designation_id, e.position_id,
+                   d.designation as designation_name, p.position as position_name
+            FROM employee_list e
+            LEFT JOIN designation_list d ON e.designation_id=d.id
+            LEFT JOIN position_list p ON e.position_id=p.id
+            WHERE e.department_id=$eval_dept_id AND e.id != $eval_id
+            ORDER BY e.lastname, e.firstname
+        ");
+    }
     while($f = $fq->fetch_assoc()) {
         $fid = (int)$f['id'];
         $fpos = (int)$f['position_id'];
@@ -126,7 +144,8 @@ if (!$is_dean && !empty($fac_table)) {
 
 // Recent activity
 $recent_where = [];
-if (!$is_dean) $recent_where[] = "e.department_id=$eval_dept_id";
+if (!$is_dean && !$is_vp) $recent_where[] = "e.department_id=$eval_dept_id";
+if ($is_vp) $recent_where[] = "e.evaluator_id=$eval_id";
 if ($period_filter !== '') {
     $recent_where[] = "(" . substr($period_filter, strlen(" AND ")) . ")";
 }
@@ -146,7 +165,7 @@ $recent = $conn->query($recent_sql);
         <div class="stat-card accent-blue">
             <div class="stat-icon blue"><i class="fas fa-users"></i></div>
             <div class="stat-value"><?= $total_faculty ?></div>
-            <div class="stat-label">Faculty<?= $is_dean ? ' (All)' : ' (Dept)' ?></div>
+            <div class="stat-label">Faculty<?= $is_dean ? ' (All)' : ($is_vp ? ' (Assigned)' : ' (Dept)') ?></div>
         </div>
     </div>
     <div class="col-6 col-md-3 mb-2">
@@ -240,7 +259,7 @@ $recent = $conn->query($recent_sql);
     <div class="col-12">
         <div class="chart-card">
             <div class="chart-card-header">
-                <span><i class="fas fa-user-graduate mr-2" style="color:#4361ee;"></i>Faculty Completion</span>
+                <span><i class="fas fa-user-graduate mr-2" style="color:#4361ee;"></i><?= $is_vp ? 'Assigned Faculty' : 'Faculty Completion' ?></span>
                 <small class="text-muted"><?= $period_label ?></small>
             </div>
             <div class="card-body p-0">
@@ -301,7 +320,7 @@ $recent = $conn->query($recent_sql);
                 </table>
                 </div>
                 <?php else: ?>
-                <p class="text-muted text-center py-4 mb-0">No faculty in department</p>
+                <p class="text-muted text-center py-4 mb-0"><?= $is_vp ? 'No faculty assigned to you' : 'No faculty in department' ?></p>
                 <?php endif; ?>
             </div>
         </div>

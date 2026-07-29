@@ -59,13 +59,23 @@ if (!defined('DB_CONNECTED')) {
      * junction table (task_designations). A task matches when its legacy
      * designation is NULL/0 ("All"), equals the faculty designation, OR it has
      * a junction row for the faculty designation.
-     * @param mixed $desig_val The int designation id of the faculty
+     *
+     * When $employee_id is provided, also matches tasks for any additional
+     * designations the employee holds via the employee_designations junction
+     * table (e.g. Director TAEx + Extension Head).
+     * @param mixed $desig_val    The int designation id of the faculty (primary)
+     * @param int   $employee_id  Optional employee id for multi-designation lookup
      * @return string SQL fragment (no leading AND)
      */
-    function task_designation_match($desig_val) {
+    function task_designation_match($desig_val, $employee_id = 0) {
         $desig_val = intval($desig_val);
-        return "(t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = $desig_val
-                 OR EXISTS (SELECT 1 FROM task_designations td WHERE td.task_id = t.id AND td.designation_id = $desig_val))";
+        $sql = "(t.designation_id IS NULL OR t.designation_id = 0 OR t.designation_id = $desig_val
+                 OR EXISTS (SELECT 1 FROM task_designations td WHERE td.task_id = t.id AND td.designation_id = $desig_val)";
+        if ($employee_id > 0) {
+            $sql .= " OR EXISTS (SELECT 1 FROM employee_designations ed JOIN task_designations td ON td.designation_id = ed.designation_id AND td.task_id = t.id WHERE ed.employee_id = $employee_id)";
+        }
+        $sql .= ")";
+        return $sql;
     }
     
     /**

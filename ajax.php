@@ -23,6 +23,7 @@ $csrf_protected_actions = [
 	'login', 'login2', 'signup',
 	'save_user', 'update_user', 'delete_user',
 	'save_department', 'delete_department',
+	'save_college_office', 'delete_college_office',
 	'save_designation', 'delete_designation',
 	'save_employee', 'delete_employee',
 	'save_evaluator', 'delete_evaluator',
@@ -146,6 +147,16 @@ if($action == 'save_department'){
 }
 if($action == 'delete_department'){
 	$save = $crud->delete_department();
+	if($save)
+		echo $save;
+}
+if($action == 'save_college_office'){
+	$save = $crud->save_college_office();
+	if($save)
+		echo $save;
+}
+if($action == 'delete_college_office'){
+	$save = $crud->delete_college_office();
 	if($save)
 		echo $save;
 }

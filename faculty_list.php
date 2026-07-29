@@ -100,6 +100,8 @@ if($is_admin) {
         ORDER BY e.lastname
     ");
 } else {
+    // Other evaluators (e.g. VP, Director, Research Head): show faculty
+    // explicitly assigned to this evaluator via evaluator_id.
     $result = $conn->query("
         SELECT e.id, e.firstname, e.middlename, e.lastname, e.department_id,
                e.designation_id, dl.designation, dep.department, e.position_id, p.position
@@ -107,7 +109,7 @@ if($is_admin) {
         LEFT JOIN designation_list dl ON e.designation_id = dl.id
         LEFT JOIN department_list dep ON e.department_id = dep.id
         LEFT JOIN position_list p ON e.position_id = p.id
-        WHERE e.department_id = $dept_id
+        WHERE e.evaluator_id = $eval_id
         ORDER BY e.lastname
     ");
 }

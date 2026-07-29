@@ -3,8 +3,17 @@
     <div class="card card-outline card-info">
         <div class="card-header">
             <h5 class="card-title"><i class="fa fa-building"></i> Department List</h5>
-            <div class="card-tools">
-                <a class="btn btn-block btn-sm btn-default btn-flat border-primary new_department" href="javascript:void(0)"><i class="fa fa-plus"></i> Add New</a>
+            <div class="card-tools d-flex align-items-center" style="gap:8px;">
+                <select id="college_filter" class="form-control form-control-sm" style="width:auto;">
+                    <option value="all">All Colleges / Offices</option>
+                    <?php
+                    $colleges_qry = $conn->query("SELECT * FROM college_office_list ORDER BY name ASC");
+                    while($co = $colleges_qry->fetch_assoc()):
+                    ?>
+                    <option value="<?= $co['id'] ?>"><?= htmlspecialchars($co['name']) ?></option>
+                    <?php endwhile; ?>
+                </select>
+                <a class="btn btn-sm btn-default btn-flat border-primary new_department" href="javascript:void(0)"><i class="fa fa-plus"></i> Add New</a>
             </div>
         </div>
         <div class="card-body">
@@ -14,6 +23,7 @@
                         <tr>
                             <th class="text-center" style="width: 40px;">#</th>
                             <th>Department</th>
+                            <th>College / Office</th>
                             <th>Description</th>
                             <th class="text-center">Action</th>
                         </tr>
@@ -21,12 +31,13 @@
                     <tbody>
                         <?php
                         $i = 1;
-                        $qry = $conn->query("SELECT * FROM department_list order by department asc ");
+                        $qry = $conn->query("SELECT d.*, c.name as college_name, c.code as college_code FROM department_list d LEFT JOIN college_office_list c ON d.college_office_id = c.id ORDER BY d.department asc");
                         while($row = $qry->fetch_assoc()):
                         ?>
-                        <tr>
+                        <tr data-college="<?php echo $row['college_office_id'] ?? '' ?>">
                             <th class="text-center font-weight-bold"><?php echo $i++ ?></th>
                             <td><strong><?php echo htmlspecialchars($row['department']) ?></strong></td>
+                            <td><?php echo $row['college_name'] ? htmlspecialchars($row['college_name']) . ($row['college_code'] ? ' <span class="badge badge-info">'.htmlspecialchars($row['college_code']).'</span>' : '') : '<span class="text-muted">—</span>' ?></td>
                             <td><?php echo htmlspecialchars($row['description']) ?></td>
                             <td class="text-center">
                                 <div class="btn-group">
@@ -38,7 +49,7 @@
                                     </button>
                                 </div>
                             </td>
-                        </tr>	
+                        </tr>
                         <?php endwhile; ?>
                     </tbody>
                 </table>
@@ -64,6 +75,19 @@ $(document).ready(function(){
     $('.delete_department').click(function(){
         _conf("Are you sure to delete this Department?","delete_department",[$(this).attr('data-id')])
     })
+
+    // College/Office filter
+    $('#college_filter').on('change', function(){
+        var val = $(this).val();
+        $('#list tbody tr').each(function(){
+            var co = $(this).data('college') !== undefined ? $(this).data('college').toString() : '';
+            if(val === 'all' || co === val){
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
+    });
 })
 
 function delete_department($id){

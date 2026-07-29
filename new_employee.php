@@ -29,7 +29,19 @@ require_once 'csrf_helper.php';
 								$departments = $conn->query("SELECT * FROM department_list order by department asc");
 								while($row=$departments->fetch_assoc()):
 								?>
-								<option value="<?php echo $row['id'] ?>" <?php echo isset($department_id) && $department_id == $row['id'] ? 'selected' : '' ?>><?php echo $row['department'] ?></option>
+								<option value="<?php echo $row['id'] ?>" data-college="<?php echo $row['college_office_id'] ?? '' ?>" <?php echo isset($department_id) && $department_id == $row['id'] ? 'selected' : '' ?>><?php echo $row['department'] ?></option>
+								<?php endwhile; ?>
+							</select>
+						</div>
+						<div class="form-group">
+							<label for="" class="control-label">College / Office</label>
+							<select name="college_office_id" id="college_office_id" class="form-control form-control-sm select2">
+								<option value=""></option>
+								<?php
+								$colleges = $conn->query("SELECT * FROM college_office_list WHERE is_active = 1 ORDER BY name ASC");
+								while($row=$colleges->fetch_assoc()):
+								?>
+								<option value="<?php echo $row['id'] ?>" <?php echo isset($college_office_id) && $college_office_id == $row['id'] ? 'selected' : '' ?>><?php echo $row['name'] ?><?php echo $row['code'] ? ' ('.$row['code'].')' : '' ?></option>
 								<?php endwhile; ?>
 							</select>
 						</div>
@@ -241,5 +253,19 @@ $(document).ready(function(){
     }
 });
 
+// Auto-set College/Office from Department mapping (unless admin overrides)
+$('#department_id').change(function(){
+    var collegeId = $(this).find('option:selected').data('college');
+    if(collegeId && collegeId !== ''){
+        $('#college_office_id').val(collegeId).trigger('change');
+    }
+});
+// On page load, if department is already selected (edit mode), auto-set college
+$(document).ready(function(){
+    var collegeId = $('#department_id').find('option:selected').data('college');
+    if(collegeId && collegeId !== '' && !$('#college_office_id').val()){
+        $('#college_office_id').val(collegeId).trigger('change');
+    }
+});
 
 </script>

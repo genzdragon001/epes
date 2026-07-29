@@ -160,7 +160,7 @@ $alloc_text = implode(' · ', $alloc_labels);
             $where = ($login_type == 2) ? "1=1" : "t.is_active = 1";
             if ($login_type == 0) {
                 $where .= " AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $emp_position_id)";
-                $where .= " AND " . task_designation_match($emp_designation_id);
+                $where .= " AND " . task_designation_match($emp_designation_id, intval($faculty_id));
             }
             $qry = $conn->query("SELECT t.*, 
                     COALESCE(GROUP_CONCAT(DISTINCT d.designation ORDER BY d.designation SEPARATOR ', '), '') as junction_designations,

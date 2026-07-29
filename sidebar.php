@@ -144,6 +144,12 @@
             </a>
           </li>
           <li class="nav-item">
+            <a href="./index.php?page=college_office" class="nav-link nav-college_office">
+              <i class="nav-icon fas fa-university"></i>
+              <p>Colleges / Offices</p>
+            </a>
+          </li>
+          <li class="nav-item">
             <a href="./index.php?page=designation" class="nav-link nav-designation">
               <i class="nav-icon fas fa-list-alt"></i>
               <p>Designations</p>

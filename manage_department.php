@@ -8,6 +8,7 @@ $qry = $stmt->get_result()->fetch_array();
 	foreach($qry as $k => $v){
 		$$k = $v;
 	}
+	$stmt->close();
 }
 ?>
 <div class="container-fluid">
@@ -17,6 +18,18 @@ $qry = $stmt->get_result()->fetch_array();
 		<div class="form-group">
 			<label for="department" class="control-label">Department</label>
 			<input type="text" class="form-control form-control-sm" name="department" id="department" value="<?php echo isset($department) ? $department : '' ?>">
+		</div>
+		<div class="form-group">
+			<label for="college_office_id" class="control-label">College / Office</label>
+			<select name="college_office_id" id="college_office_id" class="form-control form-control-sm">
+				<option value="">— None —</option>
+				<?php
+				$colleges = $conn->query("SELECT * FROM college_office_list WHERE is_active = 1 ORDER BY name ASC");
+				while($co = $colleges->fetch_assoc()):
+				?>
+				<option value="<?php echo $co['id'] ?>" <?php echo isset($college_office_id) && $college_office_id == $co['id'] ? 'selected' : '' ?>><?php echo htmlspecialchars($co['name']) ?><?php echo $co['code'] ? ' ('.$co['code'].')' : '' ?></option>
+				<?php endwhile; ?>
+			</select>
 		</div>
 		<div class="form-group">
 			<label for="description" class="control-label">Description</label>
@@ -38,7 +51,7 @@ $qry = $stmt->get_result()->fetch_array();
 					if(resp == 1){
 						alert_toast("Data successfully saved.","success");
 						setTimeout(function(){
-							location.reload()	
+							location.reload()
 						},1750)
 					}else if(resp == 2){
 						$('#msg').html('<div class="alert alert-danger"><i class="fa fa-exclamation-triangle"></i> Department already exist.</div>')

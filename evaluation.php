@@ -28,7 +28,10 @@ if ($login_type == 1) {
     $stmt->bind_result($eval_desig_id);
     $stmt->fetch();
     $stmt->close();
-    $is_vp = ($eval_desig_id == 4);
+    // Any VP designation can evaluate a Director's Strategic Plan targets
+    $is_vp = in_array($eval_desig_id, [4, 18, 19]); // VPAF, VPAA, VPREI
+    // VPREI (19) only evaluates Strategic targets — core/support are locked
+    $is_vprei = ($eval_desig_id == 19);
 }
 // Fetch faculty designation and position
 $stmt = $conn->prepare("SELECT designation_id, position_id FROM employee_list WHERE id = ?");
@@ -40,6 +43,8 @@ $stmt->close();
 $fac_is_director = ($fac_desig_id == 6);
 // Strategic Plan tasks are locked for non-VP evaluators when faculty is Director
 $strat_locked = ($fac_is_director && !$is_vp && !$is_admin_view);
+// For VPREI: lock everything EXCEPT strategic (opposite of Dean)
+$non_strat_locked = ($is_vprei && !$is_admin_view);
 
 $qry = $conn->query("SELECT CONCAT(firstname, ' ', lastname) AS faculty_name FROM employee_list WHERE id = '$nameId' LIMIT 1");
 
@@ -196,7 +201,7 @@ SELECT
     LEFT JOIN ratings r ON r.employee_id = " . intval($nameId) . " AND r.task_id = t.id AND r.rating_period IN (" . implode(",", array_map(function($c) use ($conn) { return "'" . $conn->real_escape_string($c) . "'"; }, $period_codes)) . ")
     WHERE t.is_active = 1
         AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = " . intval($fac_position_id) . ")
-        AND " . task_designation_match($fac_desig_id) . "
+        AND " . task_designation_match($fac_desig_id, intval($nameId)) . "
         AND t.id NOT IN (SELECT task_id FROM target_exemptions WHERE position_id = " . intval($fac_position_id) . ")
     ORDER BY 
         CASE WHEN t.category = 'strategic' THEN 0
@@ -247,7 +252,7 @@ SELECT
 <?php
                 endif;
                 $task_is_strategic = (($row['task_category'] ?? '') === 'strategic');
-                $row_locked = ($strat_locked && $task_is_strategic);
+                $row_locked = ($strat_locked && $task_is_strategic) || ($non_strat_locked && !$task_is_strategic);
                 $has_submission = !empty($row['progress_id']);
                 $currentStatus = $row['task_progress'] ?? null;
                 $is_na = ($currentStatus === 'N/A');
@@ -282,7 +287,7 @@ SELECT
                 : (($currentStatus == 'For Verification') ? 'badge-warning'
                 : ($is_na ? 'badge-info' : 'badge-secondary'));
             ?>
-            <span class="badge <?= $badgeClass ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>>
+            <span class="badge <?= $badgeClass ?>" <?= $row_locked ? 'title="' . ($task_is_strategic ? 'Strategic Plan — VP only' : 'VPREI — Strategic targets only') . '"' : '' ?>>
                 <?= $currentStatus ?? 'Pending' ?>
                 <?= $row_locked ? ' <i class="fas fa-lock ml-1" style="font-size:0.6rem;"></i>' : '' ?>
             </span>
@@ -372,7 +377,7 @@ SELECT
                 $ratingDisabled = $is_na || !$has_submission;
             ?>
             <?php if ($is_admin_view || $row_locked || $ratingDisabled): ?>
-                <span class="badge <?= isset($row['rating_efficiency']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= ($effApplicable && !$ratingDisabled) ? $currentEff : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
+                <span class="badge <?= isset($row['rating_efficiency']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="' . ($task_is_strategic ? 'Strategic Plan — VP only' : 'VPREI — Strategic targets only') . '"' : '' ?>><?= ($effApplicable && !$ratingDisabled) ? $currentEff : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
             <?php else: ?>
             <div class="dropdown">
                 <button class="btn btn-sm <?= isset($row['rating_efficiency']) ? 'btn-success' : 'btn-secondary' ?> dropdown-toggle" 
@@ -423,7 +428,7 @@ SELECT
                 $ratingDisabled = $is_na || !$has_submission;
             ?>
             <?php if ($is_admin_view || $row_locked || $ratingDisabled): ?>
-                <span class="badge <?= isset($row['rating_quality']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= ($qualApplicable && !$ratingDisabled) ? $currentQual : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
+                <span class="badge <?= isset($row['rating_quality']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="' . ($task_is_strategic ? 'Strategic Plan — VP only' : 'VPREI — Strategic targets only') . '"' : '' ?>><?= ($qualApplicable && !$ratingDisabled) ? $currentQual : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
             <?php else: ?>
             <div class="dropdown">
                 <button class="btn btn-sm <?= isset($row['rating_quality']) ? 'btn-success' : 'btn-secondary' ?> dropdown-toggle" 
@@ -474,7 +479,7 @@ SELECT
                 $ratingDisabled = $is_na || !$has_submission;
             ?>
             <?php if ($is_admin_view || $row_locked || $ratingDisabled): ?>
-                <span class="badge <?= isset($row['rating_timeliness']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="Strategic Plan — VP only"' : '' ?>><?= ($timeApplicable && !$ratingDisabled) ? $currentTime : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
+                <span class="badge <?= isset($row['rating_timeliness']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="' . ($task_is_strategic ? 'Strategic Plan — VP only' : 'VPREI — Strategic targets only') . '"' : '' ?>><?= ($timeApplicable && !$ratingDisabled) ? $currentTime : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
             <?php else: ?>
             <div class="dropdown">
                 <button class="btn btn-sm <?= isset($row['rating_timeliness']) ? 'btn-success' : 'btn-secondary' ?> dropdown-toggle" 

@@ -137,7 +137,7 @@ function computeRatingBreakdown($conn, $faculty_id, $position_id, $designation_i
     if ($is_cos) {
         $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0)";
     } elseif (!empty($designation_id) && $designation_id > 0) {
-        $where .= " AND " . task_designation_match($designation_id);
+        $where .= " AND " . task_designation_match($designation_id, intval($faculty_id));
     } else {
         $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0)";
     }
@@ -285,7 +285,7 @@ function computeRatingBreakdown($conn, $faculty_id, $position_id, $designation_i
     // --- Research (divide by expected count) ---
     $res_val = 0;
     if (count($tasks_by_section['core_research']) > 0 || $has_research) {
-        $research_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'research' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
+        $research_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'research' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0, intval($faculty_id)) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
         $expected_research_count = $research_task_qry ? (int)$research_task_qry->fetch_assoc()['task_count'] : 0;
         $r_divisor = $expected_research_count > 0 ? $expected_research_count : ($res_ave['count'] > 0 ? $res_ave['count'] : 1);
         $res_val = $res_ave['count'] > 0 ? $res_ave['sum'] / $r_divisor : 0;
@@ -295,7 +295,7 @@ function computeRatingBreakdown($conn, $faculty_id, $position_id, $designation_i
     // --- Extension (divide by expected count) ---
     $ext_val = 0;
     if (count($tasks_by_section['core_extension']) > 0 || $has_extension) {
-        $extension_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'extension' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
+        $extension_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'extension' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0, intval($faculty_id)) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
         $expected_extension_count = $extension_task_qry ? (int)$extension_task_qry->fetch_assoc()['task_count'] : 0;
         $e_divisor = $expected_extension_count > 0 ? $expected_extension_count : ($ext_ave['count'] > 0 ? $ext_ave['count'] : 1);
         $ext_val = $ext_ave['count'] > 0 ? $ext_ave['sum'] / $e_divisor : 0;
@@ -541,7 +541,7 @@ function computeWeightedRating($conn, $faculty_id, $position_id, $designation_id
     if ($is_cos) {
         $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0)";
     } elseif (!empty($designation_id) && $designation_id > 0) {
-        $where .= " AND " . task_designation_match($designation_id);
+        $where .= " AND " . task_designation_match($designation_id, intval($faculty_id));
     } else {
         $where .= " AND (t.designation_id IS NULL OR t.designation_id = 0)";
     }
@@ -642,7 +642,7 @@ function computeWeightedRating($conn, $faculty_id, $position_id, $designation_id
     // --- calcResearchAverage (same as rating.php: divide by expected count) ---
     $res_val = 0;
     if (count($tasks_by_section['core_research']) > 0 || $has_research) {
-        $research_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'research' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
+        $research_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'research' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0, intval($faculty_id)) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
         $expected_research_count = $research_task_qry ? (int)$research_task_qry->fetch_assoc()['task_count'] : 0;
         $r_divisor = $expected_research_count > 0 ? $expected_research_count : ($res_ave['count'] > 0 ? $res_ave['count'] : 1);
         $res_val = $res_ave['count'] > 0 ? $res_ave['sum'] / $r_divisor : 0;
@@ -652,7 +652,7 @@ function computeWeightedRating($conn, $faculty_id, $position_id, $designation_id
     // --- calcExtensionAverage (same as rating.php: divide by expected count) ---
     $ext_val = 0;
     if (count($tasks_by_section['core_extension']) > 0 || $has_extension) {
-        $extension_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'extension' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
+        $extension_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'extension' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0, intval($faculty_id)) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
         $expected_extension_count = $extension_task_qry ? (int)$extension_task_qry->fetch_assoc()['task_count'] : 0;
         $e_divisor = $expected_extension_count > 0 ? $expected_extension_count : ($ext_ave['count'] > 0 ? $ext_ave['count'] : 1);
         $ext_val = $ext_ave['count'] > 0 ? $ext_ave['sum'] / $e_divisor : 0;

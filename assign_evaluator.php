@@ -4,26 +4,49 @@ if (!isset($_SESSION['login_type']) || intval($_SESSION['login_type']) !== 2) {
     echo '<div class="col-lg-12"><div class="alert alert-danger">Access denied. Only administrators can assign evaluators.</div></div>';
     exit;
 }
+
+// Load existing designation-to-designation mapping
+$map_qry = $conn->query("SELECT employee_designation_id, evaluator_designation_id FROM evaluator_designation_map");
+$current_map = [];
+if ($map_qry) {
+    while ($m = $map_qry->fetch_assoc()) {
+        $current_map[intval($m['employee_designation_id'])] = intval($m['evaluator_designation_id']);
+    }
+}
+
+// All designations
+$desigs = $conn->query("SELECT * FROM designation_list ORDER BY designation ASC");
+$all_desigs = [];
+while ($d = $desigs->fetch_assoc()) {
+    $all_desigs[intval($d['id'])] = trim($d['designation']);
+}
+
+// Faculty count per designation
+$cnt_q = $conn->query("SELECT designation_id, COUNT(*) AS c FROM employee_list GROUP BY designation_id");
+$cnt_arr = [];
+while ($cr = $cnt_q->fetch_assoc()) {
+    $cnt_arr[intval($cr['designation_id'])] = intval($cr['c']);
+}
+
+// Evaluator count per designation
+$eval_cnt_q = $conn->query("SELECT designation_id, COUNT(*) AS c FROM evaluator_list GROUP BY designation_id");
+$eval_cnt_arr = [];
+while ($ecr = $eval_cnt_q->fetch_assoc()) {
+    $eval_cnt_arr[intval($ecr['designation_id'])] = intval($ecr['c']);
+}
 ?>
 <div class="col-lg-12">
     <div class="card card-outline card-info">
         <div class="card-header">
             <h5 class="card-title"><i class="fa fa-user-secret"></i> Assign Evaluator by Designation</h5>
             <div class="card-tools">
-                <button type="button" class="btn btn-sm btn-primary" id="apply_all"><i class="fa fa-wand-magic-sparkles"></i> Apply All Designations</button>
+                <button type="button" class="btn btn-sm btn-primary" id="apply_all"><i class="fa fa-wand-magic-sparkles"></i> Apply All</button>
             </div>
         </div>
         <div class="card-body">
             <!-- Toolbar -->
             <div class="d-flex flex-wrap justify-content-between align-items-center mb-3" style="gap:10px;">
-                <div class="d-flex flex-wrap" style="gap:10px;">
-                    <input type="text" id="desig_search" class="form-control form-control-sm" placeholder="Search designation…" style="max-width:220px;">
-                    <select id="desig_filter" class="form-control form-control-sm" style="max-width:240px;">
-                        <option value="all">All designations</option>
-                        <option value="assigned">With evaluator set</option>
-                        <option value="unassigned">Unassigned</option>
-                    </select>
-                </div>
+                <input type="text" id="desig_search" class="form-control form-control-sm" placeholder="Search designation…" style="max-width:240px;">
                 <button type="button" class="btn btn-sm btn-default border-secondary" id="reset_btn"><i class="fa fa-rotate-left"></i> Reset to saved</button>
             </div>
 
@@ -32,108 +55,54 @@ if (!isset($_SESSION['login_type']) || intval($_SESSION['login_type']) !== 2) {
                     <thead class="thead-dark">
                         <tr>
                             <th class="text-center" style="width:40px;">#</th>
-                            <th>Designation</th>
-                            <th class="text-center" style="width:120px;">Faculty Count</th>
-                            <th style="width:340px;">Default Evaluator</th>
-                            <th class="text-center" style="width:180px;">Action</th>
+                            <th>Employee Designation</th>
+                            <th class="text-center" style="width:100px;">Faculty Count</th>
+                            <th class="text-center" style="width:60px;">Eval Count</th>
+                            <th style="width:340px;">Evaluated By (Designation)</th>
+                            <th class="text-center" style="width:160px;">Action</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php
                         $i = 1;
-                        // Evaluators available to assign (everyone in evaluator_list), grouped by their designation
-                        $evals = $conn->query("SELECT ev.id, CONCAT(ev.firstname,' ',ev.lastname) AS name, ev.designation_id
-                                                FROM evaluator_list ev ORDER BY name ASC");
-                        $eval_by_desig = [];
-                        while ($e = $evals->fetch_assoc()) {
-                            $eval_by_desig[intval($e['designation_id'])][intval($e['id'])] = $e['name'];
-                        }
-                        // For each employee designation, which evaluator designation is allowed to evaluate them?
-                        // Faculty (3) -> evaluated by a Department Head (2)
-                        // Department Head (2) -> evaluated by a Dean (1)
-                        // Everything else -> any evaluator
-                        $allowed_evaluator_desig = function($emp_desig) {
-                            if ($emp_desig == 3) return 2;   // Faculty -> Department Head
-                            if ($emp_desig == 2) return 1;   // Department Head -> Dean
-                            return null;                     // no restriction
-                        };
-                        // Faculty count per designation
-                        $cnt_q = $conn->query("SELECT designation_id, COUNT(*) AS c FROM employee_list GROUP BY designation_id");
-                        $cnt_arr = [];
-                        while ($cr = $cnt_q->fetch_assoc()) {
-                            $cnt_arr[intval($cr['designation_id'])] = intval($cr['c']);
-                        }
-                        // Current default evaluator per designation = the evaluator_id most common among that designation's employees
-                        $def_q = $conn->query("SELECT designation_id, evaluator_id, COUNT(*) c
-                                                FROM employee_list
-                                                WHERE evaluator_id IS NOT NULL AND evaluator_id <> 0 AND evaluator_id <> ''
-                                                GROUP BY designation_id, evaluator_id");
-                        $def_arr = [];
-                        // keep the highest-count evaluator per designation
-                        $def_best = [];
-                        while ($dr = $def_q->fetch_assoc()) {
-                            $did = intval($dr['designation_id']);
-                            $eid = intval($dr['evaluator_id']);
-                            if (!isset($def_best[$did]) || $dr['c'] > $def_best[$did]['c']) {
-                                $def_best[$did] = ['evaluator_id' => $eid, 'c' => intval($dr['c'])];
-                            }
-                        }
-                        foreach ($def_best as $did => $v) {
-                            $def_arr[$did] = $v['evaluator_id'];
-                        }
-
-                        $qry = $conn->query("SELECT * FROM designation_list ORDER BY designation ASC");
-                        while ($row = $qry->fetch_assoc()):
-                            $did = intval($row['id']);
+                        foreach ($all_desigs as $did => $dname):
                             $count = $cnt_arr[$did] ?? 0;
-                            $current = $def_arr[$did] ?? 0;
-                            // Which evaluator designation is allowed to evaluate this employee designation?
-                            $allow_desig = $allowed_evaluator_desig($did); // int or null
-                            if ($allow_desig === null) {
-                                // No restriction: offer every evaluator across all designations
-                                $eval_options = [];
-                                foreach ($eval_by_desig as $grp) { $eval_options += $grp; }
-                            } else {
-                                $eval_options = $eval_by_desig[$allow_desig] ?? [];
-                            }
-                            // Allowed-evaluator hint label
-                            $allow_label = '';
-                            if ($allow_desig !== null) {
-                                $all_desig = $conn->query("SELECT designation FROM designation_list WHERE id = $allow_desig LIMIT 1")->fetch_assoc();
-                                $allow_label = $all_desig ? $all_desig['designation'] : '';
-                            }
+                            $current_eval_desig = $current_map[$did] ?? 0;
                         ?>
-                        <tr data-desig="<?php echo htmlspecialchars($row['designation']) ?>" data-eval="<?php echo $current ?>">
-                            <td class="text-center font-weight-bold"><?php echo $i++ ?></td>
-                            <td><strong><?php echo htmlspecialchars($row['designation']) ?></strong></td>
-                            <td class="text-center"><span class="badge badge-secondary"><?php echo $count ?></span></td>
+                        <tr data-desig="<?= htmlspecialchars($dname) ?>" data-evaldesig="<?= $current_eval_desig ?>">
+                            <td class="text-center font-weight-bold"><?= $i++ ?></td>
+                            <td><strong><?= htmlspecialchars($dname) ?></strong></td>
+                            <td class="text-center"><span class="badge badge-secondary"><?= $count ?></span></td>
+                            <td class="text-center">
+                                <?php $ec = $eval_cnt_arr[$did] ?? 0; ?>
+                                <span class="badge badge-<?= $ec > 0 ? 'success' : 'warning' ?>"><?= $ec ?> evaluators</span>
+                            </td>
                             <td>
-                                <select class="form-control form-control-sm eval-select" data-desig="<?php echo $did ?>">
-                                    <option value="0" <?php echo $current == 0 ? 'selected' : '' ?>>— Select evaluator —</option>
-                                    <?php foreach ($eval_options as $eid => $ename): ?>
-                                    <option value="<?php echo $eid ?>" <?php echo $current == $eid ? 'selected' : '' ?>><?php echo htmlspecialchars($ename) ?></option>
+                                <select class="form-control form-control-sm eval-desig-select" data-empdesig="<?= $did ?>">
+                                    <option value="0">— Select evaluator designation —</option>
+                                    <?php foreach ($all_desigs as $edid => $ename):
+                                        if ($edid == $did) continue; // can't evaluate yourself
+                                    ?>
+                                    <option value="<?= $edid ?>" <?= $current_eval_desig == $edid ? 'selected' : '' ?>><?= htmlspecialchars($ename) ?></option>
                                     <?php endforeach; ?>
                                 </select>
-                                <?php if ($allow_label !== ''): ?>
-                                <small class="text-muted d-block mt-1">Evaluator must be a <?php echo htmlspecialchars($allow_label) ?></small>
-                                <?php endif; ?>
                             </td>
                             <td class="text-center">
                                 <?php if ($count > 0): ?>
-                                <button type="button" class="btn btn-sm btn-success apply-one" data-desig="<?php echo $did ?>">
-                                    <i class="fa fa-check"></i> Apply to <?php echo $count ?> faculty
+                                <button type="button" class="btn btn-sm btn-success apply-one" data-empdesig="<?= $did ?>">
+                                    <i class="fa fa-check"></i> Apply
                                 </button>
                                 <?php else: ?>
                                 <span class="text-muted small"><i class="fa fa-circle-check"></i> No faculty</span>
                                 <?php endif; ?>
                             </td>
                         </tr>
-                        <?php endwhile; ?>
+                        <?php endforeach; ?>
                     </tbody>
                 </table>
             </div>
             <div class="mt-2">
-                <small class="text-muted"><i class="fa fa-circle-info"></i> "Apply" sets each matching faculty member's evaluator to the chosen default, overwriting any existing individual assignment for that designation.</small>
+                <small class="text-muted"><i class="fa fa-circle-info"></i> "Apply" assigns evaluators of the selected evaluator-designation to all faculty of this employee-designation. If multiple evaluators exist for the evaluator-designation, they are distributed round-robin.</small>
             </div>
         </div>
     </div>
@@ -150,26 +119,35 @@ $(document).ready(function(){
         "searching": false
     });
 
-    function applyDesignation(desigId, btn) {
-        var $sel = $('.eval-select[data-desig="'+desigId+'"]');
-        var evaluatorId = $sel.val();
-        if (evaluatorId == 0 || evaluatorId === "") {
-            alert_toast("Please choose an evaluator first.", 'warning');
-            return;
+    function applyDesignation(empDesigId, evalDesigId, btn) {
+        if (evalDesigId == 0 || evalDesigId === "") {
+            alert_toast("Please choose an evaluator designation first.", 'warning');
+            return false;
         }
         start_load();
         $.ajax({
             url: 'ajax.php?action=save_assign_evaluator',
             method: 'POST',
-            data: {designation_id: desigId, evaluator_id: evaluatorId},
+            data: {
+                employee_designation_id: empDesigId,
+                evaluator_designation_id: evalDesigId
+            },
             success: function(resp){
-                if (resp == 1) {
-                    alert_toast("Evaluator applied successfully.", 'success');
-                    // reflect saved state on the row
-                    var $tr = $sel.closest('tr');
-                    $tr.attr('data-eval', evaluatorId);
-                } else {
-                    alert_toast("Failed to apply evaluator.", 'danger');
+                try {
+                    var r = typeof resp === 'string' ? JSON.parse(resp) : resp;
+                    if (r.status === 'success') {
+                        alert_toast(r.message || "Evaluator applied successfully.", 'success');
+                        var $tr = $('.eval-desig-select[data-empdesig="'+empDesigId+'"]').closest('tr');
+                        $tr.attr('data-evaldesig', evalDesigId);
+                    } else {
+                        alert_toast(r.message || "Failed to apply evaluator.", 'danger');
+                    }
+                } catch(e) {
+                    if (resp == 1) {
+                        alert_toast("Evaluator applied successfully.", 'success');
+                    } else {
+                        alert_toast("Failed to apply evaluator.", 'danger');
+                    }
                 }
                 end_load();
             },
@@ -178,32 +156,34 @@ $(document).ready(function(){
                 end_load();
             }
         });
+        return true;
     }
 
     $(document).on('click', '.apply-one', function(){
-        var desigId = $(this).data('desig');
-        applyDesignation(desigId, this);
+        var empDesigId = $(this).data('empdesig');
+        var evalDesigId = $('.eval-desig-select[data-empdesig="'+empDesigId+'"]').val();
+        applyDesignation(empDesigId, evalDesigId, this);
     });
 
     $('#apply_all').click(function(){
         var rows = [];
         var incomplete = false;
-        $('.eval-select').each(function(){
-            var did = $(this).data('desig');
-            var eid = $(this).val();
-            var count = parseInt($(this).closest('tr').find('.badge').text()) || 0;
-            if (count > 0 && (eid == 0 || eid === "")) {
+        $('.eval-desig-select').each(function(){
+            var empDesig = $(this).data('empdesig');
+            var evalDesig = $(this).val();
+            var count = parseInt($(this).closest('tr').find('.badge-secondary').text()) || 0;
+            if (count > 0 && (evalDesig == 0 || evalDesig === "")) {
                 incomplete = true;
             }
-            if (count > 0 && eid != 0 && eid !== "") {
-                rows.push({designation_id: did, evaluator_id: eid});
+            if (count > 0 && evalDesig != 0 && evalDesig !== "") {
+                rows.push({employee_designation_id: empDesig, evaluator_designation_id: evalDesig});
             }
         });
         if (rows.length === 0) {
-            alert_toast("No designations with a selected evaluator to apply.", 'warning');
+            alert_toast("No designations with a mapping to apply.", 'warning');
             return;
         }
-        if (incomplete && !confirm("Some designations with faculty have no evaluator selected — they will be skipped. Continue?")) {
+        if (incomplete && !confirm("Some designations with faculty have no evaluator designation selected — they will be skipped. Continue?")) {
             return;
         }
         start_load();
@@ -212,10 +192,19 @@ $(document).ready(function(){
             method: 'POST',
             data: {bulk: 1, assignments: JSON.stringify(rows)},
             success: function(resp){
-                if (resp == 1) {
-                    alert_toast("All designations applied successfully.", 'success');
-                } else {
-                    alert_toast("Failed to apply assignments.", 'danger');
+                try {
+                    var r = typeof resp === 'string' ? JSON.parse(resp) : resp;
+                    if (r.status === 'success') {
+                        alert_toast(r.message || "All designations applied successfully.", 'success');
+                    } else {
+                        alert_toast(r.message || "Failed to apply assignments.", 'danger');
+                    }
+                } catch(e) {
+                    if (resp == 1) {
+                        alert_toast("All designations applied successfully.", 'success');
+                    } else {
+                        alert_toast("Failed to apply assignments.", 'danger');
+                    }
                 }
                 end_load();
             },
@@ -230,20 +219,14 @@ $(document).ready(function(){
         location.reload();
     });
 
-    // Client-side search + filter (lightweight, DataTable searching disabled)
+    // Client-side search
     function applyFilter(){
         var q = $('#desig_search').val().toLowerCase();
-        var f = $('#desig_filter').val();
         $('#list tbody tr').each(function(){
             var name = $(this).data('desig').toString().toLowerCase();
-            var evalv = $(this).data('eval');
-            var show = name.indexOf(q) > -1;
-            if (f === 'assigned') show = show && (evalv != 0 && evalv !== '');
-            else if (f === 'unassigned') show = show && (evalv == 0 || evalv === '');
-            $(this).toggle(show);
+            $(this).toggle(name.indexOf(q) > -1);
         });
     }
     $('#desig_search').on('keyup', applyFilter);
-    $('#desig_filter').on('change', applyFilter);
 });
 </script>

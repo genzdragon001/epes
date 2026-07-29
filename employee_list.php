@@ -17,7 +17,8 @@
 							<th style="width: 15%;">Email</th>
 							<th style="width: 12%;">Position</th>
 							<th style="width: 12%;">Department</th>
-							<th style="width: 12%;">Designation</th>
+								<th style="width: 12%;">College / Office</th>
+								<th style="width: 12%;">Designation</th>
 							<th class="text-center" style="width: 100px;">Status</th>
 							<th class="text-center" style="width: 120px;">Action</th>
 						</tr>
@@ -34,6 +35,11 @@
 						$dept_arr[0]= "Not Set";
 						while($row=$departments->fetch_assoc()){
 							$dept_arr[$row['id']] =$row['department'];
+						}
+						$colleges = $conn->query("SELECT * FROM college_office_list");
+						$college_arr[0] = "Not Set";
+						while($row=$colleges->fetch_assoc()){
+							$college_arr[$row['id']] = $row['name'];
 						}
 						$position = $conn->query("SELECT * FROM position_list");
 						$posi_arr[0]= "Not Set";
@@ -65,6 +71,7 @@
 								<span class="badge badge-info"><?php echo isset($posi_arr[$row['position_id']]) ? $posi_arr[$row['position_id']] : 'Unknown' ?></span>
 							</td>
 							<td><?php echo isset($dept_arr[$row['department_id']]) ? $dept_arr[$row['department_id']] : 'Unknown' ?></td>
+							<td><?php echo isset($college_arr[$row['college_office_id']]) ? $college_arr[$row['college_office_id']] : 'Not Set' ?></td>
 							<td><?php echo isset($design_arr[$row['designation_id']]) ? $design_arr[$row['designation_id']] : 'Not Set' ?></td>
 							<td class="text-center">
 								<span class="badge badge-<?php echo $status_class ?>"><?php echo $status_text ?></span>

@@ -894,6 +894,7 @@ Class Action {
 	function save_department(){
 		extract($_POST);
 		$department_name = $_POST['department'] ?? '';
+		$college_office_id = intval($college_office_id ?? 0) ?: null;
 		$id = isset($id) ? intval($id) : null;
 		
 		$chk_stmt = $this->db->prepare("SELECT * FROM department_list WHERE department = ? AND id != ?");
@@ -905,14 +906,13 @@ Class Action {
 		if($chk > 0){
 			return 2;
 		}
-		$user_ids_str = isset($user_ids) ? implode(',', $user_ids) : '';
-		
+
 		if(empty($id)){
-			$stmt = $this->db->prepare("INSERT INTO department_list (department, user_ids) VALUES (?, ?)");
-			$stmt->bind_param('ss', $department_name, $user_ids_str);
+			$stmt = $this->db->prepare("INSERT INTO department_list (department, college_office_id) VALUES (?, ?)");
+			$stmt->bind_param('si', $department_name, $college_office_id);
 		} else {
-			$stmt = $this->db->prepare("UPDATE department_list SET department=?, user_ids=? WHERE id=?");
-			$stmt->bind_param('ssi', $department_name, $user_ids_str, $id);
+			$stmt = $this->db->prepare("UPDATE department_list SET department=?, college_office_id=? WHERE id=?");
+			$stmt->bind_param('sii', $department_name, $college_office_id, $id);
 		}
 		$save = $stmt->execute();
 		$stmt->close();
@@ -930,6 +930,43 @@ Class Action {
 		if($delete){
 			return 1;
 		}
+	}
+	function save_college_office(){
+		$name = $_POST['name'] ?? '';
+		$code = $_POST['code'] ?? '';
+		$is_active = isset($_POST['is_active']) ? intval($_POST['is_active']) : 1;
+		$id = isset($_POST['id']) ? intval($_POST['id']) : null;
+
+		$chk_stmt = $this->db->prepare("SELECT id FROM college_office_list WHERE name = ? AND id != ?");
+		$chk_stmt->bind_param('si', $name, $id);
+		$chk_stmt->execute();
+		$chk = $chk_stmt->get_result()->num_rows;
+		$chk_stmt->close();
+
+		if($chk > 0) return 2;
+
+		if(empty($id)){
+			$stmt = $this->db->prepare("INSERT INTO college_office_list (name, code, is_active) VALUES (?, ?, ?)");
+			$stmt->bind_param('ssi', $name, $code, $is_active);
+		} else {
+			$stmt = $this->db->prepare("UPDATE college_office_list SET name=?, code=?, is_active=? WHERE id=?");
+			$stmt->bind_param('ssii', $name, $code, $is_active, $id);
+		}
+		$save = $stmt->execute();
+		$stmt->close();
+		if($save) return 1;
+	}
+	function delete_college_office(){
+		$id = intval($_POST['id'] ?? 0);
+		if ($id <= 0) return 0;
+		// Check if any faculty are assigned to this college/office
+		$chk = $this->db->query("SELECT COUNT(*) c FROM employee_list WHERE college_office_id = $id")->fetch_assoc();
+		if (intval($chk['c']) > 0) return 0;
+		$stmt = $this->db->prepare("DELETE FROM college_office_list WHERE id = ?");
+		$stmt->bind_param('i', $id);
+		$delete = $stmt->execute();
+		$stmt->close();
+		if($delete) return 1;
 	}
 	function save_designation(){
 		extract($_POST);
@@ -1008,23 +1045,25 @@ Class Action {
 		}
 		
 		if(empty($id)){
-			$password_hash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : '';
-			$stmt = $this->db->prepare("INSERT INTO employee_list (employee_id, firstname, lastname, email, password, department_id, position_id, designation_id, evaluator_id, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-			$stmt->bind_param('sssssissis', $employee_id, $firstname, $lastname, $email, $password_hash, $department_id, $position_id, $designation_id, $evaluator_id, $avatar);
-			$save = $stmt->execute();
-			$stmt->close();
+		$password_hash = !empty($password) ? password_hash($password, PASSWORD_DEFAULT) : '';
+		$college_office_id = intval($college_office_id ?? 0) ?: null;
+		$stmt = $this->db->prepare("INSERT INTO employee_list (employee_id, firstname, lastname, email, password, department_id, college_office_id, position_id, designation_id, evaluator_id, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+		$stmt->bind_param('sssssisisis', $employee_id, $firstname, $lastname, $email, $password_hash, $department_id, $college_office_id, $position_id, $designation_id, $evaluator_id, $avatar);
+		$save = $stmt->execute();
+		$stmt->close();
+	} else {
+		$college_office_id = intval($college_office_id ?? 0) ?: null;
+		if(!empty($password)){
+			$password_hash = password_hash($password, PASSWORD_DEFAULT);
+			$stmt = $this->db->prepare("UPDATE employee_list SET employee_id=?, firstname=?, lastname=?, email=?, password=?, department_id=?, college_office_id=?, position_id=?, designation_id=?, evaluator_id=?, avatar=? WHERE id=?");
+			$stmt->bind_param('sssssisissii', $employee_id, $firstname, $lastname, $email, $password_hash, $department_id, $college_office_id, $position_id, $designation_id, $evaluator_id, $avatar, $id);
 		} else {
-			if(!empty($password)){
-				$password_hash = password_hash($password, PASSWORD_DEFAULT);
-				$stmt = $this->db->prepare("UPDATE employee_list SET employee_id=?, firstname=?, lastname=?, email=?, password=?, department_id=?, position_id=?, designation_id=?, evaluator_id=?, avatar=? WHERE id=?");
-				$stmt->bind_param('ssssssissii', $employee_id, $firstname, $lastname, $email, $password_hash, $department_id, $position_id, $designation_id, $evaluator_id, $avatar, $id);
-			} else {
-				$stmt = $this->db->prepare("UPDATE employee_list SET employee_id=?, firstname=?, lastname=?, email=?, department_id=?, position_id=?, designation_id=?, evaluator_id=?, avatar=? WHERE id=?");
-				$stmt->bind_param('ssssissiii', $employee_id, $firstname, $lastname, $email, $department_id, $position_id, $designation_id, $evaluator_id, $avatar, $id);
-			}
-			$save = $stmt->execute();
-			$stmt->close();
+			$stmt = $this->db->prepare("UPDATE employee_list SET employee_id=?, firstname=?, lastname=?, email=?, department_id=?, college_office_id=?, position_id=?, designation_id=?, evaluator_id=?, avatar=? WHERE id=?");
+			$stmt->bind_param('ssssisissii', $employee_id, $firstname, $lastname, $email, $department_id, $college_office_id, $position_id, $designation_id, $evaluator_id, $avatar, $id);
 		}
+		$save = $stmt->execute();
+		$stmt->close();
+	}
 
 		return $save ? 1 : 0;
 	}
@@ -1195,56 +1234,98 @@ Class Action {
 		if (session_status() === PHP_SESSION_NONE) session_start();
 		if (intval($_SESSION['login_type'] ?? -1) !== 2) return 0; // admin only
 
-		// Verify the evaluator's designation is allowed to evaluate the employee designation.
-		// Faculty (3) -> evaluator must be a Department Head (2)
-		// Department Head (2) -> evaluator must be a Dean (1)
-		// All other employee designations -> any evaluator
-		$isAllowedEvaluator = function($emp_desig, $eval_id) {
-			if (intval($eval_id) <= 0) return false;
-			if ($emp_desig == 3) $required = 2;
-			elseif ($emp_desig == 2) $required = 1;
-			else return true; // unrestricted
-			$st = $this->db->prepare("SELECT designation_id FROM evaluator_list WHERE id = ? LIMIT 1");
-			$st->bind_param('i', $eval_id);
-			$st->execute();
-			$row = $st->get_result()->fetch_assoc();
-			$st->close();
-			return $row && intval($row['designation_id']) === $required;
-		};
+		header('Content-Type: application/json');
 
-		// Bulk "Apply All"
+		// Bulk "Apply All" — assignments is array of {employee_designation_id, evaluator_designation_id}
 		if (!empty($_POST['bulk']) && !empty($_POST['assignments'])) {
 			$assignments = json_decode($_POST['assignments'], true);
-			if (!is_array($assignments) || empty($assignments)) return 0;
+			if (!is_array($assignments) || empty($assignments)) {
+				return json_encode(['status' => 'error', 'message' => 'No assignments provided.']);
+			}
 			$this->db->begin_transaction();
 			try {
-				$stmt = $this->db->prepare("UPDATE employee_list SET evaluator_id = ? WHERE designation_id = ?");
+				$applied = 0;
+				$skipped = 0;
 				foreach ($assignments as $a) {
-					$did = intval($a['designation_id'] ?? 0);
-					$eid = intval($a['evaluator_id'] ?? 0);
-					if ($did <= 0 || !$isAllowedEvaluator($did, $eid)) continue;
-					$stmt->bind_param('ii', $eid, $did);
-					$stmt->execute();
+					$emp_desig = intval($a['employee_designation_id'] ?? 0);
+					$eval_desig = intval($a['evaluator_designation_id'] ?? 0);
+					if ($emp_desig <= 0 || $eval_desig <= 0) { $skipped++; continue; }
+
+					// Save/update the designation mapping
+					$this->db->query("INSERT INTO evaluator_designation_map (employee_designation_id, evaluator_designation_id)
+						VALUES ($emp_desig, $eval_desig)
+						ON DUPLICATE KEY UPDATE evaluator_designation_id = $eval_desig");
+
+					// Get all evaluators of the evaluator-designation
+					$eval_rs = $this->db->query("SELECT id FROM evaluator_list WHERE designation_id = $eval_desig ORDER BY id ASC");
+					$eval_ids = [];
+					if ($eval_rs) { while ($er = $eval_rs->fetch_assoc()) $eval_ids[] = intval($er['id']); }
+					if (empty($eval_ids)) { $skipped++; continue; }
+
+					// Get all employees of the employee-designation
+					$emp_rs = $this->db->query("SELECT id FROM employee_list WHERE designation_id = $emp_desig");
+					if (!$emp_rs) { $skipped++; continue; }
+
+					// Round-robin assignment
+					$idx = 0;
+					$stmt = $this->db->prepare("UPDATE employee_list SET evaluator_id = ? WHERE id = ?");
+					while ($er = $emp_rs->fetch_assoc()) {
+						$emp_id = intval($er['id']);
+						$eval_id = $eval_ids[$idx % count($eval_ids)];
+						$stmt->bind_param('ii', $eval_id, $emp_id);
+						$stmt->execute();
+						$idx++;
+					}
+					$stmt->close();
+					$applied++;
 				}
-				$stmt->close();
 				$this->db->commit();
-				return 1;
+				return json_encode(['status' => 'success', 'message' => "$applied designation(s) applied, $skipped skipped."]);
 			} catch (Exception $e) {
 				$this->db->rollback();
-				return 0;
+				return json_encode(['status' => 'error', 'message' => 'Database error: ' . $e->getMessage()]);
 			}
 		}
 
 		// Single designation apply
-		$designation_id = intval($_POST['designation_id'] ?? 0);
-		$evaluator_id   = intval($_POST['evaluator_id'] ?? 0);
-		if ($designation_id <= 0 || !$isAllowedEvaluator($designation_id, $evaluator_id)) return 0;
+		$emp_desig = intval($_POST['employee_designation_id'] ?? 0);
+		$eval_desig = intval($_POST['evaluator_designation_id'] ?? 0);
+		if ($emp_desig <= 0 || $eval_desig <= 0) {
+			return json_encode(['status' => 'error', 'message' => 'Invalid designation IDs.']);
+		}
 
-		$stmt = $this->db->prepare("UPDATE employee_list SET evaluator_id = ? WHERE designation_id = ?");
-		$stmt->bind_param('ii', $evaluator_id, $designation_id);
-		$done = $stmt->execute();
+		// Save/update the designation mapping
+		$this->db->query("INSERT INTO evaluator_designation_map (employee_designation_id, evaluator_designation_id)
+			VALUES ($emp_desig, $eval_desig)
+			ON DUPLICATE KEY UPDATE evaluator_designation_id = $eval_desig");
+
+		// Get all evaluators of the evaluator-designation
+		$eval_rs = $this->db->query("SELECT id FROM evaluator_list WHERE designation_id = $eval_desig ORDER BY id ASC");
+		$eval_ids = [];
+		if ($eval_rs) { while ($er = $eval_rs->fetch_assoc()) $eval_ids[] = intval($er['id']); }
+		if (empty($eval_ids)) {
+			return json_encode(['status' => 'error', 'message' => 'No evaluators found for that designation.']);
+		}
+
+		// Get all employees of the employee-designation
+		$emp_rs = $this->db->query("SELECT id FROM employee_list WHERE designation_id = $emp_desig");
+		if (!$emp_rs || $emp_rs->num_rows === 0) {
+			return json_encode(['status' => 'error', 'message' => 'No faculty found for that designation.']);
+		}
+
+		// Round-robin assignment
+		$idx = 0;
+		$stmt = $this->db->prepare("UPDATE employee_list SET evaluator_id = ? WHERE id = ?");
+		while ($er = $emp_rs->fetch_assoc()) {
+			$emp_id = intval($er['id']);
+			$eval_id = $eval_ids[$idx % count($eval_ids)];
+			$stmt->bind_param('ii', $eval_id, $emp_id);
+			$stmt->execute();
+			$idx++;
+		}
 		$stmt->close();
-		if ($done) return 1;
+
+		return json_encode(['status' => 'success', 'message' => "$idx faculty assigned to " . count($eval_ids) . " evaluator(s)."]);
 	}
 	function save_task(){
 		$this->db->begin_transaction();
@@ -2734,7 +2815,7 @@ function submit_file() {
 			LEFT JOIN target_exemptions te ON t.id = te.task_id AND te.position_id = $position_id
 			WHERE t.is_active = 1
 			AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id)
-			AND " . task_designation_match($designation_id) . "
+			AND " . task_designation_match($designation_id, intval($faculty_id)) . "
 			AND te.id IS NULL
 			$category_where
 			ORDER BY t.category, t.sub_category, t.mfo");
