@@ -807,6 +807,11 @@ $(".set_status").click(function() {
             var $btn = $(this).find('button.dropdown-toggle');
             if ($btn.length) {
                 var txt = $.trim($btn.text());
+                // "N/A" criteria are not applicable — skip them entirely so a
+                // target can be verified when only the Applicable criteria are
+                // rated. (The rating cell renders an N/A button, not a span, so
+                // we must exclude it by its exact text.)
+                if (txt === 'N/A') return;
                 var num = parseFloat(txt);
                 if (txt === 'Set' || txt === '' || isNaN(num) || num === 0) {
                     var name = (label === 'E') ? 'Efficiency'

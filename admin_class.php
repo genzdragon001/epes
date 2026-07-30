@@ -1681,6 +1681,13 @@ Class Action {
             return;
         }
         $taskRow = $taskCheck->fetch_assoc();
+        // Normalize applicability so "Not Applicable" / "not applicable" /
+        // stray whitespace are all treated as N/A and skipped during the
+        // For Verification -> Verified transition. Only "APPLICABLE" criteria
+        // are required before a target can be verified.
+        $effAppl = strtoupper(trim($taskRow['task_eff'] ?? ''));
+        $timeAppl = strtoupper(trim($taskRow['task_time'] ?? ''));
+        $qualAppl = strtoupper(trim($taskRow['task_qual'] ?? ''));
 
         // Use the LATEST rating row (MAX id) for this task+faculty so duplicate
         // ratings rows (same task, multiple period-codes) don't make the gate
@@ -1703,21 +1710,21 @@ Class Action {
             $stmt = $this->db->prepare("SELECT efficiency FROM ratings WHERE id = (SELECT MAX(id) FROM ratings WHERE employee_id = ? AND task_id = ?)");
             $stmt->bind_param('ii', $faculty, $id);
             $stmt->execute();
-            if ($taskRow['task_eff'] === 'Applicable' && empty($stmt->get_result()->fetch_assoc()['efficiency'] ?? null)) {
+            if ($effAppl === 'APPLICABLE' && empty($stmt->get_result()->fetch_assoc()['efficiency'] ?? null)) {
                 $missingRatings[] = 'Efficiency';
             }
             $stmt->close();
             $stmt = $this->db->prepare("SELECT timeliness FROM ratings WHERE id = (SELECT MAX(id) FROM ratings WHERE employee_id = ? AND task_id = ?)");
             $stmt->bind_param('ii', $faculty, $id);
             $stmt->execute();
-            if ($taskRow['task_time'] === 'Applicable' && empty($stmt->get_result()->fetch_assoc()['timeliness'] ?? null)) {
+            if ($timeAppl === 'APPLICABLE' && empty($stmt->get_result()->fetch_assoc()['timeliness'] ?? null)) {
                 $missingRatings[] = 'Timeliness';
             }
             $stmt->close();
             $stmt = $this->db->prepare("SELECT quality FROM ratings WHERE id = (SELECT MAX(id) FROM ratings WHERE employee_id = ? AND task_id = ?)");
             $stmt->bind_param('ii', $faculty, $id);
             $stmt->execute();
-            if ($taskRow['task_qual'] === 'Applicable' && empty($stmt->get_result()->fetch_assoc()['quality'] ?? null)) {
+            if ($qualAppl === 'APPLICABLE' && empty($stmt->get_result()->fetch_assoc()['quality'] ?? null)) {
                 $missingRatings[] = 'Quality';
             }
             $stmt->close();
@@ -1728,13 +1735,13 @@ Class Action {
         } else {
             $ratingRow = $ratingCheck->fetch_assoc();
             $missingRatings = [];
-            if ($taskRow['task_eff'] === 'Applicable' && (empty($ratingRow['efficiency']) || $ratingRow['efficiency'] === '')) {
+            if ($effAppl === 'APPLICABLE' && (empty($ratingRow['efficiency']) || $ratingRow['efficiency'] === '')) {
                 $missingRatings[] = 'Efficiency';
             }
-            if ($taskRow['task_time'] === 'Applicable' && (empty($ratingRow['timeliness']) || $ratingRow['timeliness'] === '')) {
+            if ($timeAppl === 'APPLICABLE' && (empty($ratingRow['timeliness']) || $ratingRow['timeliness'] === '')) {
                 $missingRatings[] = 'Timeliness';
             }
-            if ($taskRow['task_qual'] === 'Applicable' && (empty($ratingRow['quality']) || $ratingRow['quality'] === '')) {
+            if ($qualAppl === 'APPLICABLE' && (empty($ratingRow['quality']) || $ratingRow['quality'] === '')) {
                 $missingRatings[] = 'Quality';
             }
             if (count($missingRatings) > 0) {
