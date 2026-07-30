@@ -71,7 +71,7 @@ if ($has_research) $cat_filters[] = "(t.category = 'core' AND t.sub_category = '
 if ($has_extension) $cat_filters[] = "(t.category = 'core' AND t.sub_category = 'extension')";
 if ($has_support) $cat_filters[] = "t.category = 'support'";
 
-$category_where = !empty($cat_filters) ? " AND (" . implode(" OR ", $cat_filters) . ")" : "";
+$category_where = ""; // Show all targets (same as target_list.php)
 
 // Get targets from task_list with MOV status breakdown from mov_uploads (period-scoped)
 $target_query = "SELECT DISTINCT t.id,
@@ -97,7 +97,7 @@ $target_query = "SELECT DISTINCT t.id,
     LEFT JOIN target_exemptions te ON t.id = te.task_id AND te.position_id = $position_id
     WHERE t.is_active = 1
     AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id)
-    AND " . task_designation_match($designation_id) . "
+    AND " . task_designation_match($designation_id, intval($faculty_id)) . "
     AND te.id IS NULL
     $category_where
     ORDER BY FIELD(t.category, 'strategic', 'core', 'support'), t.sort_order, t.mfo";
@@ -120,7 +120,7 @@ $tmp = $conn->query("SELECT
     ) mv ON mv.target_id = t.id AND mv.faculty_id = $faculty_id
     WHERE t.is_active = 1
     AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id)
-    AND " . task_designation_match($designation_id) . "
+    AND " . task_designation_match($designation_id, intval($faculty_id)) . "
     AND te.id IS NULL
     $category_where");
 if ($tmp && $row = $tmp->fetch_assoc()) {
@@ -135,6 +135,7 @@ $cat_meta = [
     'core'      => ['label' => 'CORE FUNCTIONS',      'dot' => 'core'],
     'support'   => ['label' => 'SUPPORT FUNCTIONS',   'dot' => 'support'],
 ];
+$period_is_active = ($selected_period && !empty($selected_period['is_active']));
 ?>
 <div class="col-lg-12">
     <div class="card card-outline card-primary">
@@ -145,7 +146,7 @@ $cat_meta = [
                 <span class="badge badge-light p-2" style="font-size:0.85rem; background:#fff; color:#28a745;">
                     <i class="fa fa-calendar-alt mr-1"></i>
                     <?= htmlspecialchars($selected_period['semester']) ?> <?= htmlspecialchars($selected_period['year']) ?>
-                    <?= !empty($selected_period['is_active']) ? '<span class="badge badge-success ml-1">Current</span>' : '' ?>
+                    <?= !empty($selected_period['is_active']) ? '<span class="badge badge-success ml-1">Current</span>' : '<span class="badge badge-warning ml-1"><i class="fa fa-lock"></i> Read-only</span>' ?>
                 </span>
                 <?php endif; ?>
             </div>
@@ -266,11 +267,15 @@ $cat_meta = [
                                 <?php endif; ?>
                             </td>
                             <td class="text-center align-middle">
+                                <?php if ($period_is_active): ?>
                                 <button type="button" class="btn btn-sm btn-primary btn-block-sm"
                                     onclick="uploadMOVForTarget(<?php echo $row['id']; ?>)"
                                     title="Upload MOV">
                                     <i class="fa fa-upload mr-1"></i> Upload MOV
                                 </button>
+                                <?php else: ?>
+                                <span class="badge badge-secondary" title="Period is inactive"><i class="fa fa-lock"></i> Locked</span>
+                                <?php endif; ?>
                                 <?php if ($total_mov > 0): ?>
                                 <button type="button" class="btn btn-sm btn-outline-secondary btn-block-sm"
                                     onclick="viewTargetMOVs(<?php echo $row['id']; ?>)"
