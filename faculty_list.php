@@ -107,6 +107,14 @@ if($is_admin) {
 } else {
     // Other evaluators (e.g. VP, Director, Research Head): show faculty
     // explicitly assigned to this evaluator via evaluator_id.
+    // The evaluator_id column stores the evaluator_list.id, but the logged-in
+    // user's session login_id is their employee_list.id. Map via email.
+    $eval_email = $conn->real_escape_string($_SESSION['login_email'] ?? '');
+    $eval_map_q = $conn->query("SELECT id FROM evaluator_list WHERE email = '$eval_email' LIMIT 1");
+    $eval_list_id = $eval_id; // fallback to session id
+    if ($eval_map_q && $eval_map_q->num_rows > 0) {
+        $eval_list_id = intval($eval_map_q->fetch_assoc()['id']);
+    }
     $result = $conn->query("
         SELECT e.id, e.firstname, e.middlename, e.lastname, e.department_id,
                e.designation_id, dl.designation, dep.department, e.position_id, p.position
@@ -114,7 +122,7 @@ if($is_admin) {
         LEFT JOIN designation_list dl ON e.designation_id = dl.id
         LEFT JOIN department_list dep ON e.department_id = dep.id
         LEFT JOIN position_list p ON e.position_id = p.id
-        WHERE e.evaluator_id = $eval_id
+        WHERE e.evaluator_id = $eval_list_id
         ORDER BY e.lastname
     ");
 }

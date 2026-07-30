@@ -1256,8 +1256,17 @@ Class Action {
 						VALUES ($emp_desig, $eval_desig)
 						ON DUPLICATE KEY UPDATE evaluator_designation_id = $eval_desig");
 
-					// Get all evaluators of the evaluator-designation
-					$eval_rs = $this->db->query("SELECT id FROM evaluator_list WHERE designation_id = $eval_desig ORDER BY id ASC");
+									// Get all evaluators of the evaluator-designation.
+								// Fall back to employee_list.designation_id when evaluator_list
+								// has designation_id=0 (evaluator was added but designation not
+								// set in the Manage Evaluators page).
+								$eval_rs = $this->db->query("
+									SELECT el.id FROM evaluator_list el
+									LEFT JOIN employee_list em ON el.email = em.email
+									WHERE el.designation_id = $eval_desig
+									   OR (el.designation_id = 0 AND em.designation_id = $eval_desig)
+									ORDER BY el.id ASC
+								");
 					$eval_ids = [];
 					if ($eval_rs) { while ($er = $eval_rs->fetch_assoc()) $eval_ids[] = intval($er['id']); }
 					if (empty($eval_ids)) { $skipped++; continue; }
@@ -1299,8 +1308,17 @@ Class Action {
 			VALUES ($emp_desig, $eval_desig)
 			ON DUPLICATE KEY UPDATE evaluator_designation_id = $eval_desig");
 
-		// Get all evaluators of the evaluator-designation
-		$eval_rs = $this->db->query("SELECT id FROM evaluator_list WHERE designation_id = $eval_desig ORDER BY id ASC");
+		// Get all evaluators of the evaluator-designation.
+		// Fall back to employee_list.designation_id when evaluator_list
+		// has designation_id=0 (evaluator was added but designation not
+		// set in the Manage Evaluators page).
+		$eval_rs = $this->db->query("
+			SELECT el.id FROM evaluator_list el
+			LEFT JOIN employee_list em ON el.email = em.email
+			WHERE el.designation_id = $eval_desig
+			   OR (el.designation_id = 0 AND em.designation_id = $eval_desig)
+			ORDER BY el.id ASC
+		");
 		$eval_ids = [];
 		if ($eval_rs) { while ($er = $eval_rs->fetch_assoc()) $eval_ids[] = intval($er['id']); }
 		if (empty($eval_ids)) {

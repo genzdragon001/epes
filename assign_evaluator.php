@@ -28,8 +28,14 @@ while ($cr = $cnt_q->fetch_assoc()) {
     $cnt_arr[intval($cr['designation_id'])] = intval($cr['c']);
 }
 
-// Evaluator count per designation
-$eval_cnt_q = $conn->query("SELECT designation_id, COUNT(*) AS c FROM evaluator_list GROUP BY designation_id");
+// Evaluator count per designation — include evaluators whose evaluator_list
+// designation_id is 0 but whose employee_list designation matches (fallback).
+$eval_cnt_q = $conn->query("
+    SELECT COALESCE(NULLIF(el.designation_id, 0), em.designation_id, el.designation_id) AS designation_id, COUNT(*) AS c
+    FROM evaluator_list el
+    LEFT JOIN employee_list em ON el.email = em.email
+    GROUP BY COALESCE(NULLIF(el.designation_id, 0), em.designation_id, el.designation_id)
+");
 $eval_cnt_arr = [];
 while ($ecr = $eval_cnt_q->fetch_assoc()) {
     $eval_cnt_arr[intval($ecr['designation_id'])] = intval($ecr['c']);

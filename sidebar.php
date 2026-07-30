@@ -12,7 +12,20 @@
         <h3 class="text-center p-0 m-0"><b><?= $role_label ?></b></h3>
         <?php elseif (!empty($_SESSION['is_evaluator'])):
             $er = $_SESSION['evaluator_role'] ?? '';
-            $role_label = ($er === 'dean') ? 'DEAN' : (($er === 'vp') ? 'VP' : (($er === 'director') ? 'DIRECTOR' : 'DEPT HEAD'));
+            // For VP roles, show the actual designation (VPAA, VPAF, VPREI) instead of generic "VP"
+            $role_label = ($er === 'dean') ? 'DEAN' : (($er === 'director') ? 'DIRECTOR' : (($er === 'dept_head') ? 'DEPT HEAD' : ''));
+            if (empty($role_label) && $er === 'vp') {
+                $desig_id = intval($_SESSION['login_designation_id'] ?? 0);
+                $dl_q = $conn->query("SELECT designation FROM designation_list WHERE id = $desig_id LIMIT 1");
+                if ($dl_q && ($dl_r = $dl_q->fetch_assoc())) {
+                    $dn = $dl_r['designation'];
+                    // Shorten "Vice President for X" to "VP X" or just use the full name
+                    $role_label = strtoupper($dn);
+                } else {
+                    $role_label = 'VP';
+                }
+            }
+            if (empty($role_label)) $role_label = 'EVALUATOR';
         ?>
         <h3 class="text-center p-0 m-0"><b><?= $role_label ?></b></h3>
         <?php else: ?>
@@ -194,7 +207,7 @@
           <li class="nav-item">
             <a href="./index.php?page=faculty_list" class="nav-link nav-faculty_list">
               <i class="nav-icon fas fa-building"></i>
-              <p>Department Heads</p>
+              <p><?= ($er === 'vp') ? 'Assigned Faculty' : 'Department Heads' ?></p>
             </a>
           </li>
           <li class="nav-item">
