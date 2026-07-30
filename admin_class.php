@@ -1959,6 +1959,19 @@ function submit_file() {
     $task_id = isset($_POST['task_id']) ? (int) $_POST['task_id'] : 0;
     $faculty_id = $_SESSION['login_id'] ?? 0;
     $rating_period = isset($_POST['rating_period']) ? $this->db->real_escape_string($_POST['rating_period']) : '';
+    if (empty($rating_period)) {
+        // Fall back to active period code, then any period code
+        $rp_qry = $this->db->query("SELECT code FROM rating_period WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
+        if ($rp_qry && $rp_qry->num_rows > 0) {
+            $rating_period = $rp_qry->fetch_assoc()['code'] ?? '';
+        }
+    }
+    if (empty($rating_period)) {
+        $rp_qry = $this->db->query("SELECT code FROM rating_period ORDER BY id DESC LIMIT 1");
+        if ($rp_qry && $rp_qry->num_rows > 0) {
+            $rating_period = $rp_qry->fetch_assoc()['code'] ?? '';
+        }
+    }
     $actual_accomplishment = isset($_POST['actual_accomplishment']) ? $this->db->real_escape_string($_POST['actual_accomplishment']) : '';
     
     if ($task_id === 0 || $faculty_id === 0) {
@@ -2014,6 +2027,18 @@ function submit_file() {
 	    $task_id = isset($_POST['task_id']) ? (int) $_POST['task_id'] : 0;
 	    $faculty_id = $_SESSION['login_id'] ?? 0;
 	    $rating_period = isset($_POST['rating_period']) ? $this->db->real_escape_string($_POST['rating_period']) : '';
+	    if (empty($rating_period)) {
+	        $rp_qry = $this->db->query("SELECT code FROM rating_period WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
+	        if ($rp_qry && $rp_qry->num_rows > 0) {
+	            $rating_period = $rp_qry->fetch_assoc()['code'] ?? '';
+	        }
+	    }
+	    if (empty($rating_period)) {
+	        $rp_qry = $this->db->query("SELECT code FROM rating_period ORDER BY id DESC LIMIT 1");
+	        if ($rp_qry && $rp_qry->num_rows > 0) {
+	            $rating_period = $rp_qry->fetch_assoc()['code'] ?? '';
+	        }
+	    }
 
 	    if ($task_id === 0 || $faculty_id === 0) {
 	        echo json_encode(["status" => "error", "message" => "Invalid task or faculty ID."]);
