@@ -45,3 +45,13 @@ INSERT IGNORE INTO evaluator_designation_map (employee_designation_id, evaluator
     (3, 2),   -- Faculty -> Department Head
     (2, 1),   -- Department Head -> Dean
     (1, 18);  -- Dean -> VPAA
+
+-- 8. Ensure evaluator_list has designation_id column (may be missing on older live DBs)
+-- Uncomment the ALTER if the column does not exist:
+-- ALTER TABLE evaluator_list ADD COLUMN designation_id INT DEFAULT 0;
+
+-- 9. Set rbburac as VPREI (designation 19) and assign Dennis Corlet to him
+--    Adjust the evaluator_list id if different on live DB:
+--    SELECT id FROM evaluator_list WHERE email = 'rbburac@gmail.com';
+UPDATE evaluator_list SET designation_id = 19 WHERE email = 'rbburac@gmail.com';
+UPDATE employee_list SET evaluator_id = (SELECT id FROM evaluator_list WHERE email = 'rbburac@gmail.com' LIMIT 1) WHERE firstname = 'Dennis' AND lastname = 'Corlet';
