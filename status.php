@@ -12,10 +12,9 @@ $for_verification = $conn->query("SELECT COUNT(*) FROM task_progress WHERE facul
 $pending_count = $total_logs - $verified_count - $for_verification;
 
 $qry = $conn->query("
-    SELECT tp.*, t.success_indicators, r.date_created as rated_on
+    SELECT tp.*, t.success_indicators, tp.date_verified as verified_on
     FROM task_progress tp
     INNER JOIN task_list t ON tp.task_id = t.id
-    LEFT JOIN ratings r ON r.task_id = tp.task_id AND r.employee_id = tp.faculty_id AND r.rating_period = tp.rating_period
     WHERE tp.faculty_id = $id" . str_replace('rating_period', 'tp.rating_period', $period_filter) . "
     ORDER BY tp.date_created DESC
 ");
@@ -135,7 +134,7 @@ $qry = $conn->query("
                                     $progress_icon = 'fa fa-search';
                                 }
                                 
-                                $verified_date = !empty($row['rated_on']) ? date("M d, Y", strtotime($row['rated_on'])) : '';
+                                $verified_date = !empty($row['verified_on']) ? date("M d, Y", strtotime($row['verified_on'])) : '';
                             ?>
                             <tr>
                                 <td class="text-center font-weight-bold"><?php echo $i++ ?></td>
