@@ -1978,7 +1978,19 @@ function submit_file() {
         echo json_encode(["status" => "error", "message" => "Invalid task or faculty ID."]);
         return;
     }
-    
+
+    // Block uploads on inactive rating periods
+    if (!empty($rating_period)) {
+        $rp_check = $this->db->query("SELECT is_active FROM rating_period WHERE code = '" . $this->db->real_escape_string($rating_period) . "' LIMIT 1");
+        if ($rp_check && $rp_check->num_rows > 0) {
+            $rp_row = $rp_check->fetch_assoc();
+            if (intval($rp_row['is_active']) !== 1) {
+                echo json_encode(["status" => "error", "message" => "This rating period is no longer active. Uploads are locked."]);
+                return;
+            }
+        }
+    }
+
     if (!isset($_FILES['document']) || $_FILES['document']['error'] !== UPLOAD_ERR_OK) {
         echo json_encode(["status" => "error", "message" => "No file uploaded or upload error."]);
         return;
@@ -2045,6 +2057,18 @@ function submit_file() {
 	        return;
 	    }
 
+	    // Block N/A submissions on inactive rating periods
+	    if (!empty($rating_period)) {
+	        $rp_check = $this->db->query("SELECT is_active FROM rating_period WHERE code = '" . $this->db->real_escape_string($rating_period) . "' LIMIT 1");
+	        if ($rp_check && $rp_check->num_rows > 0) {
+	            $rp_row = $rp_check->fetch_assoc();
+	            if (intval($rp_row['is_active']) !== 1) {
+	                echo json_encode(["status" => "error", "message" => "This rating period is no longer active. Submissions are locked."]);
+	                return;
+	            }
+	        }
+	    }
+
 	    // Check if a submission already exists for this period
 	    $check = $this->db->query("SELECT id FROM task_progress WHERE task_id = $task_id AND faculty_id = $faculty_id AND rating_period = '$rating_period' LIMIT 1");
 	    if ($check && $check->num_rows > 0) {
@@ -2071,6 +2095,18 @@ function submit_file() {
 		exit;
 	}
 	 $rp = isset($rating_period) ? $this->db->real_escape_string($rating_period) : '';
+
+	// Block deletes on inactive rating periods
+	if (!empty($rp)) {
+		$rp_check = $this->db->query("SELECT is_active FROM rating_period WHERE code = '$rp' LIMIT 1");
+		if ($rp_check && $rp_check->num_rows > 0) {
+			$rp_row = $rp_check->fetch_assoc();
+			if (intval($rp_row['is_active']) !== 1) {
+				echo 0;
+				exit;
+			}
+		}
+	}
 
 	// Delete record from task_progress (scoped to the selected period)
 	$delete_sql = "DELETE FROM task_progress WHERE task_id = $task_id AND faculty_id = $faculty_id";

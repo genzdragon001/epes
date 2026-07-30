@@ -20,6 +20,7 @@ $is_admin_view = ($login_type == 2);
 $eval_desig_id = 0;
 $fac_desig_id = 0;
 $is_vp = false;
+$is_vprei = false;
 $fac_is_director = false;
 if ($login_type == 1) {
     $stmt = $conn->prepare("SELECT designation_id FROM evaluator_list WHERE id = ?");

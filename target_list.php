@@ -60,6 +60,9 @@ if (isset($allocations['core_extension'])) $alloc_labels[] = 'Extension ' . $all
 if (isset($allocations['support'])) $alloc_labels[] = 'Support ' . $allocations['support'] . '%';
 if (empty($alloc_labels) && isset($allocations['core_instructions'])) $alloc_labels[] = 'Core ' . ($allocations['core_total'] ?? 90) . '%';
 $alloc_text = implode(' · ', $alloc_labels);
+
+// Check if the selected period is the active one (faculty can only upload on active period)
+$period_is_active = ($selected_period && !empty($selected_period['is_active']));
 ?>
 <div class="col-lg-12">
     <div class="card card-outline card-info">
@@ -78,6 +81,9 @@ $alloc_text = implode(' · ', $alloc_labels);
                     <option value="<?= htmlspecialchars($key) ?>" <?= $key === $sel_key ? 'selected' : '' ?>><?= htmlspecialchars($opt_label) ?></option>
                     <?php endforeach; ?>
                 </select>
+                <?php if($login_type == 0 && !$period_is_active): ?>
+                <span class="badge badge-warning ml-1" title="This rating period is no longer active"><i class="fa fa-lock"></i> Read-only</span>
+                <?php endif; ?>
                 <?php if($login_type == 2): ?>
                 <a href="download_target_template.php" class="btn btn-sm btn-default btn-flat border-secondary">
                     <i class="fa fa-download"></i> CSV Template
@@ -306,9 +312,11 @@ $alloc_text = implode(' · ', $alloc_labels);
                         <td>
                             <?php if($isVerified): ?>
                                 <div style="font-size:0.8rem; color:#555;"><?= !empty($accomplishment) ? nl2br(htmlspecialchars($accomplishment)) : '<span class="text-muted">—</span>' ?></div>
-                            <?php elseif($hasSubmission && !$isNA): ?>
+                            <?php elseif($hasSubmission && !$isNA && $period_is_active): ?>
                                 <textarea class="form-control form-control-sm accomplishment-edit" rows="3" data-task-id="<?= $row['id'] ?>" placeholder="Describe accomplishment..."><?= htmlspecialchars($accomplishment) ?></textarea>
                                 <button class="btn btn-sm btn-outline-success btn-block mt-1 save-accomplishment" data-task-id="<?= $row['id'] ?>"><i class="fa fa-save mr-1"></i> Save</button>
+                            <?php elseif($hasSubmission && !$isNA): ?>
+                                <div style="font-size:0.8rem; color:#555;"><?= !empty($accomplishment) ? nl2br(htmlspecialchars($accomplishment)) : '<span class="text-muted">—</span>' ?></div>
                             <?php else: ?>
                                 <span class="text-muted" style="font-size:0.8rem;">—</span>
                             <?php endif; ?>
@@ -337,9 +345,14 @@ $alloc_text = implode(' · ', $alloc_labels);
                             <div class="action-btns">
                             <?php if($login_type == 0): ?>
                                 <?php if($isNA): ?>
+                                <?php if($period_is_active): ?>
                                 <button class="btn btn-sm btn-outline-danger" onclick="delete_file(<?= $row['id'] ?>, <?= $faculty_id ?>)" title="Remove N/A"><i class="fa fa-trash"></i></button>
+                                <?php else: ?>
+                                <span class="badge badge-secondary" title="Period is inactive"><i class="fa fa-lock"></i> N/A</span>
+                                <?php endif; ?>
                                 <?php elseif($hasSubmission && !$isVerified): ?>
                                 <button type="button" class="btn btn-sm btn-outline-primary view-submit-file" data-file="<?= htmlspecialchars($filePath) ?>" data-filetype="<?= htmlspecialchars($fileType) ?>" title="View"><i class="fa fa-eye"></i></button>
+                                <?php if($period_is_active): ?>
                                 <div class="dropdown d-inline-block">
                                     <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="fcAction<?php echo $row['id']; ?>" data-toggle="dropdown" title="Options"><i class="fa fa-cog"></i></button>
                                     <div class="dropdown-menu dropdown-menu-right" aria-labelledby="fcAction<?php echo $row['id']; ?>">
@@ -352,11 +365,16 @@ $alloc_text = implode(' · ', $alloc_labels);
                                         <button class="dropdown-item text-danger" onclick="delete_file(<?= $row['id'] ?>, <?= $faculty_id ?>)"><i class="fa fa-trash mr-2"></i>Delete File</button>
                                     </div>
                                 </div>
+                                <?php endif; ?>
                                 <?php elseif($hasSubmission && $isVerified): ?>
                                 <button type="button" class="btn btn-sm btn-outline-primary view-submit-file" data-file="<?= htmlspecialchars($filePath) ?>" data-filetype="<?= htmlspecialchars($fileType) ?>" title="View"><i class="fa fa-eye"></i></button>
                                 <?php else: ?>
+                                <?php if($period_is_active): ?>
                                 <button class="btn btn-sm btn-primary submit-btn" data-task-id="<?php echo $row['id']; ?>" title="Submit"><i class="fa fa-upload"></i></button>
                                 <button class="btn btn-sm btn-outline-secondary na-btn" data-task-id="<?php echo $row['id']; ?>" title="N/A">N/A</button>
+                                <?php else: ?>
+                                <span class="badge badge-secondary" title="Period is inactive"><i class="fa fa-lock"></i> Locked</span>
+                                <?php endif; ?>
                                 <?php endif; ?>
                             <?php endif; ?>
                             <?php if($login_type == 2): ?>

@@ -263,8 +263,9 @@ if ($result && $result->num_rows > 0) {
                                 else { $adj = 'Poor'; $cls = 'danger'; }
                             }
                         ?>
-                $can_view = ($is_admin || $is_dean || $is_dept_head || (!$is_admin && !$is_dean && !$is_dept_head));
-                ?>
+                        <?php
+                        $can_view = ($is_admin || $is_dean || $is_dept_head || (!$is_admin && !$is_dean && !$is_dept_head));
+                        ?>
                         <tr class="<?= $flagged ? 'table-warning' : '' ?> fac-row" data-search="<?= htmlspecialchars(strtolower($row['lastname'] . ' ' . $row['firstname'] . ' ' . ($row['department'] ?? '') . ' ' . ($row['designation'] ?? ''))) ?>" <?php if($can_view): ?>onclick="window.location.href='index.php?page=evaluation&id=<?= $row['id'] ?>'"<?php endif; ?>>
                             <td class="text-center font-weight-bold"><?= $i++ ?></td>
                             <td>
