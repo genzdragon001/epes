@@ -1834,9 +1834,12 @@ Class Action {
     // Fetch task deadline and submission date
     $stmt = $this->db->prepare("
     	SELECT t.deadline, t.efficiency AS task_eff_applicable, t.timeliness AS task_time_applicable,
-    		   tp.date_submitted, tp.date_verified, tp.id AS progress_id, tp.rating_period
+    	       tp.date_submitted, tp.date_verified, tp.id AS progress_id, tp.rating_period
     	FROM task_list t
-    	LEFT JOIN task_progress tp ON t.id = tp.task_id AND tp.faculty_id = ?
+    	LEFT JOIN task_progress tp ON tp.id = (
+    		SELECT MAX(tp2.id) FROM task_progress tp2
+    		WHERE tp2.task_id = t.id AND tp2.faculty_id = ?
+    	)
     	WHERE t.id = ?
     	LIMIT 1
     ");
@@ -1855,7 +1858,16 @@ Class Action {
     $verified    = $row['date_verified'] ?: date('Y-m-d H:i:s');
     $eff_appl    = strtoupper($row['task_eff_applicable'] ?? '');
     $time_appl   = strtoupper($row['task_time_applicable'] ?? '');
-    $rating_period = $row['rating_period'] ?? ($_SESSION['rating_period'] ?? '');
+    $rating_period = $row['rating_period'] ?? '';
+    if (empty($rating_period)) {
+        $rating_period = $_SESSION['rating_period'] ?? '';
+    }
+    if (empty($rating_period)) {
+        $rp_q = $this->db->query("SELECT code FROM rating_period WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
+        if ($rp_q && $rp_q->num_rows > 0) {
+            $rating_period = $rp_q->fetch_assoc()['code'] ?? '';
+        }
+    }
 
     if (!$progress_id || $deadline === null || $submitted === null) {
     	return;
@@ -1906,19 +1918,29 @@ Class Action {
     $stmt->execute();
     $stmt->close();
 
-    // Mirror into ratings table so IPCR/DPCR/OPCR views pick them up
+    // Mirror into ratings table so IPCR/DPCR/OPCR views pick them up.
     // IMPORTANT: Only fill in fields that the evaluator hasn't manually set yet.
     // Unconditionally overwriting would destroy manually-entered ratings.
+    // Use the LATEST ratings row (MAX id) for this task+faculty, matching by
+    // the SAME period-code set the display query uses (IN clause, not exact =).
+    // An exact = match can miss the row when task_progress.rating_period and
+    // ratings.rating_period use different code variants for the same semester,
+    // causing a duplicate INSERT that wipes the displayed E/Q values.
     $quality_default = 5;
     $stmt = $this->db->prepare("
-    	SELECT id, efficiency, timeliness, quality FROM ratings
-    	WHERE task_id = ? AND employee_id = ?
-    	LIMIT 1
+        SELECT id, efficiency, timeliness, quality FROM ratings
+        WHERE id = (
+            SELECT MAX(r2.id) FROM ratings r2
+            WHERE r2.employee_id = ? AND r2.task_id = ?
+        )
+        LIMIT 1
     ");
     $stmt->bind_param('ii', $task_id, $faculty_id);
     $stmt->execute();
     $check = $stmt->get_result();
     $stmt->close();
+
+    error_log("AUTOSCORE_DEBUG rp=[$rating_period] num_rows=[".($check ? $check->num_rows : 'null')."]");
 
     $period_type = 'IPCR';
     $evaluator_id = intval($_SESSION['login_id'] ?? 0);
