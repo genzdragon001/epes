@@ -197,9 +197,16 @@ SELECT
     r.quality AS rating_quality,
     ((((r.efficiency + r.timeliness + r.quality) / 4) / 5) * 100) AS pa
     FROM task_list t
-    LEFT JOIN task_progress tp ON tp.task_id = t.id AND tp.faculty_id = " . intval($nameId) . " $period_filter
+    LEFT JOIN task_progress tp ON tp.id = (
+        SELECT MAX(tp2.id) FROM task_progress tp2
+        WHERE tp2.task_id = t.id AND tp2.faculty_id = " . intval($nameId) . " $period_filter
+    )
     LEFT JOIN employee_list e ON tp.faculty_id = e.id
-    LEFT JOIN ratings r ON r.employee_id = " . intval($nameId) . " AND r.task_id = t.id AND r.rating_period IN (" . implode(",", array_map(function($c) use ($conn) { return "'" . $conn->real_escape_string($c) . "'"; }, $period_codes)) . ")
+    LEFT JOIN ratings r ON r.id = (
+        SELECT MAX(r2.id) FROM ratings r2
+        WHERE r2.employee_id = " . intval($nameId) . " AND r2.task_id = t.id
+          AND r2.rating_period IN (" . implode(",", array_map(function($c) use ($conn) { return "'" . $conn->real_escape_string($c) . "'"; }, $period_codes)) . ")
+    )
     WHERE t.is_active = 1
         AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = " . intval($fac_position_id) . ")
         AND " . task_designation_match($fac_desig_id, intval($nameId)) . "
