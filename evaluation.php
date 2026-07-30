@@ -790,6 +790,42 @@ $(".set_status").click(function() {
         return;
     }
 
+    // Pre-check before marking a target "Verified": every Applicable rating
+    // criterion (E/Q/T) for this row must already have a value, otherwise the
+    // server's ratings-gate will silently reject the verify and the status
+    // appears "stuck" (rating saves, status doesn't change). Surface the exact
+    // missing criteria here so the evaluator knows what to set first.
+    if (status === 'Verified') {
+        var $row = $(this).closest('tr');
+        var missing = [];
+        $row.find('td[data-label="E"], td[data-label="Q"], td[data-label="T"]').each(function () {
+            var label = $(this).data('label');
+            // A criterion is required if its dropdown button is present and
+            // still shows "Set" (applicable but unrated) OR a stored 0/empty
+            // value (the server also treats 0 as "not rated"). "N/A" cells have
+            // no dropdown button, so they are correctly skipped.
+            var $btn = $(this).find('button.dropdown-toggle');
+            if ($btn.length) {
+                var txt = $.trim($btn.text());
+                var num = parseFloat(txt);
+                if (txt === 'Set' || txt === '' || isNaN(num) || num === 0) {
+                    var name = (label === 'E') ? 'Efficiency'
+                             : (label === 'Q') ? 'Quality'
+                             : (label === 'T') ? 'Timeliness' : label;
+                    missing.push(name);
+                }
+            }
+        });
+        if (missing.length > 0) {
+            alert_toast(
+                'Cannot verify yet — please set the ' + missing.join(', ') +
+                ' rating' + (missing.length > 1 ? 's' : '') + ' first.',
+                'warning'
+            );
+            return;
+        }
+    }
+
     // Optional: show loading animation if you have one
     console.log("⏳ Starting loading animation...");
     if (typeof start_load === "function") start_load();
