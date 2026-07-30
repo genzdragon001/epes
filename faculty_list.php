@@ -23,15 +23,20 @@ if (!$is_admin) {
         $stmt->close();
     } else {
         // Legacy evaluator (login_type=1)
-        $stmt_type = $conn->prepare("SELECT type, department_id FROM evaluator_list WHERE id = ?");
+        $stmt_type = $conn->prepare("SELECT type, department_id, designation_id FROM evaluator_list WHERE id = ?");
         $stmt_type->bind_param("i", $eval_id);
         $stmt_type->execute();
-        $stmt_type->bind_result($eval_type, $dept_id);
+        $stmt_type->bind_result($eval_type, $dept_id, $eval_desig_id);
         $stmt_type->fetch();
         $stmt_type->close();
         
         $is_dean = ($eval_type == 1);
         $is_dept_head = ($eval_type == 0);
+        // Override: VP designations are not dept heads
+        $vp_desigs = [4, 18, 19]; // VPAF, VPAA, VPREI
+        if (in_array(intval($eval_desig_id ?? 0), $vp_desigs)) {
+            $is_dept_head = false;
+        }
     }
 }
 
@@ -214,7 +219,7 @@ if ($result && $result->num_rows > 0) {
                 if($is_admin) echo 'All Faculty';
                 elseif($is_dean) echo 'Department Heads';
                 elseif($is_dept_head) echo 'Faculty Under My Department';
-                else echo 'Faculty';
+                else echo 'Assigned Faculty';
                 ?>
             </h5>
             <span class="badge badge-light"><?= $total_faculty ?> faculty | <?= $total_rated ?> rated (<?= $active_period_code ?>)</span>
@@ -258,7 +263,9 @@ if ($result && $result->num_rows > 0) {
                                 else { $adj = 'Poor'; $cls = 'danger'; }
                             }
                         ?>
-                        <tr class="<?= $flagged ? 'table-warning' : '' ?> fac-row" data-search="<?= htmlspecialchars(strtolower($row['lastname'] . ' ' . $row['firstname'] . ' ' . ($row['department'] ?? '') . ' ' . ($row['designation'] ?? ''))) ?>" <?php if($is_admin || $is_dean || $is_dept_head): ?>onclick="window.location.href='index.php?page=evaluation&id=<?= $row['id'] ?>'"<?php endif; ?>>
+                $can_view = ($is_admin || $is_dean || $is_dept_head || (!$is_admin && !$is_dean && !$is_dept_head));
+                ?>
+                        <tr class="<?= $flagged ? 'table-warning' : '' ?> fac-row" data-search="<?= htmlspecialchars(strtolower($row['lastname'] . ' ' . $row['firstname'] . ' ' . ($row['department'] ?? '') . ' ' . ($row['designation'] ?? ''))) ?>" <?php if($can_view): ?>onclick="window.location.href='index.php?page=evaluation&id=<?= $row['id'] ?>'"<?php endif; ?>>
                             <td class="text-center font-weight-bold"><?= $i++ ?></td>
                             <td>
                                 <strong><?= htmlspecialchars($row['lastname'] . ', ' . $row['firstname'] . ' ' . $row['middlename']) ?></strong>
@@ -296,7 +303,7 @@ if ($result && $result->num_rows > 0) {
                                     <span class="text-muted" style="font-size: 0.85rem;">—</span>
                                 <?php endif; ?>
                             </td>
-                            <?php if($is_admin || $is_dean || $is_dept_head): ?>
+                            <?php if($can_view): ?>
                             <td class="text-center">
                                 <a href="index.php?page=evaluation&id=<?= $row['id'] ?>" class="btn btn-sm btn-info" onclick="event.stopPropagation();">
                                     <i class="fa fa-search"></i> Check
@@ -322,7 +329,7 @@ if ($result && $result->num_rows > 0) {
                         else { $adj = 'Poor'; $cls = 'danger'; }
                     }
                 ?>
-                <div class="fac-card <?= $flagged ? 'fac-card-flagged' : '' ?>" data-search="<?= htmlspecialchars(strtolower($row['lastname'] . ' ' . $row['firstname'] . ' ' . ($row['department'] ?? '') . ' ' . ($row['designation'] ?? ''))) ?>" <?php if($is_admin || $is_dean || $is_dept_head): ?>onclick="window.location.href='index.php?page=evaluation&id=<?= $row['id'] ?>'"<?php endif; ?>>
+                <div class="fac-card <?= $flagged ? 'fac-card-flagged' : '' ?>" data-search="<?= htmlspecialchars(strtolower($row['lastname'] . ' ' . $row['firstname'] . ' ' . ($row['department'] ?? '') . ' ' . ($row['designation'] ?? ''))) ?>" <?php if($can_view): ?>onclick="window.location.href='index.php?page=evaluation&id=<?= $row['id'] ?>'"<?php endif; ?>>
                     <div class="fac-card-top">
                         <div class="fac-card-name">
                             <strong><?= htmlspecialchars($row['lastname'] . ', ' . $row['firstname']) ?></strong>
