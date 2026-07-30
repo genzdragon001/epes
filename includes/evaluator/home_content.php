@@ -25,7 +25,27 @@ if (!empty($_SESSION['is_evaluator'])) {
     $stmt_type->fetch();
     $stmt_type->close();
     $is_dean = ($eval_type == 1);
-    $is_vp   = in_array($eval_desig_id ?? 0, [4, 18, 19]);
+    // Fall back to employee_list.designation_id when evaluator_list has 0
+    $effective_desig = intval($eval_desig_id ?? 0);
+    if ($effective_desig === 0) {
+        $eval_email = $conn->real_escape_string($_SESSION['login_email'] ?? '');
+        $ed_q = $conn->query("SELECT designation_id FROM employee_list WHERE email = '$eval_email' LIMIT 1");
+        if ($ed_q && $ed_q->num_rows > 0) {
+            $effective_desig = intval($ed_q->fetch_assoc()['designation_id']);
+        }
+    }
+    $is_vp = in_array($effective_desig, [4, 18, 19]);
+}
+
+// For VP: map session login_id (employee_list.id or evaluator_list.id) to
+// the evaluator_list.id that employee_list.evaluator_id references.
+$eval_list_id = $eval_id;
+if ($is_vp) {
+    $eval_email = $conn->real_escape_string($_SESSION['login_email'] ?? '');
+    $eval_map_q = $conn->query("SELECT id FROM evaluator_list WHERE email = '$eval_email' LIMIT 1");
+    if ($eval_map_q && $eval_map_q->num_rows > 0) {
+        $eval_list_id = intval($eval_map_q->fetch_assoc()['id']);
+    }
 }
 
 if($is_dean) {
@@ -35,10 +55,10 @@ if($is_dean) {
     $for_verif          = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.id!=$eval_id AND tp.progress='For Verification' $period_filter")->fetch_row()[0];
 } elseif($is_vp) {
     // VP sees faculty explicitly assigned to them via evaluator_id
-    $total_faculty      = $conn->query("SELECT COUNT(*) FROM employee_list WHERE evaluator_id=$eval_id")->fetch_row()[0];
-    $total_submissions  = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.evaluator_id=$eval_id $period_filter")->fetch_row()[0];
-    $verified           = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.evaluator_id=$eval_id AND tp.progress='Verified' $period_filter")->fetch_row()[0];
-    $for_verif          = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.evaluator_id=$eval_id AND tp.progress='For Verification' $period_filter")->fetch_row()[0];
+    $total_faculty      = $conn->query("SELECT COUNT(*) FROM employee_list WHERE evaluator_id=$eval_list_id")->fetch_row()[0];
+    $total_submissions  = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.evaluator_id=$eval_list_id $period_filter")->fetch_row()[0];
+    $verified           = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.evaluator_id=$eval_list_id AND tp.progress='Verified' $period_filter")->fetch_row()[0];
+    $for_verif          = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.evaluator_id=$eval_list_id AND tp.progress='For Verification' $period_filter")->fetch_row()[0];
 } else {
     $total_faculty      = $conn->query("SELECT COUNT(*) FROM employee_list WHERE department_id=$eval_dept_id")->fetch_row()[0];
     $total_submissions  = $conn->query("SELECT COUNT(*) FROM task_progress tp INNER JOIN employee_list e ON tp.faculty_id=e.id WHERE e.department_id=$eval_dept_id AND e.id != $eval_id $period_filter")->fetch_row()[0];
@@ -95,7 +115,7 @@ if(!$is_dean) {
             FROM employee_list e
             LEFT JOIN designation_list d ON e.designation_id=d.id
             LEFT JOIN position_list p ON e.position_id=p.id
-            WHERE e.evaluator_id=$eval_id
+            WHERE e.evaluator_id=$eval_list_id
             ORDER BY e.lastname, e.firstname
         ");
     } else {
@@ -145,7 +165,7 @@ if (!$is_dean && !empty($fac_table)) {
 // Recent activity
 $recent_where = [];
 if (!$is_dean && !$is_vp) $recent_where[] = "e.department_id=$eval_dept_id";
-if ($is_vp) $recent_where[] = "e.evaluator_id=$eval_id";
+if ($is_vp) $recent_where[] = "e.evaluator_id=$eval_list_id";
 if ($period_filter !== '') {
     $recent_where[] = "(" . substr($period_filter, strlen(" AND ")) . ")";
 }
