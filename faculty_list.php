@@ -29,13 +29,24 @@ if (!$is_admin) {
         $stmt_type->bind_result($eval_type, $dept_id, $eval_desig_id);
         $stmt_type->fetch();
         $stmt_type->close();
-        
+
         $is_dean = ($eval_type == 1);
         $is_dept_head = ($eval_type == 0);
-        // Override: VP designations are not dept heads
+        // Override: VP designations are not dept heads — they evaluate only
+        // faculty explicitly assigned via evaluator_id. Fall back to
+        // employee_list.designation_id when evaluator_list.designation_id=0.
         $vp_desigs = [4, 18, 19]; // VPAF, VPAA, VPREI
-        if (in_array(intval($eval_desig_id ?? 0), $vp_desigs)) {
+        $effective_desig = intval($eval_desig_id ?? 0);
+        if ($effective_desig === 0) {
+            $eval_email = $conn->real_escape_string($_SESSION['login_email'] ?? '');
+            $ed_q = $conn->query("SELECT designation_id FROM employee_list WHERE email = '$eval_email' LIMIT 1");
+            if ($ed_q && $ed_q->num_rows > 0) {
+                $effective_desig = intval($ed_q->fetch_assoc()['designation_id']);
+            }
+        }
+        if (in_array($effective_desig, $vp_desigs)) {
             $is_dept_head = false;
+            $is_dean = false;
         }
     }
 }

@@ -6,24 +6,38 @@
         if ($lt == 2): ?>
         <h3 class="text-center p-0 m-0"><b>ADMIN</b></h3>
         <?php elseif ($lt == 1):
-            $er = $_SESSION['evaluator_role'] ?? '';
+            // Legacy evaluator: detect role from evaluator_list + employee_list
+            $er = '';
+            $eval_id_label = intval($_SESSION['login_id'] ?? 0);
+            $el_q = $conn->query("SELECT type, designation_id FROM evaluator_list WHERE id = $eval_id_label LIMIT 1");
+            $el_row = $el_q ? $el_q->fetch_assoc() : null;
+            $eval_type_label = intval($el_row['type'] ?? 0);
+            $eval_desig_label = intval($el_row['designation_id'] ?? 0);
+            if ($eval_desig_label === 0) {
+                $eval_email = $conn->real_escape_string($_SESSION['login_email'] ?? '');
+                $ed_q = $conn->query("SELECT designation_id FROM employee_list WHERE email = '$eval_email' LIMIT 1");
+                if ($ed_q && $ed_q->num_rows > 0) {
+                    $eval_desig_label = intval($ed_q->fetch_assoc()['designation_id']);
+                }
+            }
+            $vp_desigs_label = [4, 18, 19];
+            if (in_array($eval_desig_label, $vp_desigs_label)) {
+                $er = 'vp';
+            } elseif ($eval_type_label == 1) {
+                $er = 'dean';
+            }
             $role_label = ($er === 'dean') ? 'DEAN' : (($er === 'vp') ? 'VP' : (($er === 'director') ? 'DIRECTOR' : 'EVALUATOR'));
+            if ($er === 'vp') {
+                $role_label = 'VPAA';
+            }
         ?>
         <h3 class="text-center p-0 m-0"><b><?= $role_label ?></b></h3>
         <?php elseif (!empty($_SESSION['is_evaluator'])):
             $er = $_SESSION['evaluator_role'] ?? '';
-            // For VP roles, show the actual designation (VPAA, VPAF, VPREI) instead of generic "VP"
+            // For VP roles, show VPAA as the label
             $role_label = ($er === 'dean') ? 'DEAN' : (($er === 'director') ? 'DIRECTOR' : (($er === 'dept_head') ? 'DEPT HEAD' : ''));
             if (empty($role_label) && $er === 'vp') {
-                $desig_id = intval($_SESSION['login_designation_id'] ?? 0);
-                $dl_q = $conn->query("SELECT designation FROM designation_list WHERE id = $desig_id LIMIT 1");
-                if ($dl_q && ($dl_r = $dl_q->fetch_assoc())) {
-                    $dn = $dl_r['designation'];
-                    // Shorten "Vice President for X" to "VP X" or just use the full name
-                    $role_label = strtoupper($dn);
-                } else {
-                    $role_label = 'VP';
-                }
+                $role_label = 'VPAA';
             }
             if (empty($role_label)) $role_label = 'EVALUATOR';
         ?>
@@ -46,14 +60,29 @@
           $is_supervisor = false;
           $eval_type = null;
           if ($lt == 1) {
-              // legacy evaluator: look up type from DB
+              // legacy evaluator: look up type and designation from DB
               $eval_id = intval($_SESSION['login_id'] ?? 0);
-              $stmt = $conn->prepare("SELECT type FROM evaluator_list WHERE id = ?");
+              $stmt = $conn->prepare("SELECT type, designation_id FROM evaluator_list WHERE id = ?");
               $stmt->bind_param("i", $eval_id);
               $stmt->execute();
-              $stmt->bind_result($eval_type);
+              $stmt->bind_result($eval_type, $eval_desig_id);
               $stmt->fetch(); $stmt->close();
               $is_supervisor = ($eval_type == 1);
+              // VP designations (VPAF=4, VPAA=18, VPREI=19) are supervisors too.
+              // Fall back to employee_list.designation_id when evaluator_list has 0.
+              $vp_desigs = [4, 18, 19];
+              $effective_desig = intval($eval_desig_id ?? 0);
+              if ($effective_desig === 0) {
+                  $eval_email = $conn->real_escape_string($_SESSION['login_email'] ?? '');
+                  $ed_q = $conn->query("SELECT designation_id FROM employee_list WHERE email = '$eval_email' LIMIT 1");
+                  if ($ed_q && $ed_q->num_rows > 0) {
+                      $effective_desig = intval($ed_q->fetch_assoc()['designation_id']);
+                  }
+              }
+              if (in_array($effective_desig, $vp_desigs)) {
+                  $is_supervisor = true;
+                  $er = 'vp'; // treat as VP for sidebar labels
+              }
           } elseif ($is_eval) {
               $is_supervisor = in_array($er, ['dean','vp','director']);
           }
@@ -107,7 +136,7 @@
           <li class="nav-item">
             <a href="./index.php?page=faculty_list" class="nav-link nav-faculty_list">
               <i class="nav-icon fas fa-building"></i>
-              <p>Department Heads</p>
+              <p><?= ($er === 'vp') ? 'Assigned Faculty' : 'Department Heads' ?></p>
             </a>
           </li>
           <li class="nav-item">
@@ -116,12 +145,14 @@
               <p>Faculty Evaluation</p>
             </a>
           </li>
+            <?php if ($er !== 'vp'): ?>
           <li class="nav-item">
             <a href="./index.php?page=recommendation" class="nav-link nav-recommendation">
               <i class="nav-icon fas fa-clipboard-check"></i>
               <p>Recommendation</p>
             </a>
           </li>
+            <?php endif; ?>
             <?php else: ?>
           <li class="nav-item">
             <a href="./index.php?page=evaluation" class="nav-link nav-evaluation">
@@ -216,12 +247,14 @@
               <p>Faculty Evaluation</p>
             </a>
           </li>
+            <?php if ($er !== 'vp'): ?>
           <li class="nav-item">
             <a href="./index.php?page=recommendation" class="nav-link nav-recommendation">
               <i class="nav-icon fas fa-clipboard-check"></i>
               <p>Recommendation</p>
             </a>
           </li>
+            <?php endif; ?>
             <?php else: ?>
           <li class="nav-item">
             <a href="./index.php?page=evaluation" class="nav-link nav-evaluation">
