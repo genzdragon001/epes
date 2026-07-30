@@ -1921,75 +1921,78 @@ Class Action {
     // Mirror into ratings table so IPCR/DPCR/OPCR views pick them up.
     // IMPORTANT: Only fill in fields that the evaluator hasn't manually set yet.
     // Unconditionally overwriting would destroy manually-entered ratings.
-    // Use the LATEST ratings row (MAX id) for this task+faculty, matching by
-    // the SAME period-code set the display query uses (IN clause, not exact =).
-    // An exact = match can miss the row when task_progress.rating_period and
-    // ratings.rating_period use different code variants for the same semester,
-    // causing a duplicate INSERT that wipes the displayed E/Q values.
+    //
+    // MERGE DUPLICATES: The old period-mismatch bug could create multiple
+    // rating rows for the same task+faculty (one with manual E/Q values, a
+    // newer one with auto-scored values). Before filling, merge all rows:
+    // for each field, take the highest non-zero value across all duplicates
+    // (manual entry wins over auto-score), write it into the MAX(id) row,
+    // then delete the older duplicates.
     $quality_default = 5;
     $stmt = $this->db->prepare("
-        SELECT id, efficiency, timeliness, quality FROM ratings
-        WHERE id = (
-            SELECT MAX(r2.id) FROM ratings r2
-            WHERE r2.employee_id = ? AND r2.task_id = ?
-        )
-        LIMIT 1
+        SELECT id, efficiency, timeliness, quality, rating_period
+        FROM ratings
+        WHERE employee_id = ? AND task_id = ?
+        ORDER BY id ASC
     ");
-    $stmt->bind_param('ii', $task_id, $faculty_id);
+    $stmt->bind_param('ii', $faculty_id, $task_id);
     $stmt->execute();
-    $check = $stmt->get_result();
+    $dupResult = $stmt->get_result();
     $stmt->close();
-
-    error_log("AUTOSCORE_DEBUG rp=[$rating_period] num_rows=[".($check ? $check->num_rows : 'null')."]");
 
     $period_type = 'IPCR';
     $evaluator_id = intval($_SESSION['login_id'] ?? 0);
 
-    if ($check && $check->num_rows > 0) {
-    	$existing = $check->fetch_assoc();
-    	$rating_id = $existing['id'];
+    if ($dupResult && $dupResult->num_rows > 0) {
+        $rows = [];
+        while ($r = $dupResult->fetch_assoc()) $rows[] = $r;
 
-    	// Only auto-fill efficiency if evaluator hasn't set it (0 or empty)
-    	$has_eff = !empty($existing['efficiency']) && floatval($existing['efficiency']) > 0;
-    	$has_time = !empty($existing['timeliness']) && floatval($existing['timeliness']) > 0;
-    	$has_qual = !empty($existing['quality']) && floatval($existing['quality']) > 0;
+        // Merge: take the best non-zero value for each field across all rows
+        $best_eff = 0; $best_time = 0; $best_qual = 0;
+        foreach ($rows as $r) {
+            if (!empty($r['efficiency']) && floatval($r['efficiency']) > 0)
+                $best_eff = max($best_eff, floatval($r['efficiency']));
+            if (!empty($r['timeliness']) && floatval($r['timeliness']) > 0)
+                $best_time = max($best_time, floatval($r['timeliness']));
+            if (!empty($r['quality']) && floatval($r['quality']) > 0)
+                $best_qual = max($best_qual, floatval($r['quality']));
+        }
 
-    	// Build UPDATE with only the fields that need auto-filling
-    	$sets = [];
-    	$types = '';
-    	$params = [];
-    	if (!$has_eff && $efficiency_rating !== null) {
-    		$sets[] = 'efficiency = ?';
-    		$types .= 'd';
-    		$params[] = $efficiency_rating;
-    	}
-    	if (!$has_time && $timeliness_rating !== null) {
-    		$sets[] = 'timeliness = ?';
-    		$types .= 'd';
-    		$params[] = $timeliness_rating;
-    	}
-    	if (!$has_qual) {
-    		$sets[] = 'quality = ?';
-    		$types .= 'd';
-    		$params[] = $quality_default;
-    	}
-    	// Always update rating_period + period_type
-    	$sets[] = 'rating_period = ?';
-    	$types .= 's';
-    	$params[] = $rating_period;
-    	$sets[] = 'period_type = ?';
-    	$types .= 's';
-    	$params[] = $period_type;
+        // The survivor is the MAX(id) row (what the display query shows)
+        $survivor = $rows[count($rows) - 1];
+        $rating_id = (int) $survivor['id'];
 
-    	if (count($sets) > 0) {
-    		$types .= 'i';
-    		$params[] = $rating_id;
-    		$sql = "UPDATE ratings SET " . implode(', ', $sets) . " WHERE id = ?";
-    		$stmt = $this->db->prepare($sql);
-    		$stmt->bind_param($types, ...$params);
-    		$stmt->execute();
-    		$stmt->close();
-    	}
+        // Auto-fill only fields that are still 0 after merge
+        if ($best_eff === 0 && $efficiency_rating !== null)
+            $best_eff = $efficiency_rating;
+        if ($best_time === 0 && $timeliness_rating !== null)
+            $best_time = $timeliness_rating;
+        if ($best_qual === 0)
+            $best_qual = $quality_default;
+
+        // Write merged values into the survivor row
+        $stmt = $this->db->prepare("
+            UPDATE ratings
+            SET efficiency = ?, timeliness = ?, quality = ?,
+                rating_period = ?, period_type = ?
+            WHERE id = ?
+        ");
+        $stmt->bind_param('dddssi', $best_eff, $best_time, $best_qual,
+                          $rating_period, $period_type, $rating_id);
+        $stmt->execute();
+        $stmt->close();
+
+        // Delete older duplicate rows (keep only the survivor)
+        if (count($rows) > 1) {
+            $deleteIds = [];
+            foreach ($rows as $r) {
+                if ((int) $r['id'] !== $rating_id) $deleteIds[] = (int) $r['id'];
+            }
+            if (!empty($deleteIds)) {
+                $idList = implode(',', $deleteIds);
+                $this->db->query("DELETE FROM ratings WHERE id IN ($idList)");
+            }
+        }
     } else {
     	// No existing rating row — insert with auto-scored values
     	$stmt = $this->db->prepare("
