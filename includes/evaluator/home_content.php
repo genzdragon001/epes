@@ -34,7 +34,7 @@ if (!empty($_SESSION['is_evaluator'])) {
             $effective_desig = intval($ed_q->fetch_assoc()['designation_id']);
         }
     }
-    $is_vp = in_array($effective_desig, [4, 18, 19]);
+    $is_vp = in_array($effective_desig, [4, 9, 10, 18, 19]);
 }
 
 // For VP: map session login_id (employee_list.id or evaluator_list.id) to

@@ -30,9 +30,9 @@ if ($login_type == 1) {
     $stmt->fetch();
     $stmt->close();
     // Any VP designation can evaluate a Director's Strategic Plan targets
-    $is_vp = in_array($eval_desig_id, [4, 18, 19]); // VPAF, VPAA, VPREI
-    // VPREI (19) only evaluates Strategic targets — core/support are locked
-    $is_vprei = ($eval_desig_id == 19);
+    $is_vp = in_array(intval($eval_desig_id ?? 0), [4, 9, 10, 18, 19]); // VPAF, VPAA, VPREI (both ID schemes)
+    // VPREI only evaluates Strategic targets — core/support are locked
+    $is_vprei = in_array(intval($eval_desig_id ?? 0), [10, 19]);
 }
 // Fetch faculty designation and position
 $stmt = $conn->prepare("SELECT designation_id, position_id FROM employee_list WHERE id = ?");

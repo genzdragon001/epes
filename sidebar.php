@@ -20,7 +20,7 @@
                     $eval_desig_label = intval($ed_q->fetch_assoc()['designation_id']);
                 }
             }
-            $vp_desigs_label = [4, 18, 19];
+            $vp_desigs_label = [4, 9, 10, 18, 19];
             if (in_array($eval_desig_label, $vp_desigs_label)) {
                 $er = 'vp';
             } elseif ($eval_type_label == 1) {
@@ -70,7 +70,7 @@
               $is_supervisor = ($eval_type == 1);
               // VP designations (VPAF=4, VPAA=18, VPREI=19) are supervisors too.
               // Fall back to employee_list.designation_id when evaluator_list has 0.
-              $vp_desigs = [4, 18, 19];
+              $vp_desigs = [4, 9, 10, 18, 19];
               $effective_desig = intval($eval_desig_id ?? 0);
               if ($effective_desig === 0) {
                   $eval_email = $conn->real_escape_string($_SESSION['login_email'] ?? '');

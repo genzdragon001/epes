@@ -35,7 +35,7 @@ if (!$is_admin) {
         // Override: VP designations are not dept heads — they evaluate only
         // faculty explicitly assigned via evaluator_id. Fall back to
         // employee_list.designation_id when evaluator_list.designation_id=0.
-        $vp_desigs = [4, 18, 19]; // VPAF, VPAA, VPREI
+        $vp_desigs = [4, 9, 10, 18, 19]; // VPAF, VPAA, VPREI (both ID schemes)
         $effective_desig = intval($eval_desig_id ?? 0);
         if ($effective_desig === 0) {
             $eval_email = $conn->real_escape_string($_SESSION['login_email'] ?? '');
