@@ -182,8 +182,15 @@ $qry = $conn->query("
         ev.firstname as evaluator_firstname,
         ev.lastname as evaluator_lastname
     FROM task_list t
-    LEFT JOIN task_progress tp ON tp.task_id = t.id AND tp.faculty_id = $faculty_id $period_filter
-    LEFT JOIN ratings r ON r.task_id = t.id AND r.employee_id = $faculty_id
+    LEFT JOIN task_progress tp ON tp.id = (
+        SELECT MAX(tp2.id) FROM task_progress tp2
+        WHERE tp2.task_id = t.id AND tp2.faculty_id = $faculty_id $period_filter
+    )
+    LEFT JOIN ratings r ON r.id = (
+        SELECT MAX(r2.id) FROM ratings r2
+        WHERE r2.task_id = t.id AND r2.employee_id = $faculty_id
+          AND r2.rating_period IN ('" . implode("','", array_map([$conn, 'real_escape_string'], $period_codes)) . "')
+    )
     LEFT JOIN evaluator_list ev ON r.evaluator_id = ev.id
     WHERE $where
     ORDER BY t.category, t.sub_category, t.id

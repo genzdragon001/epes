@@ -131,7 +131,10 @@ $periods_result = $conn->query("SELECT DISTINCT rating_period FROM renewal_recom
                         tp.progress
                     FROM task_progress tp
                     INNER JOIN task_list t ON tp.task_id = t.id
-                    LEFT JOIN ratings r ON r.task_id = tp.task_id AND r.employee_id = tp.faculty_id
+                    LEFT JOIN ratings r ON r.id = (
+                        SELECT MAX(r2.id) FROM ratings r2
+                        WHERE r2.task_id = tp.task_id AND r2.employee_id = tp.faculty_id
+                    )
                     WHERE tp.faculty_id = $emp_id 
                       AND t.mfo IN ($mfo)
                       AND t.is_active = 1
@@ -217,7 +220,10 @@ $periods_result = $conn->query("SELECT DISTINCT rating_period FROM renewal_recom
                         r.quality AS rating_quality
                     FROM task_progress tp
                     INNER JOIN task_list t ON tp.task_id = t.id
-                    LEFT JOIN ratings r ON r.task_id = tp.task_id AND r.employee_id = tp.faculty_id
+                    LEFT JOIN ratings r ON r.id = (
+                        SELECT MAX(r2.id) FROM ratings r2
+                        WHERE r2.task_id = tp.task_id AND r2.employee_id = tp.faculty_id
+                    )
                     WHERE tp.faculty_id = $emp_id 
                       AND t.mfo IN ($mfo)
                       AND tp.progress = 'Verified'
