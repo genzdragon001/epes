@@ -1681,29 +1681,40 @@ Class Action {
             return;
         }
         $taskRow = $taskCheck->fetch_assoc();
-        
-        $stmt = $this->db->prepare("SELECT efficiency, timeliness, quality FROM ratings WHERE employee_id = ? AND task_id = ? LIMIT 1");
+
+        // Use the LATEST rating row (MAX id) for this task+faculty so duplicate
+        // ratings rows (same task, multiple period-codes) don't make the gate
+        // read a stale/empty row and wrongly block verification.
+        $stmt = $this->db->prepare("
+            SELECT r.efficiency, r.timeliness, r.quality
+            FROM ratings r
+            WHERE r.id = (
+                SELECT MAX(r2.id) FROM ratings r2
+                WHERE r2.employee_id = ? AND r2.task_id = ?
+            )
+            LIMIT 1
+        ");
         $stmt->bind_param('ii', $faculty, $id);
         $stmt->execute();
         $ratingCheck = $stmt->get_result();
         $stmt->close();
         if (!$ratingCheck || $ratingCheck->num_rows == 0) {
             $missingRatings = [];
-            $stmt = $this->db->prepare("SELECT efficiency FROM ratings WHERE employee_id = ? AND task_id = ?");
+            $stmt = $this->db->prepare("SELECT efficiency FROM ratings WHERE id = (SELECT MAX(id) FROM ratings WHERE employee_id = ? AND task_id = ?)");
             $stmt->bind_param('ii', $faculty, $id);
             $stmt->execute();
             if ($taskRow['task_eff'] === 'Applicable' && empty($stmt->get_result()->fetch_assoc()['efficiency'] ?? null)) {
                 $missingRatings[] = 'Efficiency';
             }
             $stmt->close();
-            $stmt = $this->db->prepare("SELECT timeliness FROM ratings WHERE employee_id = ? AND task_id = ?");
+            $stmt = $this->db->prepare("SELECT timeliness FROM ratings WHERE id = (SELECT MAX(id) FROM ratings WHERE employee_id = ? AND task_id = ?)");
             $stmt->bind_param('ii', $faculty, $id);
             $stmt->execute();
             if ($taskRow['task_time'] === 'Applicable' && empty($stmt->get_result()->fetch_assoc()['timeliness'] ?? null)) {
                 $missingRatings[] = 'Timeliness';
             }
             $stmt->close();
-            $stmt = $this->db->prepare("SELECT quality FROM ratings WHERE employee_id = ? AND task_id = ?");
+            $stmt = $this->db->prepare("SELECT quality FROM ratings WHERE id = (SELECT MAX(id) FROM ratings WHERE employee_id = ? AND task_id = ?)");
             $stmt->bind_param('ii', $faculty, $id);
             $stmt->execute();
             if ($taskRow['task_qual'] === 'Applicable' && empty($stmt->get_result()->fetch_assoc()['quality'] ?? null)) {
