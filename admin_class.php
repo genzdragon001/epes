@@ -1751,8 +1751,20 @@ Class Action {
         }
     }
 
-    // Check if record exists
-    $stmt = $this->db->prepare("SELECT id, progress FROM task_progress WHERE task_id = ? AND faculty_id = ? LIMIT 1");
+    // Check if record exists — use the LATEST row (MAX id) for this
+    // task+faculty. Duplicate task_progress rows (same task, multiple
+    // rating periods / re-submissions) can exist; LIMIT 1 would otherwise
+    // pick a stale row and the UPDATE would "succeed" without changing the
+    // row the UI actually displays ("status saved but no change").
+    $stmt = $this->db->prepare("
+        SELECT tp.id, tp.progress
+        FROM task_progress tp
+        WHERE tp.id = (
+            SELECT MAX(tp2.id) FROM task_progress tp2
+            WHERE tp2.task_id = ? AND tp2.faculty_id = ?
+        )
+        LIMIT 1
+    ");
     $stmt->bind_param('ii', $id, $faculty);
     $stmt->execute();
     $check = $stmt->get_result();
