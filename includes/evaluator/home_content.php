@@ -111,6 +111,125 @@ if($is_dean) {
     }
 }
 
+// Dean: Faculty flagged for intervention — 3 consecutive rating periods with
+// IPCR rating ≤ 3.60 (Satisfactory or below). Only faculty who actually have
+// a computed rating in each period are counted; periods with no rating break
+// the streak. Uses computeWeightedRating() for accuracy (matches rating.php).
+$flagged_faculty = [];
+if ($is_dean) {
+    // Get the dean's college_office_id to find all departments under this college
+    $dean_dept_id = $eval_dept_id;
+    $college_q = $conn->query("SELECT college_office_id FROM department_list WHERE id = " . intval($dean_dept_id) . " LIMIT 1");
+    $college_id = ($college_q && $college_q->num_rows > 0) ? intval($college_q->fetch_assoc()['college_office_id']) : 0;
+
+    if ($college_id > 0) {
+        // Get all rating periods ordered chronologically
+        $all_periods = [];
+        $apq = $conn->query("SELECT id, semester, year, code FROM rating_period ORDER BY year ASC, FIELD(semester, '1st Semester', '2nd Semester', 'Summer')");
+        while ($ap = $apq->fetch_assoc()) $all_periods[] = $ap;
+
+        // Build period filter and codes for each period (like period_builder does)
+        $period_data = [];
+        foreach ($all_periods as $ap) {
+            $sem = $ap['semester']; $yr = $ap['year'];
+            $codes = [$ap['code']];
+            $codes[] = epes_short_code($sem, $yr);
+            $codes[] = $sem . ' ' . $yr;
+            // data-driven: match semester+year
+            $sem_compact = str_replace(' ', '', $sem);
+            $like = $conn->real_escape_string($sem_compact . '-' . $yr);
+            $short = epes_short_code($sem, $yr);
+            $dq = $conn->query("SELECT DISTINCT rating_period FROM task_progress WHERE rating_period <> '' AND (rating_period LIKE '%$like%' OR rating_period LIKE '%$short%')");
+            while ($dq && $r = $dq->fetch_assoc()) $codes[] = $r['rating_period'];
+            $rq = $conn->query("SELECT DISTINCT rating_period FROM ratings WHERE rating_period <> '' AND (rating_period LIKE '%$like%' OR rating_period LIKE '%$short%')");
+            while ($rq && $r = $rq->fetch_assoc()) $codes[] = $r['rating_period'];
+            $codes = array_values(array_unique(array_filter($codes)));
+            $in = implode("','", array_map([$conn, 'real_escape_string'], $codes));
+            $pf = " AND rating_period IN ('$in')";
+            $period_data[] = [
+                'id' => $ap['id'],
+                'label' => $sem . ' ' . $yr,
+                'codes' => $codes,
+                'filter' => $pf,
+            ];
+        }
+
+        // All faculty in departments under this college, excluding the dean themselves
+        $cfq = $conn->query("
+            SELECT e.id, e.firstname, e.lastname, e.position_id, COALESCE(e.designation_id,0) AS designation_id,
+                   d.department AS dept_name
+            FROM employee_list e
+            LEFT JOIN department_list d ON e.department_id = d.id
+            WHERE d.college_office_id = $college_id AND e.id != $eval_id
+            ORDER BY d.department, e.lastname, e.firstname
+        ");
+        while ($f = $cfq->fetch_assoc()) {
+            $fid = (int)$f['id'];
+            $fpos = (int)$f['position_id'];
+            $fdes = (int)$f['designation_id'];
+
+            // Compute rating for each period — only periods where faculty has
+            // verified submissions count. Missing rating breaks the streak.
+            $streak = 0;
+            $streak_details = [];
+            $current_period_rating = null;
+
+            foreach ($period_data as $pd) {
+                $vq = $conn->query("SELECT COUNT(*) AS cnt FROM task_progress WHERE faculty_id=$fid AND progress='Verified' {$pd['filter']}");
+                $vcount = $vq ? (int)$vq->fetch_assoc()['cnt'] : 0;
+                if ($vcount === 0) {
+                    $streak = 0;
+                    $streak_details = [];
+                    continue;
+                }
+                $rating = computeWeightedRating($conn, $fid, $fpos, $fdes, $pd['codes'][0] ?? '', $pd['filter']);
+                if ($rating === null || $rating <= 0) {
+                    $streak = 0;
+                    $streak_details = [];
+                    continue;
+                }
+
+                // Track the selected/current period rating for display
+                if ($pd['label'] === $period_label) $current_period_rating = $rating;
+
+                if ($rating <= 3.60) {
+                    $streak++;
+                    $streak_details[] = ['label' => $pd['label'], 'rating' => $rating];
+                } else {
+                    $streak = 0;
+                    $streak_details = [];
+                }
+            }
+
+            // Flag if 3 consecutive periods ≤ 3.60
+            if ($streak >= 3) {
+                $last_three = array_slice($streak_details, -3);
+                $display_rating = $current_period_rating ?? $last_three[count($last_three)-1]['rating'];
+
+                // Upsert into intervention_flags so admin/faculty_list also sees it
+                $periods_json = json_encode(array_map(function($s) use ($conn) {
+                    return $conn->real_escape_string($s['label']);
+                }, $last_three));
+                $ratings_json = json_encode($last_three);
+                $stmt = $conn->prepare("INSERT IGNORE INTO intervention_flags (employee_id, flag_type, consecutive_periods, overall_ratings) VALUES (?, '3_CONSECUTIVE_LOW', ?, ?)");
+                $stmt->bind_param('iss', $fid, $periods_json, $ratings_json);
+                $stmt->execute();
+                $stmt->close();
+
+                $flagged_faculty[] = [
+                    'name' => $f['lastname'] . ', ' . $f['firstname'],
+                    'dept' => $f['dept_name'] ?? 'N/A',
+                    'faculty_id' => $fid,
+                    'rating' => $display_rating,
+                    'adjectival' => getAdjectivalRating($display_rating),
+                    'streak' => $streak,
+                    'streak_details' => $last_three,
+                ];
+            }
+        }
+    }
+}
+
 // Faculty table data for dept head or VP
 $fac_table = [];
 if(!$is_dean) {
@@ -224,6 +343,67 @@ $recent = $conn->query($recent_sql);
         </div>
     </div>
 </div>
+
+<!-- DEAN: Intervention Flag Panel — 3 consecutive periods Satisfactory or below -->
+<?php if ($is_dean): ?>
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="chart-card" style="border-left:4px solid <?= empty($flagged_faculty) ? '#27ae60' : '#e74c3c' ?>;">
+            <div class="chart-card-header" style="background:<?= empty($flagged_faculty) ? '#f0fff4' : '#fff5f5' ?>;">
+                <span><i class="fas <?= empty($flagged_faculty) ? 'fa-check-circle' : 'fa-exclamation-triangle' ?> mr-2" style="color:<?= empty($flagged_faculty) ? '#27ae60' : '#e74c3c' ?>;"></i>Intervention Flags — 3 Consecutive Periods Satisfactory or Below</span>
+                <small class="text-muted"><?= count($flagged_faculty) ?> faculty flagged</small>
+            </div>
+            <?php if (!empty($flagged_faculty)): ?>
+            <div class="card-body p-0">
+                <div style="overflow-x:auto;">
+                <table class="table table-sm table-flat mb-0" style="font-size:0.83rem;">
+                    <thead>
+                        <tr>
+                            <th>Faculty</th>
+                            <th>Department</th>
+                            <th class="text-center">Current Rating</th>
+                            <th>3-Period Streak</th>
+                            <th class="text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($flagged_faculty as $ff):
+                            $r = floatval($ff['rating']);
+                            if ($r >= 2.61) { $rcls = 'info'; $rcolor = '#3498db'; }
+                            elseif ($r >= 1.61) { $rcls = 'warning'; $rcolor = '#e67e22'; }
+                            else { $rcls = 'danger'; $rcolor = '#e74c3c'; }
+                            $streak_str = implode(' → ', array_map(function($s) {
+                                return $s['label'] . ' (' . number_format($s['rating'], 2) . ')';
+                            }, $ff['streak_details']));
+                        ?>
+                        <tr>
+                            <td><strong><?= htmlspecialchars($ff['name']) ?></strong></td>
+                            <td><?= htmlspecialchars($ff['dept']) ?></td>
+                            <td class="text-center">
+                                <span class="badge badge-<?= $rcls ?>" style="font-size:0.75rem;" title="<?= htmlspecialchars($ff['adjectival']) ?>"><?= number_format($r, 2) ?></span>
+                                <div style="font-size:0.7rem; color:<?= $rcolor ?>; margin-top:2px;"><?= htmlspecialchars($ff['adjectival']) ?></div>
+                            </td>
+                            <td style="font-size:0.75rem; color:#666;"><?= htmlspecialchars($streak_str) ?></td>
+                            <td class="text-right">
+                                <a href="index.php?page=evaluation&id=<?= $ff['faculty_id'] ?>" class="btn btn-sm btn-outline-danger" style="font-size:0.75rem;">
+                                    <i class="fas fa-clipboard-list mr-1"></i> Review &amp; Intervene
+                                </a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                </div>
+            </div>
+            <?php else: ?>
+            <div class="card-body text-center py-3">
+                <p class="text-muted mb-0" style="font-size:0.85rem;"><i class="fas fa-check-circle mr-1" style="color:#27ae60;"></i> No faculty flagged — all rated faculty are performing above Satisfactory across consecutive periods.</p>
+            </div>
+            <?php endif; ?>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <!-- CONTENT TABLE -->
 <div class="row mb-3">
