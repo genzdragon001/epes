@@ -78,6 +78,12 @@ if($is_dean) {
         FROM evaluator_list ev
         LEFT JOIN department_list d ON ev.department_id = d.id
         WHERE ev.type = 0
+          AND ev.id NOT IN (
+            SELECT el.id FROM evaluator_list el
+            LEFT JOIN employee_list em ON el.email = em.email
+            WHERE el.designation_id IN (4, 9, 10, 18, 19)
+               OR (el.designation_id = 0 AND em.designation_id IN (4, 9, 10, 18, 19))
+          )
         ORDER BY d.department, ev.lastname, ev.firstname
     ");
     while($dh = $dhq->fetch_assoc()) {

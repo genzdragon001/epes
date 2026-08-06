@@ -47,6 +47,11 @@ $strat_locked = ($fac_is_director && !$is_vp && !$is_admin_view);
 // For VPREI: lock everything EXCEPT strategic (opposite of Dean)
 $non_strat_locked = ($is_vprei && !$is_admin_view);
 
+// Evaluators can only rate in the active/current rating period.
+// Inactive periods are read-only (view past ratings only).
+$period_is_active = ($selected_period && !empty($selected_period['is_active']));
+$period_locked = !$is_admin_view && !$period_is_active;
+
 $qry = $conn->query("SELECT CONCAT(firstname, ' ', lastname) AS faculty_name FROM employee_list WHERE id = '$nameId' LIMIT 1");
 
 if ($qry && $qry->num_rows > 0) {
@@ -68,6 +73,9 @@ if ($qry && $qry->num_rows > 0) {
 					<i class="fa fa-calendar-alt mr-1"></i>
 					<?= htmlspecialchars($selected_period['semester']) ?> <?= htmlspecialchars($selected_period['year']) ?>
 					<?= !empty($selected_period['is_active']) ? '<span class="badge badge-light ml-1">Current</span>' : '' ?>
+					<?php if ($period_locked): ?>
+					<span class="badge badge-warning ml-1" title="This rating period is no longer active"><i class="fa fa-lock"></i> Read-only</span>
+					<?php endif; ?>
 				</span>
 				<?php endif; ?>
 			</div>
@@ -302,7 +310,7 @@ SELECT
         </td>
         <td class="text-center align-middle" data-label="Actions">
             <div class="btn-group" role="group">
-            <?php if (!$is_admin_view && !$row_locked): ?>
+            <?php if (!$is_admin_view && !$row_locked && !$period_locked): ?>
             <div class="dropdown d-inline-block">
                 <button class="btn btn-sm btn-outline-secondary dropdown-toggle" 
                         type="button"
@@ -382,9 +390,10 @@ SELECT
             <?php 
                 $effApplicable = (isset($row['task_efficiency']) && $row['task_efficiency'] === 'Applicable');
                 $currentEff = isset($row['rating_efficiency']) ? $row['rating_efficiency'] : '-';
-                $ratingDisabled = $is_na || !$has_submission;
+                $ratingDisabled = $is_na || !$has_submission || $period_locked;
+                $hardLocked = $is_admin_view || $row_locked || $is_na || !$has_submission;
             ?>
-            <?php if ($is_admin_view || $row_locked || $ratingDisabled): ?>
+            <?php if ($hardLocked): ?>
                 <span class="badge <?= isset($row['rating_efficiency']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="' . ($task_is_strategic ? 'Strategic Plan — VP only' : 'VPREI — Strategic targets only') . '"' : '' ?>><?= ($effApplicable && !$ratingDisabled) ? $currentEff : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
             <?php else: ?>
             <div class="dropdown">
@@ -394,10 +403,11 @@ SELECT
                         data-toggle="dropdown" 
                         aria-haspopup="true" 
                         aria-expanded="false"
-                        <?= !$effApplicable ? 'disabled' : '' ?>>
+                        <?= !$effApplicable || $period_locked ? 'disabled' : '' ?>>
                     <?= $effApplicable ? (isset($row['rating_efficiency']) ? $row['rating_efficiency'] : 'Set') : 'N/A' ?>
+                    <?php if ($period_locked): ?><i class="fas fa-lock ml-1" style="font-size:0.6rem;"></i><?php endif; ?>
                 </button>
-                <?php if ($effApplicable): ?>
+                <?php if ($effApplicable && !$period_locked): ?>
                     <div class="dropdown-menu p-3" aria-labelledby="effDropdown<?= $row['progress_id'] ?>" style="min-width: 200px;">
                         <small class="text-muted mb-2 d-block">Select or enter rating:</small>
                         <?php for ($i = 5; $i >= 1; $i--): ?>
@@ -433,9 +443,10 @@ SELECT
             <?php 
                 $qualApplicable = (isset($row['task_quality']) && $row['task_quality'] === 'Applicable');
                 $currentQual = isset($row['rating_quality']) ? $row['rating_quality'] : '-';
-                $ratingDisabled = $is_na || !$has_submission;
+                $ratingDisabled = $is_na || !$has_submission || $period_locked;
+                $hardLocked = $is_admin_view || $row_locked || $is_na || !$has_submission;
             ?>
-            <?php if ($is_admin_view || $row_locked || $ratingDisabled): ?>
+            <?php if ($hardLocked): ?>
                 <span class="badge <?= isset($row['rating_quality']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="' . ($task_is_strategic ? 'Strategic Plan — VP only' : 'VPREI — Strategic targets only') . '"' : '' ?>><?= ($qualApplicable && !$ratingDisabled) ? $currentQual : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
             <?php else: ?>
             <div class="dropdown">
@@ -445,10 +456,11 @@ SELECT
                         data-toggle="dropdown" 
                         aria-haspopup="true" 
                         aria-expanded="false"
-                        <?= !$qualApplicable ? 'disabled' : '' ?>>
+                        <?= !$qualApplicable || $period_locked ? 'disabled' : '' ?>>
                     <?= $qualApplicable ? (isset($row['rating_quality']) ? $row['rating_quality'] : 'Set') : 'N/A' ?>
+                    <?php if ($period_locked): ?><i class="fas fa-lock ml-1" style="font-size:0.6rem;"></i><?php endif; ?>
                 </button>
-                <?php if ($qualApplicable): ?>
+                <?php if ($qualApplicable && !$period_locked): ?>
                     <div class="dropdown-menu p-3" aria-labelledby="qualDropdown<?= $row['progress_id'] ?>" style="min-width: 200px;">
                         <small class="text-muted mb-2 d-block">Select or enter rating:</small>
                         <?php for ($i = 5; $i >= 1; $i--): ?>
@@ -484,9 +496,10 @@ SELECT
             <?php 
                 $timeApplicable = (isset($row['task_timeliness']) && $row['task_timeliness'] === 'Applicable');
                 $currentTime = isset($row['rating_timeliness']) ? $row['rating_timeliness'] : '-';
-                $ratingDisabled = $is_na || !$has_submission;
+                $ratingDisabled = $is_na || !$has_submission || $period_locked;
+                $hardLocked = $is_admin_view || $row_locked || $is_na || !$has_submission;
             ?>
-            <?php if ($is_admin_view || $row_locked || $ratingDisabled): ?>
+            <?php if ($hardLocked): ?>
                 <span class="badge <?= isset($row['rating_timeliness']) ? 'badge-success' : 'badge-secondary' ?>" <?= $row_locked ? 'title="' . ($task_is_strategic ? 'Strategic Plan — VP only' : 'VPREI — Strategic targets only') . '"' : '' ?>><?= ($timeApplicable && !$ratingDisabled) ? $currentTime : 'N/A' ?><?= $row_locked ? ' <i class="fas fa-lock" style="font-size:0.6rem;"></i>' : '' ?></span>
             <?php else: ?>
             <div class="dropdown">
@@ -496,10 +509,11 @@ SELECT
                         data-toggle="dropdown" 
                         aria-haspopup="true" 
                         aria-expanded="false"
-                        <?= !$timeApplicable ? 'disabled' : '' ?>>
+                        <?= !$timeApplicable || $period_locked ? 'disabled' : '' ?>>
                     <?= $timeApplicable ? (isset($row['rating_timeliness']) ? $row['rating_timeliness'] : 'Set') : 'N/A' ?>
+                    <?php if ($period_locked): ?><i class="fas fa-lock ml-1" style="font-size:0.6rem;"></i><?php endif; ?>
                 </button>
-                <?php if ($timeApplicable): ?>
+                <?php if ($timeApplicable && !$period_locked): ?>
                     <div class="dropdown-menu p-3" aria-labelledby="timeDropdown<?= $row['progress_id'] ?>" style="min-width: 200px;">
                         <small class="text-muted mb-2 d-block">Select or enter rating:</small>
                         <?php for ($i = 5; $i >= 1; $i--): ?>
@@ -548,7 +562,7 @@ if($comment_check && $comment_check->num_rows > 0){
     $existing_comment = htmlspecialchars($comment_row['comment_text']);
 }
 ?>
-<?php if (!$is_admin_view): ?>
+<?php if (!$is_admin_view && !$period_locked): ?>
 <div class="card mt-4 border-secondary">
     <div class="card-header bg-secondary text-white">
         <h5 class="card-title mb-0"><i class="fas fa-comments"></i> Evaluator Comment</h5>

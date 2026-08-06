@@ -1542,6 +1542,15 @@ Class Action {
 			return 0;
 		}
 
+		// Enforce: evaluators can only rate in the ACTIVE rating period.
+		// Reject saves targeting an inactive period.
+		$rating_period = $rating_period ?? '';
+		$active_qry = $this->db->query("SELECT code FROM rating_period WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
+		$active_code = ($active_qry && $active_qry->num_rows > 0) ? $active_qry->fetch_assoc()['code'] : '';
+		if ($rating_period !== '' && $active_code !== '' && $rating_period !== $active_code) {
+			return 0;
+		}
+
 		// Get rating_period from POST, or fall back to the active period code
 		$rating_period = $rating_period ?? '';
 		if (empty($rating_period)) {
@@ -1675,6 +1684,16 @@ Class Action {
         echo json_encode(["status" => "error", "message" => "Missing or invalid parameters."]);
         return;
     }
+
+    // Enforce: evaluators can only change status in the ACTIVE rating period.
+    // Reject saves when no active period exists.
+    $active_qry = $this->db->query("SELECT id FROM rating_period WHERE is_active = 1 ORDER BY id DESC LIMIT 1");
+    if (!$active_qry || $active_qry->num_rows == 0) {
+        echo json_encode(["status" => "error", "message" => "No active rating period. Status changes are locked."]);
+        return;
+    }
+    // The latest task_progress row is always created in the active period, so if
+    // the task_progress record exists it's already in the active period.
 
     $userId    = $_SESSION['login_id']   ?? null;
     $username  = $_SESSION['login_email'] ?? 'Unknown';

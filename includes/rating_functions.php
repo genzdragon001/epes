@@ -143,10 +143,20 @@ function computeRatingBreakdown($conn, $faculty_id, $position_id, $designation_i
     }
     $where .= " AND (" . implode(" OR ", $cat_filters) . ")";
 
-    $tp_on = "tp.task_id = t.id AND tp.faculty_id = $faculty_id";
+    // Use MAX(id) correlated subqueries — exactly like rating.php — so duplicate
+    // task_progress/ratings rows (across period-code variants) don't multiply
+    // rows and inflate or distort the computation.
+    $tp_on = "tp.id = (SELECT MAX(tp2.id) FROM task_progress tp2 WHERE tp2.task_id = t.id AND tp2.faculty_id = $faculty_id";
     if ($period_filter !== '') {
         $tp_on .= " " . $period_filter;
     }
+    $tp_on .= ")";
+
+    $r_on = "r.id = (SELECT MAX(r2.id) FROM ratings r2 WHERE r2.task_id = t.id AND r2.employee_id = $faculty_id";
+    if ($period_filter !== '') {
+        $r_on .= " " . $period_filter;
+    }
+    $r_on .= ")";
 
     $qry = $conn->query("
         SELECT t.id, t.category, t.sub_category, t.success_indicators, t.targets_measures,
@@ -155,7 +165,7 @@ function computeRatingBreakdown($conn, $faculty_id, $position_id, $designation_i
                r.efficiency as re, r.timeliness as rt, r.quality as rq
         FROM task_list t
         LEFT JOIN task_progress tp ON $tp_on
-        LEFT JOIN ratings r ON r.task_id = t.id AND r.employee_id = $faculty_id
+        LEFT JOIN ratings r ON $r_on
         WHERE $where ORDER BY t.category, t.sub_category, t.id
     ");
 
@@ -282,25 +292,11 @@ function computeRatingBreakdown($conn, $faculty_id, $position_id, $designation_i
     $instruction_rating = ($ter_ave * 0.50) + ($instruction_div * 0.50);
     $inst_val = floatval(number_format($instruction_rating, 2));
 
-    // --- Research (divide by expected count) ---
-    $res_val = 0;
-    if (count($tasks_by_section['core_research']) > 0 || $has_research) {
-        $research_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'research' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0, intval($faculty_id)) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
-        $expected_research_count = $research_task_qry ? (int)$research_task_qry->fetch_assoc()['task_count'] : 0;
-        $r_divisor = $expected_research_count > 0 ? $expected_research_count : ($res_ave['count'] > 0 ? $res_ave['count'] : 1);
-        $res_val = $res_ave['count'] > 0 ? $res_ave['sum'] / $r_divisor : 0;
-        $res_val = floatval(number_format($res_val, 2));
-    }
-
-    // --- Extension (divide by expected count) ---
-    $ext_val = 0;
-    if (count($tasks_by_section['core_extension']) > 0 || $has_extension) {
-        $extension_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'extension' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0, intval($faculty_id)) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
-        $expected_extension_count = $extension_task_qry ? (int)$extension_task_qry->fetch_assoc()['task_count'] : 0;
-        $e_divisor = $expected_extension_count > 0 ? $expected_extension_count : ($ext_ave['count'] > 0 ? $ext_ave['count'] : 1);
-        $ext_val = $ext_ave['count'] > 0 ? $ext_ave['sum'] / $e_divisor : 0;
-        $ext_val = floatval(number_format($ext_val, 2));
-    }
+    // --- Research/Extension: use simple calcAverage (sum / submitted count),
+    // exactly like rating.php lines 732-733. The old expected-count divisor
+    // caused the dashboard total to diverge from the IPCR form. ---
+    $res_val = floatval($res_ave['ave']);
+    $ext_val = floatval($ext_ave['ave']);
 
     // --- Support (divide by all non-N/A tasks) ---
     $supp_sum = 0; $supp_count = 0;
@@ -547,21 +543,27 @@ function computeWeightedRating($conn, $faculty_id, $position_id, $designation_id
     }
     $where .= " AND (" . implode(" OR ", $cat_filters) . ")";
 
-    // Period filtering applies only to the task_progress (submission) JOIN,
-    // exactly like rating.php and the dashboard stats. The ratings JOIN is left
-    // unfiltered — rating rows are matched to tasks by task_id+employee_id, so a
-    // rating only contributes when its task was submitted in the selected period.
-    $tp_on = "tp.task_id = t.id AND tp.faculty_id = $faculty_id";
+    // Use MAX(id) correlated subqueries — exactly like rating.php — so duplicate
+    // task_progress/ratings rows (across period-code variants) don't multiply
+    // rows and inflate or distort the computation.
+    $tp_on = "tp.id = (SELECT MAX(tp2.id) FROM task_progress tp2 WHERE tp2.task_id = t.id AND tp2.faculty_id = $faculty_id";
     if ($period_filter !== '') {
         $tp_on .= " " . $period_filter;
     }
+    $tp_on .= ")";
+
+    $r_on = "r.id = (SELECT MAX(r2.id) FROM ratings r2 WHERE r2.task_id = t.id AND r2.employee_id = $faculty_id";
+    if ($period_filter !== '') {
+        $r_on .= " " . $period_filter;
+    }
+    $r_on .= ")";
 
     $qry = $conn->query("
         SELECT t.id, t.category, t.sub_category, t.quality as tq, t.timeliness as tt, t.efficiency as te,
                tp.progress, r.efficiency as re, r.timeliness as rt, r.quality as rq
         FROM task_list t
         LEFT JOIN task_progress tp ON $tp_on
-        LEFT JOIN ratings r ON r.task_id = t.id AND r.employee_id = $faculty_id
+        LEFT JOIN ratings r ON $r_on
         WHERE $where ORDER BY t.category, t.sub_category, t.id
     ");
 
@@ -639,25 +641,11 @@ function computeWeightedRating($conn, $faculty_id, $position_id, $designation_id
     $instruction_rating = ($ter_ave * 0.50) + ($instruction_div * 0.50);
     $inst_val = floatval(number_format($instruction_rating, 2));
 
-    // --- calcResearchAverage (same as rating.php: divide by expected count) ---
-    $res_val = 0;
-    if (count($tasks_by_section['core_research']) > 0 || $has_research) {
-        $research_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'research' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0, intval($faculty_id)) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
-        $expected_research_count = $research_task_qry ? (int)$research_task_qry->fetch_assoc()['task_count'] : 0;
-        $r_divisor = $expected_research_count > 0 ? $expected_research_count : ($res_ave['count'] > 0 ? $res_ave['count'] : 1);
-        $res_val = $res_ave['count'] > 0 ? $res_ave['sum'] / $r_divisor : 0;
-        $res_val = floatval(number_format($res_val, 2));
-    }
-
-    // --- calcExtensionAverage (same as rating.php: divide by expected count) ---
-    $ext_val = 0;
-    if (count($tasks_by_section['core_extension']) > 0 || $has_extension) {
-        $extension_task_qry = $conn->query("SELECT COUNT(*) as task_count FROM task_list t WHERE t.category = 'core' AND t.sub_category = 'extension' AND t.is_active = 1 AND (t.academic_rank_id IS NULL OR t.academic_rank_id = 0 OR t.academic_rank_id = $position_id) AND " . task_designation_match($designation_id > 0 ? $designation_id : 0, intval($faculty_id)) . " AND t.id NOT IN (SELECT tp.task_id FROM task_progress tp WHERE tp.faculty_id = $faculty_id AND tp.progress = 'N/A')");
-        $expected_extension_count = $extension_task_qry ? (int)$extension_task_qry->fetch_assoc()['task_count'] : 0;
-        $e_divisor = $expected_extension_count > 0 ? $expected_extension_count : ($ext_ave['count'] > 0 ? $ext_ave['count'] : 1);
-        $ext_val = $ext_ave['count'] > 0 ? $ext_ave['sum'] / $e_divisor : 0;
-        $ext_val = floatval(number_format($ext_val, 2));
-    }
+    // --- Research/Extension: use simple calcAverage (sum / submitted count),
+    // exactly like rating.php lines 732-733. The old expected-count divisor
+    // caused the dashboard total to diverge from the IPCR form. ---
+    $res_val = floatval($res_ave['ave']);
+    $ext_val = floatval($ext_ave['ave']);
 
     // --- Support average (same as rating.php: divide by all non-N/A tasks) ---
     $supp_sum = 0; $supp_count = 0;
