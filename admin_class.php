@@ -3128,17 +3128,17 @@ function submit_file() {
 				
 				// Upsert DP
 				$stmt = $this->db->prepare("
-					INSERT INTO cascading_ratings 
-						(source_period_id, target_period_id, department_id, level, 
+					INSERT INTO cascading_ratings
+						(source_period_id, target_period_id, employee_id, department_id, level,
 						 avg_efficiency, avg_timeliness, avg_quality, overall_rating)
-					VALUES (?, ?, ?, 'DP', ?, ?, ?, ?)
-					ON DUPLICATE KEY UPDATE
-						avg_efficiency = VALUES(avg_efficiency),
-						avg_timeliness = VALUES(avg_timeliness),
-						avg_quality = VALUES(avg_quality),
-						overall_rating = VALUES(overall_rating),
-						computed_at = CURRENT_TIMESTAMP
-				");
+						VALUES (?, ?, 0, ?, 'DP', ?, ?, ?, ?)
+						ON DUPLICATE KEY UPDATE
+							avg_efficiency = VALUES(avg_efficiency),
+							avg_timeliness = VALUES(avg_timeliness),
+							avg_quality = VALUES(avg_quality),
+							overall_rating = VALUES(overall_rating),
+							computed_at = CURRENT_TIMESTAMP
+					");
 				$stmt->bind_param('iiidddd', $period_id, $period_id, $dept_id, $eff, $time, $qual, $overall);
 				$stmt->execute();
 				$stmt->close();
@@ -3197,17 +3197,17 @@ function submit_file() {
 			
 			// Office-level OPCR (department_id = 0 means "all departments")
 			$stmt = $this->db->prepare("
-				INSERT INTO cascading_ratings 
-					(source_period_id, target_period_id, department_id, level,
-					 avg_efficiency, avg_timeliness, avg_quality, overall_rating)
-					VALUES (?, ?, 0, 'OPCR', ?, ?, ?, ?)
-					ON DUPLICATE KEY UPDATE
-						avg_efficiency = VALUES(avg_efficiency),
-						avg_timeliness = VALUES(avg_timeliness),
-						avg_quality = VALUES(avg_quality),
-						overall_rating = VALUES(overall_rating),
-						computed_at = CURRENT_TIMESTAMP
-			");
+					INSERT INTO cascading_ratings
+						(source_period_id, target_period_id, employee_id, department_id, level,
+						 avg_efficiency, avg_timeliness, avg_quality, overall_rating)
+						VALUES (?, ?, 0, 0, 'OPCR', ?, ?, ?, ?)
+						ON DUPLICATE KEY UPDATE
+							avg_efficiency = VALUES(avg_efficiency),
+							avg_timeliness = VALUES(avg_timeliness),
+							avg_quality = VALUES(avg_quality),
+							overall_rating = VALUES(overall_rating),
+							computed_at = CURRENT_TIMESTAMP
+					");
 			$stmt->bind_param('iidddd', $period_id, $period_id, $eff, $time, $qual, $overall);
 			$stmt->execute();
 			$stmt->close();
