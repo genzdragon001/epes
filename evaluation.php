@@ -417,13 +417,13 @@ SELECT
                 </button>
                 <?php if ($effApplicable && !$period_locked): ?>
                     <div class="dropdown-menu p-3" aria-labelledby="effDropdown<?= $row['progress_id'] ?>" style="min-width: 200px;">
-                        <small class="text-muted mb-2 d-block">Select or enter rating:</small>
+                        <small class="text-muted mb-2 d-block">Select rating:</small>
                         <?php for ($i = 5; $i >= 1; $i--): ?>
-                            <a class="dropdown-item py-1 set_rating" 
-                            href="javascript:void(0)" 
-                            data-id="<?= $row['real_task_id'] ?>" 
+                            <a class="dropdown-item py-1 set_rating"
+                            href="javascript:void(0)"
+                            data-id="<?= $row['real_task_id'] ?>"
                             data-faculty="<?= $nameId ?>"
-                            data-field="efficiency" 
+                            data-field="efficiency"
                             data-value="<?= $i ?>">
                                 <?= $i ?>
                             </a>
@@ -472,13 +472,13 @@ SELECT
                 </button>
                 <?php if ($qualApplicable && !$period_locked): ?>
                     <div class="dropdown-menu p-3" aria-labelledby="qualDropdown<?= $row['progress_id'] ?>" style="min-width: 200px;">
-                        <small class="text-muted mb-2 d-block">Select or enter rating:</small>
+                        <small class="text-muted mb-2 d-block">Select rating:</small>
                         <?php for ($i = 5; $i >= 1; $i--): ?>
-                            <a class="dropdown-item py-1 set_rating" 
-                               href="javascript:void(0)" 
-                               data-id="<?= $row['real_task_id'] ?>" 
+                            <a class="dropdown-item py-1 set_rating"
+                               href="javascript:void(0)"
+                               data-id="<?= $row['real_task_id'] ?>"
                                data-faculty="<?= $nameId ?>"
-                               data-field="quality" 
+                               data-field="quality"
                                data-value="<?= $i ?>">
                                 <?= $i ?>
                             </a>
@@ -527,13 +527,13 @@ SELECT
                 </button>
                 <?php if ($timeApplicable && !$period_locked): ?>
                     <div class="dropdown-menu p-3" aria-labelledby="timeDropdown<?= $row['progress_id'] ?>" style="min-width: 200px;">
-                        <small class="text-muted mb-2 d-block">Select or enter rating:</small>
+                        <small class="text-muted mb-2 d-block">Select rating:</small>
                         <?php for ($i = 5; $i >= 1; $i--): ?>
-                            <a class="dropdown-item py-1 set_rating" 
-                               href="javascript:void(0)" 
-                               data-id="<?= $row['real_task_id'] ?>" 
+                            <a class="dropdown-item py-1 set_rating"
+                               href="javascript:void(0)"
+                               data-id="<?= $row['real_task_id'] ?>"
                                data-faculty="<?= $nameId ?>"
-                               data-field="timeliness" 
+                               data-field="timeliness"
                                data-value="<?= $i ?>">
                                 <?= $i ?>
                             </a>
