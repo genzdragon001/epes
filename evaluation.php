@@ -47,6 +47,13 @@ $strat_locked = ($fac_is_director && !$is_vp && !$is_admin_view);
 // For VPREI: lock everything EXCEPT strategic (opposite of Dean)
 $non_strat_locked = ($is_vprei && !$is_admin_view);
 
+// VPREI must NOT evaluate Department Heads — the Dean evaluates Dept Heads.
+// VPREI may only evaluate the Director (strategic targets) and the Dean.
+if ($is_vprei && $fac_desig_id == 2 && !$is_admin_view) {
+    echo "<script>alert('You are not authorized to evaluate this faculty. Department Heads are evaluated by the Dean.'); window.location.href='index.php?page=faculty_list';</script>";
+    exit;
+}
+
 // Evaluators can only rate in the active/current rating period.
 // Inactive periods are read-only (view past ratings only).
 $period_is_active = ($selected_period && !empty($selected_period['is_active']));

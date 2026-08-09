@@ -1542,6 +1542,24 @@ Class Action {
 			return 0;
 		}
 
+		// VPREI must NOT rate Department Heads — only the Dean evaluates Dept Heads.
+		if ($_SESSION['login_type'] ?? -1 == 1) {
+			$ev_id = intval($_SESSION['login_id'] ?? 0);
+			$ev_chk = $this->db->query("SELECT designation_id FROM evaluator_list WHERE id = $ev_id LIMIT 1");
+			$ev_desig = ($ev_chk && $ev_chk->num_rows > 0) ? intval($ev_chk->fetch_assoc()['designation_id']) : 0;
+			// Fallback to employee_list designation if evaluator_list has 0
+			if ($ev_desig === 0) {
+				$ev_email = $this->db->real_escape_string($_SESSION['login_email'] ?? '');
+				$ed_chk = $this->db->query("SELECT designation_id FROM employee_list WHERE email = '$ev_email' LIMIT 1");
+				if ($ed_chk && $ed_chk->num_rows > 0) $ev_desig = intval($ed_chk->fetch_assoc()['designation_id']);
+			}
+			if (in_array($ev_desig, [10, 19])) { // VPREI (both ID schemes)
+				$fac_chk = $this->db->query("SELECT designation_id FROM employee_list WHERE id = $employee_id LIMIT 1");
+				$fac_desig = ($fac_chk && $fac_chk->num_rows > 0) ? intval($fac_chk->fetch_assoc()['designation_id']) : 0;
+				if ($fac_desig == 2) return 0; // Department Head — reject
+			}
+		}
+
 		// Enforce: evaluators can only rate in the ACTIVE rating period.
 		// Reject saves targeting an inactive period.
 		$rating_period = $rating_period ?? '';
@@ -1683,6 +1701,26 @@ Class Action {
     if ($id === null || $faculty === null || $value === null || $value === '') {
         echo json_encode(["status" => "error", "message" => "Missing or invalid parameters."]);
         return;
+    }
+
+    // VPREI must NOT change status for Department Heads — only the Dean evaluates Dept Heads.
+    if (($_SESSION['login_type'] ?? -1) == 1) {
+        $ev_id = intval($_SESSION['login_id'] ?? 0);
+        $ev_chk = $this->db->query("SELECT designation_id FROM evaluator_list WHERE id = $ev_id LIMIT 1");
+        $ev_desig = ($ev_chk && $ev_chk->num_rows > 0) ? intval($ev_chk->fetch_assoc()['designation_id']) : 0;
+        if ($ev_desig === 0) {
+            $ev_email = $this->db->real_escape_string($_SESSION['login_email'] ?? '');
+            $ed_chk = $this->db->query("SELECT designation_id FROM employee_list WHERE email = '$ev_email' LIMIT 1");
+            if ($ed_chk && $ed_chk->num_rows > 0) $ev_desig = intval($ed_chk->fetch_assoc()['designation_id']);
+        }
+        if (in_array($ev_desig, [10, 19])) { // VPREI (both ID schemes)
+            $fac_chk = $this->db->query("SELECT designation_id FROM employee_list WHERE id = $faculty LIMIT 1");
+            $fac_desig = ($fac_chk && $fac_chk->num_rows > 0) ? intval($fac_chk->fetch_assoc()['designation_id']) : 0;
+            if ($fac_desig == 2) {
+                echo json_encode(["status" => "error", "message" => "Department Heads are evaluated by the Dean."]);
+                return;
+            }
+        }
     }
 
     // Enforce: evaluators can only change status in the ACTIVE rating period.
