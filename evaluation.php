@@ -427,10 +427,11 @@ SELECT
                                 <?= $i ?>
                             </a>
                         <?php endfor; ?>
+                        <?php if ($task_sub === 'ter'): ?>
                         <div class="dropdown-divider"></div>
                         <div class="input-group input-group-sm">
-                            <input type="number" class="form-control form-control-sm custom_rating_input" 
-                                   data-id="<?= $row['real_task_id'] ?>" 
+                            <input type="number" class="form-control form-control-sm custom_rating_input"
+                                   data-id="<?= $row['real_task_id'] ?>"
                                    data-faculty="<?= $nameId ?>"
                                    data-field="efficiency"
                                    min="0" max="5" step="0.01"
@@ -441,6 +442,7 @@ SELECT
                                 </button>
                             </div>
                         </div>
+                        <?php endif; ?>
                     </div>
                 <?php endif; ?>
             </div>
@@ -480,10 +482,11 @@ SELECT
                                 <?= $i ?>
                             </a>
                         <?php endfor; ?>
+                        <?php if ($task_sub === 'ter'): ?>
                         <div class="dropdown-divider"></div>
                         <div class="input-group input-group-sm">
-                            <input type="number" class="form-control form-control-sm custom_rating_input" 
-                                   data-id="<?= $row['real_task_id'] ?>" 
+                            <input type="number" class="form-control form-control-sm custom_rating_input"
+                                   data-id="<?= $row['real_task_id'] ?>"
                                    data-faculty="<?= $nameId ?>"
                                    data-field="quality"
                                    min="0" max="5" step="0.01"
@@ -494,6 +497,7 @@ SELECT
                                 </button>
                             </div>
                         </div>
+                        <?php endif; ?>
                     </div>
                 <?php endif; ?>
             </div>
@@ -533,10 +537,11 @@ SELECT
                                 <?= $i ?>
                             </a>
                         <?php endfor; ?>
+                        <?php if ($task_sub === 'ter'): ?>
                         <div class="dropdown-divider"></div>
                         <div class="input-group input-group-sm">
-                            <input type="number" class="form-control form-control-sm custom_rating_input" 
-                                   data-id="<?= $row['real_task_id'] ?>" 
+                            <input type="number" class="form-control form-control-sm custom_rating_input"
+                                   data-id="<?= $row['real_task_id'] ?>"
                                    data-faculty="<?= $nameId ?>"
                                    data-field="timeliness"
                                    min="0" max="5" step="0.01"
@@ -547,6 +552,7 @@ SELECT
                                 </button>
                             </div>
                         </div>
+                        <?php endif; ?>
                     </div>
                 <?php endif; ?>
             </div>
@@ -908,6 +914,12 @@ $(document).ready(function(){
 
         if(value === "" || isNaN(value)){
             alert_toast("Please enter a valid number", "warning");
+            return;
+        }
+
+        if(value < 0 || value > 5){
+            alert_toast("Rating must be between 0 and 5", "warning");
+            $(this).val("");
             return;
         }
 

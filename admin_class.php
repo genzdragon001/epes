@@ -1530,6 +1530,10 @@ Class Action {
 		$task_id = intval($task_id ?? 0);
 		$employee_id = intval($faculty_id ?? 0);
 		$value = floatval($value);
+	
+	// Clamp rating value to 0-5 range (prevent values > 5 from skewing ratings)
+	if ($value < 0) $value = 0;
+	if ($value > 5) $value = 5;
 		
 		// Whitelist allowed field names to prevent SQL injection through $field
 		$allowed_fields = ['efficiency', 'timeliness', 'quality'];

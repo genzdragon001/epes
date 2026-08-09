@@ -518,7 +518,7 @@ $total_verified = $str_ave['count'] + $inst_ave['count'] + $res_ave['count'] + $
     <h3 style="font-size: 1.15rem; font-weight: bold; margin: 8px 0 2px 0; color: #1a1a2e;">INDIVIDUAL PERFORMANCE COMMITMENT AND REVIEW (IPCR)</h3>
     <div style="font-size: 0.8rem; color: #555;">SPMS Form &middot; Rating Period: <?php echo htmlspecialchars($period_label); ?>
     <?php if(!empty($real_periods)): ?>
-    <select class="form-control form-control-sm d-inline-block ml-2"
+    <select class="form-control form-control-sm d-inline-block ml-2 no-print"
             onchange="window.location.href='index.php?page=rating&period='+encodeURIComponent(this.value)"
             style="width:auto; font-size:0.78rem; padding:3px 24px 3px 8px; max-width:220px; vertical-align:middle;">
         <?php foreach($real_periods as $rp):
