@@ -204,6 +204,7 @@ SELECT
     t.timeliness AS task_timeliness,
     t.quality AS task_quality,
     t.category AS task_category,
+    t.sub_category,
     t.is_active,
     CONCAT(tp.file_path, '.', tp.file_type) AS file_name,
     r.id AS rating_id,
