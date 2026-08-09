@@ -228,8 +228,12 @@ if ($is_dean) {
 
                 $flagged_faculty[] = [
                     'name' => $f['lastname'] . ', ' . $f['firstname'],
+                    'firstname' => $f['firstname'],
+                    'lastname' => $f['lastname'],
                     'dept' => $f['dept_name'] ?? 'N/A',
                     'faculty_id' => $fid,
+                    'position_id' => $fpos,
+                    'designation_id' => $fdes,
                     'rating' => $display_rating,
                     'adjectival' => getAdjectivalRating($display_rating),
                     'streak' => $streak,
@@ -385,6 +389,73 @@ $recent = $conn->query($recent_sql);
                             $streak_str = implode(' → ', array_map(function($s) {
                                 return $s['label'] . ' (' . number_format($s['rating'], 2) . ')';
                             }, $ff['streak_details']));
+                            
+                            // Build category breakdown for the current period
+                            $ff_id = (int)$ff['faculty_id'];
+                            $ff_pos = (int)$ff['position_id'];
+                            $ff_des = (int)$ff['designation_id'];
+                            $cat_breakdown = [];
+                            $cat_labels = ['strategic' => 'Strategic', 'core' => 'Core', 'support' => 'Support'];
+                            foreach (['strategic', 'core', 'support'] as $cat) {
+                                $catq = $conn->query("SELECT AVG(CASE WHEN r.efficiency > 0 THEN r.efficiency END) as eff,
+                                    AVG(CASE WHEN r.timeliness > 0 THEN r.timeliness END) as tim,
+                                    AVG(CASE WHEN r.quality > 0 THEN r.quality END) as qual,
+                                    COUNT(DISTINCT r.task_id) as tasks
+                                    FROM ratings r
+                                    JOIN task_list t ON r.task_id = t.id
+                                    WHERE r.employee_id = $ff_id AND t.category = '$cat'
+                                    AND r.rating_period IN ('$in_codes')");
+                                if ($catq) {
+                                    $crow = $catq->fetch_assoc();
+                                    $cat_tasks = (int)$crow['tasks'];
+                                    if ($cat_tasks > 0) {
+                                        $vals = array_filter([floatval($crow['eff']), floatval($crow['tim']), floatval($crow['qual'])], fn($v) => $v > 0);
+                                        $cat_avg = count($vals) > 0 ? round(array_sum($vals) / count($vals), 2) : 0;
+                                        $cat_breakdown[$cat] = ['avg' => $cat_avg, 'tasks' => $cat_tasks];
+                                    }
+                                }
+                            }
+                            
+                            // Determine trend direction
+                            $ratings_arr = array_column($ff['streak_details'], 'rating');
+                            $trend = '';
+                            if (count($ratings_arr) >= 2) {
+                                $last = end($ratings_arr); $prev = prev($ratings_arr);
+                                if ($last > $prev + 0.3) $trend = 'improving';
+                                elseif ($last < $prev - 0.3) $trend = 'declining';
+                                else $trend = 'stable';
+                            }
+                            
+                            // Generate recommendation
+                            $rec_lines = [];
+                            $lowest_cat = null; $lowest_val = 5;
+                            foreach ($cat_breakdown as $cat => $data) {
+                                if ($data['avg'] < $lowest_val) { $lowest_val = $data['avg']; $lowest_cat = $cat; }
+                            }
+                            if ($lowest_cat) {
+                                $cat_name = $cat_labels[$lowest_cat] ?? $lowest_cat;
+                                $rec_lines[] = "Focus on {$cat_name} functions — current average is {$lowest_val} (below Satisfactory threshold of 2.61).";
+                            }
+                            if ($trend === 'declining') {
+                                $rec_lines[] = "Performance is declining compared to the previous period — schedule a coaching session immediately.";
+                            } elseif ($trend === 'improving') {
+                                $rec_lines[] = "Performance is improving — acknowledge progress and set targets to push above 3.60 (Very Satisfactory).";
+                            } else {
+                                $rec_lines[] = "Performance is stable but consistently low — a performance improvement plan is recommended.";
+                            }
+                            if ($r <= 1.60) {
+                                $rec_lines[] = "Current rating is Poor (≤1.60) — consider formal intervention and mentorship assignment.";
+                            } elseif ($r <= 2.60) {
+                                $rec_lines[] = "Current rating is Unsatisfactory — requires a structured improvement plan with clear milestones.";
+                            } else {
+                                $rec_lines[] = "Current rating is Satisfactory — monitor closely and provide targeted support.";
+                            }
+                            
+                            // Position and designation names
+                            $pos_q = $conn->query("SELECT position FROM position_list WHERE id = $ff_pos LIMIT 1");
+                            $pos_name = ($pos_q && $pos_q->num_rows > 0) ? $pos_q->fetch_assoc()['position'] : 'Unknown';
+                            $des_q = $conn->query("SELECT designation FROM designation_list WHERE id = $ff_des LIMIT 1");
+                            $des_name = ($des_q && $des_q->num_rows > 0) ? $des_q->fetch_assoc()['designation'] : 'Faculty';
                         ?>
                         <tr>
                             <td><strong><?= htmlspecialchars($ff['name']) ?></strong></td>
@@ -395,11 +466,129 @@ $recent = $conn->query($recent_sql);
                             </td>
                             <td style="font-size:0.75rem; color:#666;"><?= htmlspecialchars($streak_str) ?></td>
                             <td class="text-right">
-                                <a href="index.php?page=evaluation&id=<?= $ff['faculty_id'] ?>" class="btn btn-sm btn-outline-danger" style="font-size:0.75rem;">
+                                <button class="btn btn-sm btn-outline-danger" style="font-size:0.75rem;"
+                                    data-toggle="modal" data-target="#interventionModal<?= $ff_id ?>">
                                     <i class="fas fa-clipboard-list mr-1"></i> Review &amp; Intervene
-                                </a>
+                                </button>
                             </td>
                         </tr>
+                        
+                        <!-- INTERVENTION MODAL -->
+                        <div class="modal fade" id="interventionModal<?= $ff_id ?>" tabindex="-1" role="dialog" aria-hidden="true">
+                            <div class="modal-dialog modal-lg" role="document">
+                                <div class="modal-content">
+                                    <div class="modal-header" style="background:#fff5f5; border-bottom:2px solid #e74c3c;">
+                                        <h5 class="modal-title">
+                                            <i class="fas fa-exclamation-triangle mr-2" style="color:#e74c3c;"></i>
+                                            Intervention Review — <?= htmlspecialchars($ff['name']) ?>
+                                        </h5>
+                                        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                                            <span aria-hidden="true">&times;</span>
+                                        </button>
+                                    </div>
+                                    <div class="modal-body" style="font-size:0.88rem;">
+                                        
+                                        <!-- Faculty Summary -->
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <table class="table table-sm table-borderless mb-0">
+                                                    <tr><td class="text-muted" style="width:40%;">Name:</td><td><strong><?= htmlspecialchars($ff['name']) ?></strong></td></tr>
+                                                    <tr><td class="text-muted">Department:</td><td><?= htmlspecialchars($ff['dept']) ?></td></tr>
+                                                    <tr><td class="text-muted">Position:</td><td><?= htmlspecialchars($pos_name) ?></td></tr>
+                                                    <tr><td class="text-muted">Designation:</td><td><?= htmlspecialchars($des_name) ?></td></tr>
+                                                </table>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="card" style="background:#f8f9fa; border:1px solid #e9ecef;">
+                                                    <div class="card-body text-center py-3">
+                                                        <div style="font-size:1.8rem; font-weight:700; color:<?= $rcolor ?>;"><?= number_format($r, 2) ?></div>
+                                                        <div style="font-size:0.8rem; color:<?= $rcolor ?>;"><?= htmlspecialchars($ff['adjectival']) ?></div>
+                                                        <div style="font-size:0.72rem; color:#999; margin-top:4px;">Current Period IPCR</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Why Flagged -->
+                                        <h6 class="mb-2" style="color:#e74c3c;"><i class="fas fa-flag mr-1"></i> Why Flagged</h6>
+                                        <p class="mb-2" style="font-size:0.85rem;">
+            This faculty has been flagged for having IPCR ratings at <strong>Satisfactory or below (≤3.60)</strong> for <strong><?= $ff['streak'] ?> consecutive rating periods</strong>. The SPMS policy requires intervention when performance remains consistently low across multiple evaluation cycles.
+                                        </p>
+                                        
+                                        <!-- 3-Period Streak -->
+                                        <div class="row mb-3">
+                                            <?php foreach ($ff['streak_details'] as $sd):
+                                                $sd_r = floatval($sd['rating']);
+                                                $sd_cls = $sd_r >= 3.61 ? 'success' : ($sd_r >= 2.61 ? 'info' : ($sd_r >= 1.61 ? 'warning' : 'danger'));
+                                            ?>
+                                            <div class="col-md-4">
+                                                <div class="card text-center mb-2" style="border:1px solid #dee2e6;">
+                                                    <div class="card-body py-2 px-1">
+                                                        <div style="font-size:0.72rem; color:#999;"><?= htmlspecialchars($sd['label']) ?></div>
+                                                        <span class="badge badge-<?= $sd_cls ?>" style="font-size:0.85rem; margin-top:4px;"><?= number_format($sd_r, 2) ?></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        
+                                        <!-- Trend -->
+                                        <?php if ($trend): 
+                                            $trend_icon = $trend === 'improving' ? 'fa-arrow-up text-success' : ($trend === 'declining' ? 'fa-arrow-down text-danger' : 'fa-minus text-warning');
+                                            $trend_text = $trend === 'improving' ? 'Improving' : ($trend === 'declining' ? 'Declining' : 'Stable');
+                                        ?>
+                                        <p class="mb-3" style="font-size:0.85rem;">
+                                            <i class="fas <?= $trend_icon ?> mr-1"></i> <strong>Trend:</strong> <?= $trend_text ?>
+                                            (<?= number_format($ratings_arr[1] ?? 0, 2) ?> → <?= number_format($ratings_arr[2] ?? 0, 2) ?>)
+                                        </p>
+                                        <?php endif; ?>
+
+                                        <!-- Category Breakdown -->
+                                        <?php if (!empty($cat_breakdown)): ?>
+                                        <h6 class="mb-2"><i class="fas fa-chart-bar mr-1"></i> Category Breakdown (Current Period)</h6>
+                                        <div class="row mb-3">
+                                            <?php foreach ($cat_breakdown as $cat => $data):
+                                                $cat_name = $cat_labels[$cat] ?? $cat;
+                                                $cat_r = $data['avg'];
+                                                $cat_cls = $cat_r >= 3.61 ? 'success' : ($cat_r >= 2.61 ? 'info' : ($cat_r >= 1.61 ? 'warning' : 'danger'));
+                                            ?>
+                                            <div class="col-md-4">
+                                                <div class="card text-center mb-2" style="border:1px solid #dee2e6;">
+                                                    <div class="card-body py-2 px-1">
+                                                        <div style="font-size:0.72rem; color:#999;"><?= htmlspecialchars($cat_name) ?></div>
+                                                        <div style="font-size:0.72rem; color:#aaa;"><?= $data['tasks'] ?> tasks rated</div>
+                                                        <span class="badge badge-<?= $cat_cls ?>" style="font-size:0.8rem; margin-top:4px;"><?= number_format($cat_r, 2) ?></span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                        <?php endif; ?>
+
+                                        <!-- Recommendations -->
+                                        <h6 class="mb-2" style="color:#4361ee;"><i class="fas fa-lightbulb mr-1"></i> Recommended Actions for the Dean</h6>
+                                        <ul style="font-size:0.85rem; padding-left:1.2rem;">
+                                            <?php foreach ($rec_lines as $rec): ?>
+                                            <li class="mb-1"><?= htmlspecialchars($rec) ?></li>
+                                            <?php endforeach; ?>
+                                        </ul>
+
+                                        <!-- Action Buttons -->
+                                        <div class="d-flex justify-content-between mt-3 pt-3" style="border-top:1px solid #e9ecef;">
+                                            <a href="index.php?page=evaluation&id=<?= $ff_id ?>" class="btn btn-primary btn-sm">
+                                                <i class="fas fa-tasks mr-1"></i> Open Evaluation Page
+                                            </a>
+                                            <a href="index.php?page=recommendation" class="btn btn-success btn-sm">
+                                                <i class="fas fa-clipboard-check mr-1"></i> Write Recommendation
+                                            </a>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Close</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         <?php endforeach; ?>
                     </tbody>
                 </table>
