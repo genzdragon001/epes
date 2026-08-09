@@ -404,7 +404,7 @@ $recent = $conn->query($recent_sql);
                                     FROM ratings r
                                     JOIN task_list t ON r.task_id = t.id
                                     WHERE r.employee_id = $ff_id AND t.category = '$cat'
-                                    AND r.rating_period IN ('$in_codes')");
+                                    $period_filter");
                                 if ($catq) {
                                     $crow = $catq->fetch_assoc();
                                     $cat_tasks = (int)$crow['tasks'];
