@@ -69,30 +69,13 @@ if($is_dean) {
 $other_submissions = $total_submissions - $verified - $for_verif;
 $completion_pct = $total_submissions > 0 ? round(($verified/$total_submissions)*100) : 0;
 
-// Dean: OPCR = average IPCR of all faculty under the Dean's college
+// Dean: OPCR = from cascading_ratings table (same as admin dashboard)
 $dean_opcr = null;
-if ($is_dean && !empty($active_period_code)) {
-    $dean_college_q = $conn->query("SELECT college_office_id FROM department_list WHERE id = " . intval($eval_dept_id) . " LIMIT 1");
-    $dean_college_id = ($dean_college_q && $dean_college_q->num_rows > 0) ? intval($dean_college_q->fetch_assoc()['college_office_id']) : 0;
-    if ($dean_college_id > 0) {
-        $opcr_q = $conn->query("
-            SELECT e.id, e.position_id, e.designation_id
-            FROM employee_list e
-            LEFT JOIN department_list d ON e.department_id = d.id
-            WHERE d.college_office_id = $dean_college_id AND e.id != $eval_id
-        ");
-        $opcr_sum = 0; $opcr_cnt = 0;
-        while ($of = $opcr_q->fetch_assoc()) {
-            $of_id = (int)$of['id'];
-            $of_pos = (int)$of['position_id'];
-            $of_des = (int)$of['designation_id'];
-            $of_rating = computeWeightedRating($conn, $of_id, $of_pos, $of_des, $active_period_code, $period_filter);
-            if ($of_rating !== null && $of_rating > 0) {
-                $opcr_sum += floatval($of_rating);
-                $opcr_cnt++;
-            }
-        }
-        $dean_opcr = $opcr_cnt > 0 ? round($opcr_sum / $opcr_cnt, 2) : null;
+if ($is_dean && !empty($selected_period_ids)) {
+    $sel_rp_ids = implode(',', array_map('intval', $selected_period_ids));
+    $opcr_q = $conn->query("SELECT overall_rating FROM cascading_ratings WHERE level='OPCR' AND target_period_id IN ($sel_rp_ids) ORDER BY computed_at DESC LIMIT 1");
+    if ($opcr_q && $opcr_q->num_rows > 0) {
+        $dean_opcr = round((float)$opcr_q->fetch_assoc()['overall_rating'], 2);
     }
 }
 
