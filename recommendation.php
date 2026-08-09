@@ -110,39 +110,6 @@ $conn->query("CREATE TABLE IF NOT EXISTS `renewal_recommendations` (
                 // Use shared computeWeightedRating — same as dashboard/rating.php
                 $overall_score = computeWeightedRating($conn, $emp_id, $emp_pos, $emp_des, $rating_period, $period_filter);
 
-                // Get instruction and support sub-averages for display
-                $instruction_ave = null;
-                $support_ave = null;
-
-                // Instruction: average of verified instruction+TER tasks
-                $instr_q = $conn->query("
-                    SELECT AVG(r.efficiency) as eff, AVG(r.timeliness) as tim, AVG(r.quality) as qual
-                    FROM ratings r
-                    JOIN task_list t ON r.task_id = t.id
-                    WHERE r.employee_id = $emp_id AND t.category = 'core'
-                    AND (t.sub_category = 'ter' OR t.sub_category = 'instruction' OR t.sub_category = 'instructions')
-                    $period_filter
-                ");
-                if ($instr_q) {
-                    $ir = $instr_q->fetch_assoc();
-                    $vals = array_filter([floatval($ir['eff']), floatval($ir['tim']), floatval($ir['qual'])], fn($v) => $v > 0);
-                    if (count($vals) > 0) $instruction_ave = round(array_sum($vals) / count($vals), 2);
-                }
-
-                // Support: average of verified support tasks
-                $supp_q = $conn->query("
-                    SELECT AVG(r.efficiency) as eff, AVG(r.timeliness) as tim, AVG(r.quality) as qual
-                    FROM ratings r
-                    JOIN task_list t ON r.task_id = t.id
-                    WHERE r.employee_id = $emp_id AND t.category = 'support'
-                    $period_filter
-                ");
-                if ($supp_q) {
-                    $sr = $supp_q->fetch_assoc();
-                    $vals = array_filter([floatval($sr['eff']), floatval($sr['tim']), floatval($sr['qual'])], fn($v) => $v > 0);
-                    if (count($vals) > 0) $support_ave = round(array_sum($vals) / count($vals), 2);
-                }
-
                 // Count verified tasks for this period
                 $vt_q = $conn->query("SELECT COUNT(DISTINCT tp.task_id) as cnt FROM task_progress tp WHERE tp.faculty_id = $emp_id AND tp.progress = 'Verified' $period_filter");
                 $verified_count = $vt_q ? (int)$vt_q->fetch_assoc()['cnt'] : 0;
@@ -169,8 +136,6 @@ $conn->query("CREATE TABLE IF NOT EXISTS `renewal_recommendations` (
                     'name' => $emp['lastname'] . ', ' . $emp['firstname'] . ' ' . $emp['middlename'],
                     'department' => $emp['dept_name'] ?? 'N/A',
                     'verified_tasks' => $verified_count,
-                    'instruction_ave' => $instruction_ave,
-                    'support_ave' => $support_ave,
                     'total_score' => $score_val,
                     'adjectival' => getAdjectivalRating($score_val),
                     'avg_efficiency' => $avg_eff,
@@ -191,9 +156,7 @@ $conn->query("CREATE TABLE IF NOT EXISTS `renewal_recommendations` (
                             <th>Faculty Name</th>
                             <th>Department</th>
                             <th class="text-center">Verified Tasks</th>
-                            <th class="text-center">Instruction (90%)</th>
-                            <th class="text-center">Support (10%)</th>
-                            <th class="text-center">Overall Score</th>
+                            <th class="text-center">IPCR</th>
                             <th class="text-center">Adjectival Rating</th>
                             <th class="text-center">Status</th>
                             <th class="text-center">Dean Decision</th>
@@ -221,13 +184,11 @@ $conn->query("CREATE TABLE IF NOT EXISTS `renewal_recommendations` (
                             $dean_decision = $rec_data['dean_decision'] ?? 'Pending';
                             $dean_reason_val = $rec_data['dean_reason'] ?? '';
                         ?>
-                        <tr class="<?= $row_class ?>" data-faculty-id="<?= $row['id'] ?>" data-overall="<?= $total_score_val ?>" data-tasks="<?= intval($row['verified_tasks']) ?>" data-inst="<?= $instruction_ave_val ?>" data-supp="<?= $support_ave_val ?>" data-eff="<?= $avg_eff_val ?>" data-time="<?= $avg_time_val ?>" data-qual="<?= $avg_qual_val ?>" data-rec-id="<?= $rec_id ?>" data-dean-decision="<?= $dean_decision ?>" data-dean-reason="<?= htmlspecialchars($dean_reason_val, ENT_QUOTES) ?>">
+                        <tr class="<?= $row_class ?>" data-faculty-id="<?= $row['id'] ?>" data-overall="<?= $total_score_val ?>" data-tasks="<?= intval($row['verified_tasks']) ?>" data-eff="<?= $avg_eff_val ?>" data-time="<?= $avg_time_val ?>" data-qual="<?= $avg_qual_val ?>" data-rec-id="<?= $rec_id ?>" data-dean-decision="<?= $dean_decision ?>" data-dean-reason="<?= htmlspecialchars($dean_reason_val, ENT_QUOTES) ?>">
                             <td class="text-center font-weight-bold"><?= $i++ ?></td>
                             <td><strong><?= htmlspecialchars($row['name']) ?></strong></td>
                             <td><?= htmlspecialchars($row['department']) ?></td>
                             <td class="text-center"><span class="badge badge-secondary"><?= $row['verified_tasks'] ?></span></td>
-                            <td class="text-center"><?= $row['instruction_ave'] !== null ? number_format($row['instruction_ave'], 2) : '-' ?></td>
-                            <td class="text-center"><?= $row['support_ave'] !== null ? number_format($row['support_ave'], 2) : '-' ?></td>
                             <td class="text-center"><strong><?= number_format($row['total_score'], 2) ?></strong></td>
                             <td class="text-center">
                                 <span class="badge badge-pill badge-<?= $row['adjectival'] == 'OUTSTANDING' ? 'success' : ($row['adjectival'] == 'VERY SATISFACTORY' ? 'primary' : ($row['adjectival'] == 'SATISFACTORY' ? 'info' : ($row['adjectival'] == 'UNSATISFACTORY' ? 'warning' : 'danger'))) ?> px-3 py-2"><?= $row['adjectival'] ?></span>
@@ -314,8 +275,6 @@ $(document).ready(function() {
         var recId = tr.data('rec-id');
         var overall = parseFloat(tr.data('overall')) || 0;
         var totalRatings = parseInt(tr.data('tasks')) || 0;
-        var instructionAve = parseFloat(tr.data('inst')) || 0;
-        var supportAve = parseFloat(tr.data('supp')) || 0;
         var eff = tr.data('eff');
         var time = tr.data('time');
         var qual = tr.data('qual');
@@ -331,9 +290,9 @@ $(document).ready(function() {
 
         var facultyName = tr.find('td:nth-child(2)').text().trim();
         var department = tr.find('td:nth-child(3)').text().trim();
-        var adjectival = tr.find('td:nth-child(8) span').text().trim();
+        var adjectival = tr.find('td:nth-child(6) span').text().trim();
 
-        var systemStatement = generateStatement(overall, totalRatings, instructionAve, supportAve);
+        var systemStatement = generateStatement(overall, totalRatings);
 
         var deanDecisionBadge = '';
         if (deanDecision === 'Approved') deanDecisionBadge = '<span class="badge badge-success"><i class="fas fa-check mr-1"></i>Approved</span>';
@@ -355,9 +314,7 @@ $(document).ready(function() {
                     <h6 class="text-primary">Performance Summary</h6>
                     <table class="table table-sm">
                         <tr><td><strong>Verified Tasks:</strong></td><td>${totalRatings}</td></tr>
-                        <tr><td><strong>Instruction (90%):</strong></td><td>${instructionAve > 0 ? instructionAve.toFixed(2) : '-'}</td></tr>
-                        <tr><td><strong>Support (10%):</strong></td><td>${supportAve > 0 ? supportAve.toFixed(2) : '-'}</td></tr>
-                        <tr><td><strong>Overall Score:</strong></td><td><span class="badge badge-${getScoreClass(overall)}">${overall.toFixed(2)} / 5.0</span></td></tr>
+                        <tr><td><strong>IPCR Score:</strong></td><td><span class="badge badge-${getScoreClass(overall)}">${overall.toFixed(2)} / 5.0</span></td></tr>
                         <tr><td><strong>Adjectival:</strong></td><td><span class="badge badge-pill badge-${getScoreClass(overall)}">${adjectival}</span></td></tr>
                     </table>
                 </div>
@@ -394,7 +351,7 @@ $(document).ready(function() {
                     <div class="alert alert-info" style="font-size:0.85rem;">
                         <i class="fas fa-info-circle mr-1"></i> Generate a recommendation first to enable Dean decision.
                     </div>
-                    <button class="btn btn-success btn-block btn-generate-rec" data-faculty-id="${facultyId}" data-overall="${overall}" data-tasks="${totalRatings}" data-inst="${instructionAve}" data-supp="${supportAve}" data-eff="${eff !== null ? eff : ''}" data-time="${time !== null ? time : ''}" data-qual="${qual !== null ? qual : ''}">
+                    <button class="btn btn-success btn-block btn-generate-rec" data-faculty-id="${facultyId}" data-overall="${overall}" data-tasks="${totalRatings}" data-eff="${eff !== null ? eff : ''}" data-time="${time !== null ? time : ''}" data-qual="${qual !== null ? qual : ''}">
                         <i class="fa fa-save mr-1"></i> Generate & Save Recommendation
                     </button>
                 </div>
@@ -412,8 +369,6 @@ $(document).ready(function() {
         var facultyId = $btn.attr('data-faculty-id');
         var overall = parseFloat($btn.attr('data-overall')) || 0;
         var totalRatings = parseInt($btn.attr('data-tasks')) || 0;
-        var instructionAve = parseFloat($btn.attr('data-inst')) || 0;
-        var supportAve = parseFloat($btn.attr('data-supp')) || 0;
         var eff = $btn.attr('data-eff');
         var time = $btn.attr('data-time');
         var qual = $btn.attr('data-qual');
@@ -425,7 +380,7 @@ $(document).ready(function() {
         if (qual === '' || qual === 'null' || qual === 'undefined' || isNaN(qual)) qual = '';
         else qual = parseFloat(qual);
 
-        var systemStatement = generateStatement(overall, totalRatings, instructionAve, supportAve);
+        var systemStatement = generateStatement(overall, totalRatings);
         var recStatus = overall >= 3.61 ? 'Recommended' : (overall >= 2.61 ? 'For Review' : 'Not Recommended');
 
         var btnHtml = $btn.html();
@@ -440,8 +395,6 @@ $(document).ready(function() {
                 evaluator_id: <?= $eval_id ?>,
                 rating_period: '<?= $rating_period ?>',
                 overall_score: overall,
-                instruction_ave: instructionAve,
-                support_ave: supportAve,
                 total_tasks: totalRatings,
                 verified_tasks: 0,
                 avg_efficiency: eff,
@@ -505,20 +458,13 @@ $(document).ready(function() {
         });
     });
 
-    function generateStatement(overall, totalRatings, instructionAve, supportAve) {
+    function generateStatement(overall, totalRatings) {
         var parts = [];
         if (totalRatings == 0) {
             return "No verified ratings found for this evaluation period. Faculty has no performance data available for renewal assessment.";
         }
         var adjectival = getAdjectivalLabel(overall);
-        parts.push("The faculty has demonstrated " + adjectival + " performance with an overall weighted score of " + overall.toFixed(2) + " out of 5.0.");
-        parts.push("For Contract of Service (COS) Faculty:");
-        if (instructionAve > 0) {
-            parts.push("Instruction Average: " + instructionAve.toFixed(2) + " (" + getAdjectivalLabel(instructionAve) + ") - Weighted at 90%.");
-        }
-        if (supportAve > 0) {
-            parts.push("Support Function Average: " + supportAve.toFixed(2) + " (" + getAdjectivalLabel(supportAve) + ") - Weighted at 10%.");
-        }
+        parts.push("The faculty has demonstrated " + adjectival + " performance with an overall IPCR score of " + overall.toFixed(2) + " out of 5.0.");
         parts.push("A total of " + totalRatings + " verified task(s) were evaluated for this period.");
         if (overall >= 4.75) {
             parts.push("Based on the exceptional performance indicators, this faculty member is STRONGLY RECOMMENDED for contract renewal.");
@@ -560,11 +506,8 @@ function printRecommendation() {
             approvedRows.push({
                 name: $(this).find('td:nth-child(2)').text().trim(),
                 department: $(this).find('td:nth-child(3)').text().trim(),
-                verified: $(this).find('td:nth-child(4)').text().trim(),
-                instruction: $(this).find('td:nth-child(5)').text().trim(),
-                support: $(this).find('td:nth-child(6)').text().trim(),
-                overall: $(this).find('td:nth-child(7)').text().trim(),
-                adjectival: $(this).find('td:nth-child(8) span').text().trim(),
+                overall: $(this).find('td:nth-child(5)').text().trim(),
+                adjectival: $(this).find('td:nth-child(6) span').text().trim(),
             });
         }
     });
@@ -584,8 +527,6 @@ function printRecommendation() {
             + '<td style="text-align:center;">' + (i + 1) + '</td>'
             + '<td style="font-weight:bold;">' + r.name + '</td>'
             + '<td>' + r.department + '</td>'
-            + '<td style="text-align:center;">' + r.instruction + '</td>'
-            + '<td style="text-align:center;">' + r.support + '</td>'
             + '<td style="text-align:center;font-weight:bold;">' + r.overall + '</td>'
             + '<td style="text-align:center;">' + r.adjectival + '</td>'
             + '</tr>';
@@ -629,9 +570,7 @@ function printRecommendation() {
         +     '<th style="width:30px;">#</th>'
         +     '<th>Name of Faculty</th>'
         +     '<th>Department</th>'
-        +     '<th>Instruction (90%)</th>'
-        +     '<th>Support (10%)</th>'
-        +     '<th>Overall Score</th>'
+        +     '<th>IPCR Score</th>'
         +     '<th>Adjectival Rating</th>'
         +   '</tr></thead>'
         +   '<tbody>' + rowsHtml + '</tbody>'
