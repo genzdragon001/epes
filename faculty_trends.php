@@ -115,9 +115,9 @@ $palette_fill = ['rgba(67,97,238,.13)','rgba(26,188,156,.13)','rgba(243,156,18,.
 $faculty = [];
 if ($sel_dept > 0) {
     $fq = $conn->prepare("SELECT e.id, e.firstname, e.lastname, e.designation_id, e.position_id
-                          FROM employee_list e WHERE e.department_id = ? AND e.id != ?
+                          FROM employee_list e WHERE e.department_id = ?
                           ORDER BY e.lastname, e.firstname");
-    $fq->bind_param("ii", $sel_dept, $login_id);
+    $fq->bind_param("i", $sel_dept);
     $fq->execute();
     $res = $fq->get_result();
     while ($row = $res->fetch_assoc()) $faculty[] = $row;
