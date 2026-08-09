@@ -58,7 +58,12 @@ $conn->query("CREATE TABLE IF NOT EXISTS `renewal_recommendations` (
 <div class="col-lg-12">
     <div class="card card-outline card-success">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
-            <h5 class="card-title mb-0"><i class="fa fa-clipboard-check mr-1"></i> COS Faculty Renewal Recommendation</h5>
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <h5 class="card-title mb-0"><i class="fa fa-clipboard-check mr-1"></i> COS Faculty Renewal Recommendation</h5>
+                <button class="btn btn-success btn-sm ml-2" onclick="printRecommendation()">
+                    <i class="fas fa-print mr-1"></i> Print Recommendation
+                </button>
+            </div>
             <?php if (count($real_periods) > 0):
                 $sel_key = $selected_period ? epes_period_key($selected_period['semester'], $selected_period['year']) : '';
             ?>
@@ -545,6 +550,122 @@ $(document).ready(function() {
         return 'POOR';
     }
 });
+
+// Print Recommendation — only Dean-Approved COS faculty
+function printRecommendation() {
+    var approvedRows = [];
+    $('#recommendation-list tbody tr').each(function() {
+        var deanDecision = $(this).data('dean-decision');
+        if (deanDecision === 'Approved') {
+            approvedRows.push({
+                name: $(this).find('td:nth-child(2)').text().trim(),
+                department: $(this).find('td:nth-child(3)').text().trim(),
+                verified: $(this).find('td:nth-child(4)').text().trim(),
+                instruction: $(this).find('td:nth-child(5)').text().trim(),
+                support: $(this).find('td:nth-child(6)').text().trim(),
+                overall: $(this).find('td:nth-child(7)').text().trim(),
+                adjectival: $(this).find('td:nth-child(8) span').text().trim(),
+            });
+        }
+    });
+
+    if (approvedRows.length === 0) {
+        alert_toast('No Dean-Approved COS faculty to print. Approve recommendations first.', 'warning');
+        return;
+    }
+
+    var periodLabel = '<?= htmlspecialchars($period_label_str) ?>';
+    var deanName = '<?php echo htmlspecialchars($_SESSION["login_name"] ?? "Dean"); ?>';
+    var today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+    var rowsHtml = '';
+    approvedRows.forEach(function(r, i) {
+        rowsHtml += '<tr>'
+            + '<td style="text-align:center;">' + (i + 1) + '</td>'
+            + '<td style="font-weight:bold;">' + r.name + '</td>'
+            + '<td>' + r.department + '</td>'
+            + '<td style="text-align:center;">' + r.instruction + '</td>'
+            + '<td style="text-align:center;">' + r.support + '</td>'
+            + '<td style="text-align:center;font-weight:bold;">' + r.overall + '</td>'
+            + '<td style="text-align:center;">' + r.adjectival + '</td>'
+            + '</tr>';
+    });
+
+    var html = '<html><head><title>COS Faculty Renewal Recommendation - ' + periodLabel + '</title>'
+        + '<style>'
+        + '@page { size: A4; margin: 1.5cm; }'
+        + 'body { font-family: Arial, sans-serif; font-size: 11px; color: #000; }'
+        + '.header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 15px; }'
+        + '.header .school { font-size: 12px; font-weight: bold; text-transform: uppercase; }'
+        + '.header .office { font-size: 10px; color: #444; margin-top: 2px; }'
+        + '.header h2 { font-size: 14px; margin: 8px 0 2px; }'
+        + '.header .period { font-size: 10px; color: #555; }'
+        + 'table { width: 100%; border-collapse: collapse; margin-top: 10px; }'
+        + 'th, td { border: 1px solid #000; padding: 5px 8px; font-size: 10px; }'
+        + 'th { background-color: #e8e8e8; font-weight: bold; text-align: center; }'
+        + '.summary { margin: 15px 0; font-size: 10px; }'
+        + '.summary p { margin: 3px 0; }'
+        + '.signatures { margin-top: 40px; display: flex; justify-content: space-between; }'
+        + '.sig-block { text-align: center; width: 45%; }'
+        + '.sig-line { border-top: 1px solid #000; margin-top: 50px; padding-top: 5px; font-weight: bold; }'
+        + '.sig-title { font-size: 9px; color: #555; }'
+        + '.no-print { display: none; }'
+        + '</style></head><body>'
+
+        + '<div class="header">'
+        +   '<div class="school">DR. EMILIO B. ESPINOSA SR. MEMORIAL STATE COLLEGE OF AGRICULTURE AND TECHNOLOGY</div>'
+        +   '<div class="office">Office of the Vice President for Academic Affairs</div>'
+        +   '<h2>RECOMMENDATION FOR CONTRACT OF SERVICE (COS) FACULTY RENEWAL</h2>'
+        +   '<div class="period">Rating Period: ' + periodLabel + '</div>'
+        + '</div>'
+
+        + '<div class="summary">'
+        +   '<p>This is to recommend the following Contract of Service (COS) faculty for contract renewal based on their performance evaluation results for the above-mentioned rating period.</p>'
+        +   '<p>Total recommended faculty: <strong>' + approvedRows.length + '</strong></p>'
+        + '</div>'
+
+        + '<table>'
+        +   '<thead><tr>'
+        +     '<th style="width:30px;">#</th>'
+        +     '<th>Name of Faculty</th>'
+        +     '<th>Department</th>'
+        +     '<th>Instruction (90%)</th>'
+        +     '<th>Support (10%)</th>'
+        +     '<th>Overall Score</th>'
+        +     '<th>Adjectival Rating</th>'
+        +   '</tr></thead>'
+        +   '<tbody>' + rowsHtml + '</tbody>'
+        + '</table>'
+
+        + '<div style="margin-top:10px;font-size:9px;color:#555;">'
+        +   'Rating Scale: 4.75-5.00 Outstanding | 3.61-4.74 Very Satisfactory | 2.61-3.60 Satisfactory | 1.61-2.60 Unsatisfactory | 1.60 below Poor'
+        + '</div>'
+
+        + '<div class="signatures">'
+        +   '<div class="sig-block">'
+        +     '<div class="sig-line">' + deanName + '</div>'
+        +     '<div class="sig-title">Recommending Approval</div>'
+        +     '<div class="sig-title">College Dean</div>'
+        +   '</div>'
+        +   '<div class="sig-block">'
+        +     '<div class="sig-line">&nbsp;</div>'
+        +     '<div class="sig-title">Approved By</div>'
+        +     '<div class="sig-title">Vice President for Academic Affairs</div>'
+        +   '</div>'
+        + '</div>'
+
+        + '<div style="margin-top:20px;font-size:9px;color:#999;text-align:right;">Generated: ' + today + '</div>'
+
+        + '</body></html>';
+
+    var printWindow = window.open('', '', 'height=800,width=1000');
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.onload = function() {
+        printWindow.print();
+    };
+}
 </script>
 
 <style>
