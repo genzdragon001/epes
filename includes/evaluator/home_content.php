@@ -69,6 +69,33 @@ if($is_dean) {
 $other_submissions = $total_submissions - $verified - $for_verif;
 $completion_pct = $total_submissions > 0 ? round(($verified/$total_submissions)*100) : 0;
 
+// Dean: OPCR = average IPCR of all faculty under the Dean's college
+$dean_opcr = null;
+if ($is_dean && !empty($active_period_code)) {
+    $dean_college_q = $conn->query("SELECT college_office_id FROM department_list WHERE id = " . intval($eval_dept_id) . " LIMIT 1");
+    $dean_college_id = ($dean_college_q && $dean_college_q->num_rows > 0) ? intval($dean_college_q->fetch_assoc()['college_office_id']) : 0;
+    if ($dean_college_id > 0) {
+        $opcr_q = $conn->query("
+            SELECT e.id, e.position_id, e.designation_id
+            FROM employee_list e
+            LEFT JOIN department_list d ON e.department_id = d.id
+            WHERE d.college_office_id = $dean_college_id AND e.id != $eval_id
+        ");
+        $opcr_sum = 0; $opcr_cnt = 0;
+        while ($of = $opcr_q->fetch_assoc()) {
+            $of_id = (int)$of['id'];
+            $of_pos = (int)$of['position_id'];
+            $of_des = (int)$of['designation_id'];
+            $of_rating = computeWeightedRating($conn, $of_id, $of_pos, $of_des, $active_period_code, $period_filter);
+            if ($of_rating !== null && $of_rating > 0) {
+                $opcr_sum += floatval($of_rating);
+                $opcr_cnt++;
+            }
+        }
+        $dean_opcr = $opcr_cnt > 0 ? round($opcr_sum / $opcr_cnt, 2) : null;
+    }
+}
+
 // Dean: Dept Head completion table
 $dept_head_table = [];
 if($is_dean) {
@@ -336,9 +363,9 @@ $recent = $conn->query($recent_sql);
             <div class="stat-label">DPCR Rating</div>
             <div class="stat-sub <?= ($dept_dpcr ?? 0) >= 3.61 ? 'green' : (($dept_dpcr ?? 0) >= 2.61 ? 'amber' : 'red') ?>"><?= $dept_dpcr !== null ? getAdjectivalRating($dept_dpcr) : 'No rating' ?></div>
             <?php else: ?>
-            <div class="stat-value"><?= $completion_pct ?>%</div>
-            <div class="stat-label">Completion</div>
-            <div class="stat-sub <?= $completion_pct >= 70 ? 'green' : ($completion_pct >= 40 ? 'amber' : 'red') ?>"><?= $verified ?>/<?= $total_submissions ?> verified</div>
+            <div class="stat-value"><?= $dean_opcr !== null ? number_format($dean_opcr, 2) : '—' ?></div>
+            <div class="stat-label">OPCR Rating</div>
+            <div class="stat-sub <?= ($dean_opcr ?? 0) >= 3.61 ? 'green' : (($dean_opcr ?? 0) >= 2.61 ? 'amber' : 'red') ?>"><?= $dean_opcr !== null ? getAdjectivalRating($dean_opcr) : 'No rating' ?></div>
             <?php endif; ?>
         </div>
     </div>
