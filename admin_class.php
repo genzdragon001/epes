@@ -3087,8 +3087,10 @@ function submit_file() {
 		while($dept = $dept_qry->fetch_assoc()){
 			$dept_id = $dept['id'];
 			
-			// Get all faculty in this department
-			$fac_qry = $this->db->query("SELECT id, position_id, designation_id FROM employee_list WHERE department_id = $dept_id");
+			// Get all faculty in this department, EXCLUDING the dept head
+			// (the dept head's own IPCR should not be in the department average,
+			//  matching what the dept head sees on their DPCR dashboard)
+			$fac_qry = $this->db->query("SELECT id, position_id, designation_id FROM employee_list WHERE department_id = $dept_id AND designation_id != 2");
 			$ipcr_scores = [];
 			while($fac = $fac_qry->fetch_assoc()){
 				$fid = (int)$fac['id'];
@@ -3116,6 +3118,7 @@ function submit_file() {
 					FROM ratings r
 					INNER JOIN employee_list e ON r.employee_id = e.id
 					WHERE e.department_id = $dept_id
+					AND e.designation_id != 2
 					AND r.rating_period IN ('$in_codes')
 				");
 				$avg = $avg_qry ? $avg_qry->fetch_assoc() : ['avg_eff'=>0,'avg_time'=>0,'avg_qual'=>0];
