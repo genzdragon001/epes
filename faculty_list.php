@@ -1,55 +1,8 @@
 <?php include 'db_connect.php';
 
 require_once 'includes/rating_functions.php';
+require_once 'includes/access_control.php';
 $login_type = $_SESSION['login_type'];
-$eval_id = intval($_SESSION['login_id']);
-$is_admin = ($login_type == 2);
-$is_dean = false;
-$is_dept_head = false;
-$dept_id = 0;
-
-if (!$is_admin) {
-    // Check if this is a merged faculty-evaluator (session-based) or legacy evaluator
-    if (!empty($_SESSION['is_evaluator'])) {
-        $eval_role = $_SESSION['evaluator_role'] ?? '';
-        $is_dean = ($eval_role === 'dean');
-        $is_dept_head = ($eval_role === 'dept_head');
-        // Get department from employee_list
-        $stmt = $conn->prepare("SELECT department_id FROM employee_list WHERE id = ?");
-        $stmt->bind_param("i", $eval_id);
-        $stmt->execute();
-        $stmt->bind_result($dept_id);
-        $stmt->fetch();
-        $stmt->close();
-    } else {
-        // Legacy evaluator (login_type=1)
-        $stmt_type = $conn->prepare("SELECT type, department_id, designation_id FROM evaluator_list WHERE id = ?");
-        $stmt_type->bind_param("i", $eval_id);
-        $stmt_type->execute();
-        $stmt_type->bind_result($eval_type, $dept_id, $eval_desig_id);
-        $stmt_type->fetch();
-        $stmt_type->close();
-
-        $is_dean = ($eval_type == 1);
-        $is_dept_head = ($eval_type == 0);
-        // Override: VP designations are not dept heads — they evaluate only
-        // faculty explicitly assigned via evaluator_id. Fall back to
-        // employee_list.designation_id when evaluator_list.designation_id=0.
-        $vp_desigs = [4, 9, 10, 18, 19]; // VPAF, VPAA, VPREI (both ID schemes)
-        $effective_desig = intval($eval_desig_id ?? 0);
-        if ($effective_desig === 0) {
-            $eval_email = $conn->real_escape_string($_SESSION['login_email'] ?? '');
-            $ed_q = $conn->query("SELECT designation_id FROM employee_list WHERE email = '$eval_email' LIMIT 1");
-            if ($ed_q && $ed_q->num_rows > 0) {
-                $effective_desig = intval($ed_q->fetch_assoc()['designation_id']);
-            }
-        }
-        if (in_array($effective_desig, $vp_desigs)) {
-            $is_dept_head = false;
-            $is_dean = false;
-        }
-    }
-}
 
 // Use shared period-building logic (same as home.php, target_list.php, etc.)
 // Provides: $real_periods, $selected_period, $period_codes, $period_filter,
@@ -67,9 +20,41 @@ if ($selected_period) {
     }
 }
 
-// Intervention flags
+// Dean: resolve college_office_id early (used by intervention query + faculty query)
+$college_id = 0;
+if ($is_dean) {
+    $college_q = $conn->query("SELECT college_office_id FROM department_list WHERE id = " . intval($dept_id) . " LIMIT 1");
+    $college_id = ($college_q && $college_q->num_rows > 0) ? intval($college_q->fetch_assoc()['college_office_id']) : 0;
+}
+
+// Intervention flags — scoped to the current user's visible faculty
 $intervention_faculty = [];
-$int_qry = $conn->query("SELECT employee_id FROM intervention_flags WHERE acknowledged = 0");
+if ($is_admin) {
+    // Admin sees all flags
+    $int_qry = $conn->query("SELECT employee_id FROM intervention_flags WHERE acknowledged = 0");
+} elseif ($is_dean) {
+    // Dean: only faculty in their college
+    $int_qry = $conn->query("
+        SELECT f.employee_id FROM intervention_flags f
+        JOIN employee_list e ON f.employee_id = e.id
+        JOIN department_list d ON e.department_id = d.id
+        WHERE f.acknowledged = 0 AND d.college_office_id = $college_id
+    ");
+} elseif ($is_dept_head) {
+    // Dept head: only faculty in their department
+    $int_qry = $conn->query("
+        SELECT f.employee_id FROM intervention_flags f
+        JOIN employee_list e ON f.employee_id = e.id
+        WHERE f.acknowledged = 0 AND e.department_id = $dept_id
+    ");
+} else {
+    // VP / other evaluator: only assigned faculty
+    $int_qry = $conn->query("
+        SELECT f.employee_id FROM intervention_flags f
+        JOIN employee_list e ON f.employee_id = e.id
+        WHERE f.acknowledged = 0 AND e.evaluator_id = $eval_list_id
+    ");
+}
 while ($int = $int_qry->fetch_assoc()) {
     $intervention_faculty[$int['employee_id']] = true;
 }
@@ -89,6 +74,7 @@ if($is_admin) {
         ORDER BY dep.department, e.lastname
     ");
 } elseif($is_dean) {
+    // Dean sees ALL faculty in their college (college_id resolved above)
     $result = $conn->query("
         SELECT e.id, e.firstname, e.middlename, e.lastname, e.department_id,
                e.designation_id, dl.designation, dep.department, e.position_id, p.position
@@ -96,7 +82,8 @@ if($is_admin) {
         LEFT JOIN designation_list dl ON e.designation_id = dl.id
         LEFT JOIN department_list dep ON e.department_id = dep.id
         LEFT JOIN position_list p ON e.position_id = p.id
-        WHERE e.designation_id = 2
+        WHERE dep.college_office_id = $college_id
+          AND e.id != $eval_id
         ORDER BY dep.department, e.lastname
     ");
 } elseif($is_dept_head) {
@@ -118,14 +105,6 @@ if($is_admin) {
 } else {
     // Other evaluators (e.g. VP, Director, Research Head): show faculty
     // explicitly assigned to this evaluator via evaluator_id.
-    // The evaluator_id column stores the evaluator_list.id, but the logged-in
-    // user's session login_id is their employee_list.id. Map via email.
-    $eval_email = $conn->real_escape_string($_SESSION['login_email'] ?? '');
-    $eval_map_q = $conn->query("SELECT id FROM evaluator_list WHERE email = '$eval_email' LIMIT 1");
-    $eval_list_id = $eval_id; // fallback to session id
-    if ($eval_map_q && $eval_map_q->num_rows > 0) {
-        $eval_list_id = intval($eval_map_q->fetch_assoc()['id']);
-    }
     $result = $conn->query("
         SELECT e.id, e.firstname, e.middlename, e.lastname, e.department_id,
                e.designation_id, dl.designation, dep.department, e.position_id, p.position
@@ -142,6 +121,9 @@ $total_faculty = 0;
 $total_rated = 0;
 $dept_stats = [];
 
+// FIX #6: $can_view moved outside the loop — all roles can view the evaluation page
+$can_view = ($is_admin || $is_dean || $is_dept_head || (!$is_admin && !$is_dean && !$is_dept_head));
+
 if ($result && $result->num_rows > 0) {
     while ($row = $result->fetch_assoc()) {
         $emp_id = $row['id'];
@@ -152,13 +134,16 @@ if ($result && $result->num_rows > 0) {
             SELECT 
                 COUNT(DISTINCT task_id) as total_tasks,
                 SUM(CASE WHEN progress = 'Verified' THEN 1 ELSE 0 END) as verified,
-                SUM(CASE WHEN progress = 'For Verification' THEN 1 ELSE 0 END) as for_verification
+                SUM(CASE WHEN progress = 'For Verification' THEN 1 ELSE 0 END) as for_verification,
+                SUM(CASE WHEN progress = 'N/A' THEN 1 ELSE 0 END) as na_count
             FROM task_progress WHERE faculty_id = $emp_id $period_filter
         ")->fetch_assoc();
         $row['total_tasks'] = $stats['total_tasks'] ?? 0;
         $row['verified'] = $stats['verified'] ?? 0;
         $row['for_verification'] = $stats['for_verification'] ?? 0;
-        $row['pending'] = $row['total_tasks'] - $row['verified'] - $row['for_verification'];
+        $row['na_count'] = $stats['na_count'] ?? 0;
+        // FIX #2: subtract N/A from pending — N/A tasks are not "pending"
+        $row['pending'] = $row['total_tasks'] - $row['verified'] - $row['for_verification'] - $row['na_count'];
         
         // Weighted rating for current period (same logic as rating.php)
         if (!empty($active_period_code)) {
@@ -170,13 +155,32 @@ if ($result && $result->num_rows > 0) {
             $row['avg_rating'] = null;
         }
         
+        // FIX #3: Eval status determination (same logic as employee_eval_status.php)
+        if ($row['total_tasks'] == 0) {
+            $row['eval_status'] = 'No Tasks';
+            $row['status_class'] = 'secondary';
+        } elseif ($row['verified'] == $row['total_tasks'] - $row['na_count']) {
+            $row['eval_status'] = 'Completed';
+            $row['status_class'] = 'success';
+        } elseif ($row['verified'] > 0 || $row['for_verification'] > 0) {
+            $row['eval_status'] = 'In Progress';
+            $row['status_class'] = 'info';
+        } else {
+            $row['eval_status'] = 'Pending';
+            $row['status_class'] = 'warning';
+        }
+        // Progress percentage: verified + N/A out of total
+        $row['progress_pct'] = ($row['total_tasks'] > 0 && ($row['verified'] + $row['na_count']) > 0)
+            ? round((($row['verified'] + $row['na_count']) / $row['total_tasks']) * 100) : 0;
+        
         // Department stats accumulation
         $d_id = $row['department_id'] ?? 0;
         if (!isset($dept_stats[$d_id])) {
-            $dept_stats[$d_id] = ['name' => $row['department'] ?? 'Unknown', 'count' => 0, 'rated' => 0];
+            $dept_stats[$d_id] = ['name' => $row['department'] ?? 'Unknown', 'count' => 0, 'rated' => 0, 'completed' => 0];
         }
         $dept_stats[$d_id]['count']++;
         if ($row['avg_rating'] !== null) $dept_stats[$d_id]['rated']++;
+        if ($row['eval_status'] === 'Completed') $dept_stats[$d_id]['completed']++;
         
         $faculty_data[] = $row;
     }
@@ -236,12 +240,12 @@ if ($result && $result->num_rows > 0) {
                 <i class="fa fa-users"></i> 
                 <?php 
                 if($is_admin) echo 'All Faculty';
-                elseif($is_dean) echo 'Department Heads';
+                elseif($is_dean) echo 'Faculty — College';
                 elseif($is_dept_head) echo 'Faculty Under My Department';
                 else echo 'Assigned Faculty';
                 ?>
             </h5>
-            <span class="badge badge-light"><?= $total_faculty ?> faculty | <?= $total_rated ?> rated (<?= $active_period_code ?>)</span>
+            <span class="badge badge-light"><?= $total_faculty ?> faculty | <?= $total_rated ?> rated (<?= $active_period_code ?: 'N/A' ?>)</span>
         </div>
         <div class="card-body">
             
@@ -262,10 +266,12 @@ if ($result && $result->num_rows > 0) {
                             <th class="text-center" style="width: 30px;">#</th>
                             <th>Faculty Name</th>
                             <th><?= $is_admin ? 'Department / Position' : 'Designation' ?></th>
-                            <th class="text-center" style="width: 60px;">Tasks</th>
-                            <th class="text-center" style="width: 60px;">Verified</th>
-                            <th class="text-center" style="width: 100px;">Rating (<?= $active_period_code ?: 'N/A' ?>)</th>
-                            <?php if($is_admin || $is_dean || $is_dept_head): ?>
+                            <th class="text-center" style="width: 50px;">Tasks</th>
+                            <th class="text-center" style="width: 50px;">Verified</th>
+                            <th class="text-center" style="width: 90px;">Status</th>
+                            <th class="text-center" style="width: 100px;">IPCR (<?= $active_period_code ?: 'N/A' ?>)</th>
+                            <th class="text-center" style="width: 100px;">Progress</th>
+                            <?php if($can_view): ?>
                             <th class="text-center" style="width: 80px;">Action</th>
                             <?php endif; ?>
                         </tr>
@@ -282,10 +288,7 @@ if ($result && $result->num_rows > 0) {
                                 else { $adj = 'Poor'; $cls = 'danger'; }
                             }
                         ?>
-                        <?php
-                        $can_view = ($is_admin || $is_dean || $is_dept_head || (!$is_admin && !$is_dean && !$is_dept_head));
-                        ?>
-                        <tr class="<?= $flagged ? 'table-warning' : '' ?> fac-row" data-search="<?= htmlspecialchars(strtolower($row['lastname'] . ' ' . $row['firstname'] . ' ' . ($row['department'] ?? '') . ' ' . ($row['designation'] ?? ''))) ?>" <?php if($can_view): ?>onclick="window.location.href='index.php?page=evaluation&id=<?= $row['id'] ?>'"<?php endif; ?>>
+                        <tr class="<?= $flagged ? 'table-warning' : '' ?> fac-row" data-search="<?= htmlspecialchars(strtolower($row['lastname'] . ' ' . $row['firstname'] . ' ' . ($row['department'] ?? '') . ' ' . ($row['designation'] ?? '') . ' ' . $row['eval_status'])) ?>" <?php if($can_view): ?>onclick="window.location.href='index.php?page=evaluation&id=<?= $row['id'] ?>'"<?php endif; ?>>
                             <td class="text-center font-weight-bold"><?= $i++ ?></td>
                             <td>
                                 <strong><?= htmlspecialchars($row['lastname'] . ', ' . $row['firstname'] . ' ' . $row['middlename']) ?></strong>
@@ -313,6 +316,11 @@ if ($result && $result->num_rows > 0) {
                                     <span class="text-muted">0</span>
                                 <?php endif; ?>
                             </td>
+                            <td class="text-center">
+                                <span class="badge badge-<?= $row['status_class'] ?>" style="font-size: 0.78rem;">
+                                    <?= $row['eval_status'] ?>
+                                </span>
+                            </td>
                             <td class="text-center" style="vertical-align:middle;">
                                 <?php if ($avg_r !== null): ?>
                                     <span class="badge badge-<?= $cls ?> font-weight-bold" style="font-size: 0.9rem; padding: 4px 10px; border-radius: 4px;">
@@ -322,6 +330,14 @@ if ($result && $result->num_rows > 0) {
                                 <?php else: ?>
                                     <span class="text-muted" style="font-size: 0.85rem;">—</span>
                                 <?php endif; ?>
+                            </td>
+                            <td class="text-center">
+                                <div class="progress mb-0" style="height: 15px;">
+                                    <div class="progress-bar bg-<?= $row['status_class'] == 'success' ? 'success' : ($row['status_class'] == 'info' ? 'info' : 'warning') ?>" role="progressbar" style="width: <?= $row['progress_pct'] ?>%">
+                                        <?= $row['progress_pct'] ?>%
+                                    </div>
+                                </div>
+                                <small class="text-muted"><?= $row['verified'] + $row['na_count'] ?>/<?= $row['total_tasks'] ?></small>
                             </td>
                             <?php if($can_view): ?>
                             <td class="text-center">
@@ -349,7 +365,7 @@ if ($result && $result->num_rows > 0) {
                         else { $adj = 'Poor'; $cls = 'danger'; }
                     }
                 ?>
-                <div class="fac-card <?= $flagged ? 'fac-card-flagged' : '' ?>" data-search="<?= htmlspecialchars(strtolower($row['lastname'] . ' ' . $row['firstname'] . ' ' . ($row['department'] ?? '') . ' ' . ($row['designation'] ?? ''))) ?>" <?php if($can_view): ?>onclick="window.location.href='index.php?page=evaluation&id=<?= $row['id'] ?>'"<?php endif; ?>>
+                <div class="fac-card <?= $flagged ? 'fac-card-flagged' : '' ?>" data-search="<?= htmlspecialchars(strtolower($row['lastname'] . ' ' . $row['firstname'] . ' ' . ($row['department'] ?? '') . ' ' . ($row['designation'] ?? '') . ' ' . $row['eval_status'])) ?>" <?php if($can_view): ?>onclick="window.location.href='index.php?page=evaluation&id=<?= $row['id'] ?>'"<?php endif; ?>>
                     <div class="fac-card-top">
                         <div class="fac-card-name">
                             <strong><?= htmlspecialchars($row['lastname'] . ', ' . $row['firstname']) ?></strong>
@@ -369,6 +385,7 @@ if ($result && $result->num_rows > 0) {
                         <?php else: ?>
                             <span class="text-muted"><?= htmlspecialchars($row['designation'] ?? 'Faculty') ?></span>
                         <?php endif; ?>
+                        <span class="badge badge-<?= $row['status_class'] ?> ml-2" style="font-size:0.65rem;"><?= $row['eval_status'] ?></span>
                     </div>
                     <div class="fac-card-stats">
                         <span class="fac-stat"><i class="fa fa-tasks text-muted"></i> <?= $row['total_tasks'] ?> tasks</span>
@@ -378,6 +395,9 @@ if ($result && $result->num_rows > 0) {
                         <?php else: ?>
                             <span class="fac-stat text-muted"><small>Not Rated</small></span>
                         <?php endif; ?>
+                    </div>
+                    <div class="progress fac-card-progress" style="height: 8px;">
+                        <div class="progress-bar bg-<?= $row['status_class'] == 'success' ? 'success' : ($row['status_class'] == 'info' ? 'info' : 'warning') ?>" style="width: <?= $row['progress_pct'] ?>%"><?= $row['progress_pct'] ?>%</div>
                     </div>
                 </div>
                 <?php endforeach; ?>
@@ -393,7 +413,7 @@ if ($result && $result->num_rows > 0) {
     </div>
 
     <!-- ===== DEPARTMENT PERFORMANCE SUMMARY ===== -->
-    <?php if ($is_admin && !empty($dept_stats)): ?>
+    <?php if (!empty($dept_stats)): ?>
     <div class="card card-outline card-info mt-3">
         <div class="card-header">
             <h5 class="card-title mb-0"><i class="fa fa-chart-bar"></i> Department Summary (<?= $active_period_code ?>)</h5>
@@ -405,6 +425,7 @@ if ($result && $result->num_rows > 0) {
                         <th>Department</th>
                         <th class="text-center">Faculty</th>
                         <th class="text-center">Rated</th>
+                        <th class="text-center">Completed</th>
                         <th class="text-center">Coverage</th>
                     </tr>
                 </thead>
@@ -414,6 +435,7 @@ if ($result && $result->num_rows > 0) {
                         <td><strong><?= htmlspecialchars($ds['name']) ?></strong></td>
                         <td class="text-center"><?= $ds['count'] ?></td>
                         <td class="text-center"><?= $ds['rated'] ?></td>
+                        <td class="text-center"><?= $ds['completed'] ?></td>
                         <td class="text-center">
                             <div class="progress" style="height: 18px;">
                                 <?php $pct = $ds['count'] > 0 ? round(($ds['rated'] / $ds['count']) * 100) : 0; ?>
@@ -456,9 +478,10 @@ if ($result && $result->num_rows > 0) {
     .fac-card-top { display: flex; justify-content: space-between; align-items: flex-start; }
     .fac-card-name { flex: 1; font-size: 0.95rem; line-height: 1.3; }
     .fac-card-rating { font-size: 0.85rem; padding: 3px 8px; border-radius: 4px; white-space: nowrap; }
-    .fac-card-meta { margin-top: 2px; font-size: 0.78rem; }
+    .fac-card-meta { margin-top: 2px; font-size: 0.78rem; display: flex; align-items: center; flex-wrap: wrap; }
     .fac-card-stats { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.75rem; align-items: center; }
     .fac-stat { display: inline-flex; align-items: center; gap: 3px; }
+    .fac-card-progress { margin-top: 8px; }
 
     @media (max-width: 767px) {
         .search-bar input { font-size: 0.85rem; }

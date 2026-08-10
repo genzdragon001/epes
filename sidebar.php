@@ -136,7 +136,7 @@
           <li class="nav-item">
             <a href="./index.php?page=faculty_list" class="nav-link nav-faculty_list">
               <i class="nav-icon fas fa-building"></i>
-              <p><?= ($er === 'vp') ? 'Assigned Faculty' : 'Department Heads' ?></p>
+              <p><?= ($er === 'vp') ? 'Assigned Faculty' : 'Faculty List' ?></p>
             </a>
           </li>
           <li class="nav-item">
@@ -238,7 +238,7 @@
           <li class="nav-item">
             <a href="./index.php?page=faculty_list" class="nav-link nav-faculty_list">
               <i class="nav-icon fas fa-building"></i>
-              <p><?= ($er === 'vp') ? 'Assigned Faculty' : 'Department Heads' ?></p>
+              <p><?= ($er === 'vp') ? 'Assigned Faculty' : 'Faculty List' ?></p>
             </a>
           </li>
           <li class="nav-item">

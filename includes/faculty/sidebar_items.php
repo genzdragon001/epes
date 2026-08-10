@@ -46,7 +46,7 @@ $is_dean_sidebar = ($eval_role === 'dean');
 <li class="nav-item dropdown">
   <a href="./index.php?page=faculty_list" class="nav-link nav-faculty_list">
     <i class="nav-icon fas fa-building"></i>
-    <p>Department Heads</p>
+    <p>Faculty List</p>
   </a>
 </li>
 <li class="nav-item dropdown">

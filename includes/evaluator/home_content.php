@@ -217,12 +217,14 @@ if ($is_dean) {
                 $last_three = array_slice($streak_details, -3);
                 $display_rating = $current_period_rating ?? $last_three[count($last_three)-1]['rating'];
 
-                // Upsert into intervention_flags so admin/faculty_list also sees it
+                // Upsert into intervention_flags so admin/faculty_list also sees it.
+                // ON DUPLICATE KEY UPDATE refreshes the ratings data but preserves
+                // the acknowledged status (don't reset an acknowledged flag).
                 $periods_json = json_encode(array_map(function($s) use ($conn) {
                     return $conn->real_escape_string($s['label']);
                 }, $last_three));
                 $ratings_json = json_encode($last_three);
-                $stmt = $conn->prepare("INSERT IGNORE INTO intervention_flags (employee_id, flag_type, consecutive_periods, overall_ratings) VALUES (?, '3_CONSECUTIVE_LOW', ?, ?)");
+                $stmt = $conn->prepare("INSERT INTO intervention_flags (employee_id, flag_type, consecutive_periods, overall_ratings) VALUES (?, '3_CONSECUTIVE_LOW', ?, ?) ON DUPLICATE KEY UPDATE consecutive_periods = VALUES(consecutive_periods), overall_ratings = VALUES(overall_ratings)");
                 $stmt->bind_param('iss', $fid, $periods_json, $ratings_json);
                 $stmt->execute();
                 $stmt->close();
@@ -240,6 +242,13 @@ if ($is_dean) {
                     'streak' => $streak,
                     'streak_details' => $last_three,
                 ];
+            } else {
+                // Streak broken — remove stale flag so faculty_list/admin dashboards
+                // don't show an intervention warning that no longer applies.
+                $stmt = $conn->prepare("DELETE FROM intervention_flags WHERE employee_id = ? AND flag_type = '3_CONSECUTIVE_LOW'");
+                $stmt->bind_param('i', $fid);
+                $stmt->execute();
+                $stmt->close();
             }
         }
     }
